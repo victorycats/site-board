@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ふたば(偽)お習字</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sumi:#1a1714;
+    --paper:#f7f4ec;
+    --paper-edge:#e6ddc8;
+    --shu:#b5341f;
+    --shu-deep:#8c2414;
+    --wall:#6f5a44;
+    --wall-dark:#5a4836;
+    --ink-faint:#6b5d4a;
+    --gold:#c9a227;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    font-family:"Zen Kaku Gothic New",sans-serif;
+    color:var(--sumi);
+    background:#e7ddc6;
+  }
+
+  .stage{position:relative;width:100vw;height:100vh;height:100dvh;overflow:hidden;-webkit-user-select:none;user-select:none}
+  .stage img{-webkit-user-drag:none;user-drag:none;pointer-events:none}
+  input,textarea{-webkit-user-select:text;user-select:text}
+
+  /* floating title */
+  .float-header{
+    position:absolute;top:10px;left:0;right:0;z-index:14;
+    text-align:center;pointer-events:none;
+  }
+  .title{
+    font-family:"Yuji Syuku",serif;
+    font-size:clamp(26px,5vw,46px);
+    color:var(--sumi);
+    letter-spacing:.12em;
+    text-shadow:1px 2px 0 rgba(255,255,255,.4);
+    line-height:1.1;
+  }
+  .title .shu{color:var(--shu)}
+  .subtitle{
+    font-family:"Shippori Mincho",serif;
+    color:var(--ink-faint);
+    margin-top:6px;font-size:13px;letter-spacing:.16em;
+    text-shadow:0 1px 0 rgba(255,255,255,.4);
+  }
+  .seal{
+    display:inline-flex;align-items:center;justify-content:center;margin-left:8px;
+    width:28px;height:28px;
+    background:#2f7d3b;border-radius:4px;
+    vertical-align:middle;transform:rotate(-4deg);box-shadow:0 1px 0 rgba(0,0,0,.3);
+  }
+  .seal svg{width:18px;height:18px;display:block}
+
+  /* floating tools (zoom + status) top-right */
+  .float-tools{
+    position:absolute;top:14px;right:14px;z-index:22;
+    display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+    background:rgba(26,23,20,.5);backdrop-filter:blur(3px);
+    padding:10px 12px;border-radius:12px;
+    box-shadow:0 4px 14px rgba(0,0,0,.35);
+  }
+  .float-tools .status{font-size:12px;color:#e9dcc0;display:flex;align-items:center;gap:8px}
+  .remain{font-size:11px;font-weight:700}
+  .remain.warn{color:#ffd27a}
+  .remain.full{color:#ff8a72}
+
+  /* floating message (placing/empty/admin/err) top-center */
+  .float-msg{
+    position:absolute;top:74px;left:50%;transform:translateX(-50%);
+    z-index:18;width:min(560px,calc(100vw - 32px));pointer-events:none;
+  }
+  .float-msg *{pointer-events:auto}
+  .float-msg:empty{display:none}
+
+  /* floating 半紙 panel */
+  .float-desk{
+    position:absolute;top:14px;left:14px;z-index:20;
+    width:330px;max-width:calc(100vw - 36px);
+    max-height:calc(100dvh - 28px);
+    display:flex;flex-direction:column;
+    background:linear-gradient(150deg,#efe6cf,#e5d7b4);
+    border-radius:14px;
+    box-shadow:0 14px 34px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.4);
+    overflow:hidden;
+    transition:opacity .4s;
+  }
+  .float-desk.guiding{opacity:0;pointer-events:none}
+  .desk-bar{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:10px 12px 8px;flex:0 0 auto;
+  }
+  .desk-bar-title{
+    font-family:"Shippori Mincho",serif;font-weight:700;font-size:14px;
+    letter-spacing:.1em;color:var(--ink-faint);
+    display:flex;align-items:center;gap:8px;
+  }
+  .desk-bar-title::before{content:none}
+  .desk-toggle{
+    width:26px;height:26px;border-radius:7px;border:none;cursor:pointer;
+    background:#d8c8a2;color:var(--ink-faint);font-size:18px;font-weight:700;line-height:1;
+    display:flex;align-items:center;justify-content:center;padding:0;
+  }
+  .desk-toggle:hover{filter:brightness(1.04)}
+  .desk-body{padding:0 16px 0;overflow-x:hidden;overflow-y:auto;min-height:0;flex:1 1 auto;-webkit-overflow-scrolling:touch}
+  .float-desk.collapsed .desk-body{display:none}
+  .float-desk.collapsed{width:auto;max-width:none}
+  .float-desk.collapsed .desk-bar{padding-bottom:10px}
+  .float-desk.big{width:495px}                                  /* 大きく描く：表示のみ1.5倍 */
+  @media(max-width:560px){
+    .float-desk.big{width:min(450px, calc(100vw - 24px))}
+  }
+  @media(max-width:560px){
+    .float-desk{width:min(300px,calc(100vw - 24px));left:12px;top:14px;max-height:calc(100dvh - 28px)}
+    .float-tools .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
+    .float-tools{padding:7px 11px}
+  }
+  .canvas-frame{
+    background:var(--paper);
+    padding:10px;
+    border-radius:6px;
+    box-shadow:inset 0 0 0 1px var(--paper-edge), inset 0 0 22px rgba(150,120,70,.18);
+    position:relative;
+    flex:0 0 auto;
+  }
+  /* 8 x 12 cm => 2 : 3 */
+  .canvas-frame::before{
+    content:"";position:absolute;inset:10px;
+    border:1px dashed rgba(140,110,60,.35);
+    border-radius:3px;pointer-events:none;
+  }
+  #pad{
+    display:block;width:100%;
+    aspect-ratio:2/3;
+    border-radius:3px;
+    touch-action:none;
+    cursor:crosshair;
+  }
+
+  .tools{margin-top:10px;padding:6px 6px 0}
+  /* 貼るボタンはスクロール外に常時固定（iOSでスクロールバーが出なくても見える） */
+  .desk-foot{
+    position:sticky;bottom:0;z-index:2;
+    margin:8px -16px 0;padding:10px 16px 14px;
+    background:#e7d9bb;
+    border-top:1px solid rgba(140,110,60,.30);
+    box-shadow:0 -10px 12px -10px rgba(60,40,10,.20);
+  }
+  .desk-foot .name-field{margin-bottom:8px}
+  /* もっと下に道具がある合図（モバイルでスクロール可能かつ最下部でない時だけ） */
+  .desk-more{
+    position:absolute;left:50%;transform:translateX(-50%);z-index:3;
+    display:none;align-items:center;justify-content:center;
+    width:30px;height:30px;border-radius:50%;
+    background:rgba(231,217,187,.96);color:var(--ink-faint);
+    font-size:13px;line-height:1;cursor:pointer;
+    box-shadow:0 3px 8px rgba(0,0,0,.28), inset 0 0 0 1px rgba(140,110,60,.35);
+    animation:deskMoreBob 1.4s ease-in-out infinite;
+  }
+  .desk-more.show{display:flex}
+  @keyframes deskMoreBob{0%,100%{margin-top:0}50%{margin-top:3px}}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .swatch{
+    width:30px;height:30px;border-radius:50%;
+    border:2px solid rgba(0,0,0,.15);
+    cursor:pointer;position:relative;
+  }
+  .swatch.active{border-color:var(--sumi);box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--sumi)}
+  .swatch.active::after{content:"";position:absolute;inset:0;border-radius:50%}
+  .tool-label{font-size:12px;color:var(--ink-faint);font-weight:500;min-width:40px}
+  .brush-seg{display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid rgba(140,110,60,.35);flex:1}
+  .brush-opt{
+    flex:1;border:none;cursor:pointer;background:transparent;color:var(--ink-faint);
+    font-family:"Shippori Mincho",serif;font-weight:700;font-size:13px;letter-spacing:.08em;
+    padding:7px 4px;
+  }
+  .brush-opt + .brush-opt{border-left:1px solid rgba(140,110,60,.35)}
+  .brush-opt.active{background:var(--shu);color:var(--paper)}
+  .brush-opt:not(.active):hover{background:rgba(181,52,31,.1)}
+  input[type=range]{flex:1;accent-color:var(--sumi)}
+  .size-wrap{flex:1;display:flex;flex-direction:column;gap:1px}
+  .size-wrap input[type=range]{flex:none;width:100%}
+  .size-dots{position:relative;height:7px}
+  .size-dots i{position:absolute;top:1px;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:var(--sumi);opacity:.75}
+
+  .name-field{
+    width:100%;
+    font-family:"Zen Kaku Gothic New",sans-serif;
+    font-size:14px;
+    padding:9px 11px;
+    border:1px solid var(--paper-edge);
+    border-radius:7px;
+    background:#fbf6e8;
+    color:var(--sumi);
+    margin-bottom:10px;
+  }
+  .name-field:focus{outline:none;border-color:var(--shu)}
+
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  button{
+    font-family:"Zen Kaku Gothic New",sans-serif;
+    cursor:pointer;border:none;border-radius:8px;
+    font-size:14px;font-weight:500;padding:11px 14px;
+    transition:transform .08s, filter .15s;
+  }
+  button:active{transform:scale(.97)}
+  .btn-ghost{
+    flex:1 1 64px;min-width:0;padding:11px 8px;font-size:13px;
+    background:#e2d4b2;color:var(--ink-faint);
+    box-shadow:inset 0 0 0 1px rgba(140,110,60,.25);
+  }
+  .btn-ghost:hover{filter:brightness(1.04)}
+  .btn-ghost.active{background:var(--shu);color:var(--paper);box-shadow:inset 0 0 0 1px var(--shu)}
+  .btn-post{
+    flex:1;
+    background:var(--shu);color:var(--paper);
+    font-family:"Shippori Mincho",serif;font-weight:700;
+    letter-spacing:.25em;font-size:16px;
+    box-shadow:0 3px 0 var(--shu-deep);
+  }
+  .btn-post:hover{filter:brightness(1.06)}
+  .btn-post:active{transform:translateY(2px);box-shadow:0 1px 0 var(--shu-deep)}
+  .btn-post:disabled{opacity:.5;cursor:default;box-shadow:0 3px 0 var(--shu-deep)}
+
+  .hint{font-size:11px;color:var(--ink-faint);opacity:.75;margin-top:9px;line-height:1.6}
+
+  /* ---- seal (落款) on the 半紙 ---- */
+  .seal-stamp{
+    position:absolute;right:14px;bottom:14px;z-index:3;
+    width:62px;height:62px;pointer-events:none;
+    border:2.5px solid var(--shu);border-radius:4px;
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr 1fr;
+    color:var(--shu);font-family:"Shippori Mincho",serif;font-weight:700;
+    line-height:1;opacity:.92;
+  }
+  .seal-stamp span{display:flex;align-items:center;justify-content:center;font-size:17px}
+  .seal-stamp span.num{font-size:12px;letter-spacing:-1px}
+
+  /* ---- wide wall / board ---- */
+  .board-head{
+    display:flex;align-items:center;justify-content:flex-end;
+    margin:6px 0 12px;flex-wrap:wrap;gap:8px;
+  }
+  .board-title{
+    font-family:"Shippori Mincho",serif;font-weight:700;
+    color:var(--paper);font-size:18px;letter-spacing:.08em;
+  }
+  .board-meta{font-size:12px;color:#e9dcc0;opacity:.85;display:flex;align-items:center;gap:10px}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#7bd66a;box-shadow:0 0 0 0 rgba(123,214,106,.7);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(123,214,106,.6)}70%{box-shadow:0 0 0 8px rgba(123,214,106,0)}100%{box-shadow:0 0 0 0 rgba(123,214,106,0)}}
+
+  #msg:not(:empty){margin-bottom:12px}
+  .placing-hint{
+    background:rgba(140,36,20,.94);border:1px solid var(--shu-deep);color:#fff5ef;
+    padding:9px 15px;border-radius:8px;font-size:13px;font-family:"Shippori Mincho",serif;
+    letter-spacing:.05em;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    box-shadow:0 6px 16px rgba(0,0,0,.3);animation:pulse2 1.6s infinite;
+  }
+  .placing-hint .cancel{cursor:pointer;text-decoration:underline}
+  @keyframes pulse2{50%{background:rgba(181,52,31,.94)}}
+
+  .wall-scroll{
+    overflow:auto;
+    position:absolute;inset:0;
+    height:100%;width:100%;
+    border-radius:0;
+    background:#e7ddc6;
+    -webkit-overflow-scrolling:touch;
+    cursor:grab;
+    touch-action:pan-x pan-y;
+    scrollbar-width:thin;
+    scrollbar-color:#a7402b #d8cdb2;
+  }
+  .wall-scroll.grabbing{cursor:grabbing}
+  .wall-scroll.placing-lock{touch-action:none}   /* 配置中はスクロールを止め、指でゴーストを動かす */
+  .wall-scroll::-webkit-scrollbar{width:13px;height:13px}
+  .wall-scroll::-webkit-scrollbar-track{background:#d8cdb2}
+  .wall-scroll::-webkit-scrollbar-thumb{
+    background:#a7402b;border-radius:8px;border:3px solid #d8cdb2;
+  }
+  .wall-scroll::-webkit-scrollbar-thumb:hover{background:var(--shu)}
+  .wall-scroll::-webkit-scrollbar-corner{background:#d8cdb2}
+  .wall-sizer{position:relative;}
+  .wall{
+    position:absolute;top:0;left:0;
+    width:6000px;height:2200px;
+    transform-origin:top left;
+    background:
+      repeating-linear-gradient(90deg, rgba(90,70,40,.045) 0 1px, transparent 1px 28px),
+      linear-gradient(155deg,#f3ecdc,#e7ddc6);
+  }
+  .wall.placing{cursor:copy}
+  .wall.placing #notes{pointer-events:none}
+  .wall::after{
+    content:"";position:absolute;left:0;right:0;top:50%;height:2px;z-index:-1;  /* 半紙の背面へ */
+    background:repeating-linear-gradient(90deg, rgba(90,70,40,.13) 0 16px, transparent 16px 32px);
+    pointer-events:none;
+  }
+
+  /* zoom control */
+  .zoom-ctl{display:flex;align-items:center;gap:8px;color:#e9dcc0;font-size:12px}
+  .zoom-ctl input[type=range]{width:120px;accent-color:var(--shu)}
+  .zoom-ctl .zbtn{
+    width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,.28);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:1;
+  }
+  .zoom-ctl .zbtn:hover{background:rgba(0,0,0,.45)}
+  .zoom-ctl .zval{min-width:42px;text-align:right;font-weight:700}
+
+  .note{
+    position:absolute;width:104px;
+    background:var(--paper);
+    padding:6px 6px 7px;
+    border-radius:3px;
+    box-shadow:0 7px 16px rgba(0,0,0,.4);
+    display:flex;flex-direction:column;
+    transform-origin:50% 50%;
+    animation:drop .45s cubic-bezier(.2,.9,.3,1.2) both;
+  }
+  .note.no-anim{animation:none}
+  .note.mine{outline:2px solid var(--gold);outline-offset:2px;z-index:20}
+  .note.is-hidden{opacity:.55;outline:2px dashed var(--shu);outline-offset:2px}
+  .note img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:2px;background:#fff}
+  .note .imgwrap{position:relative}
+  /* 読み込み前の空半紙（うっすら和紙色）。読めたらふわっと表示 */
+  .note .note-img{
+    width:100%;aspect-ratio:2/3;border-radius:2px;
+    background:repeating-linear-gradient(0deg,#fbf8f0,#fbf8f0 7px,#f4eede 7px,#f4eede 8px);
+    opacity:0;transition:opacity .3s;
+  }
+  .note .note-img.ready{opacity:1;background:#fff}
+  .note .tape{
+    position:absolute;top:-9px;left:50%;transform:translateX(-50%) rotate(var(--r,-3deg));
+    width:48px;height:18px;
+    background:rgba(216,201,168,.62);
+    box-shadow:0 1px 3px rgba(0,0,0,.2);z-index:2;
+  }
+  /* 反転（180°）した半紙はテープを反対の端へ＝画面上では上側に来る */
+  .note.flipped .tape{top:auto;bottom:-9px}
+  .note .tape{transition:opacity .3s ease, transform .4s cubic-bezier(.2,.85,.3,1.45)}
+  .note.rotoring .tape{opacity:0;transform:translateX(-50%) rotate(var(--r,-3deg)) scale(.2)}  /* 回転中は隠し、確定後に生える */
+  .note.snapping{transition:transform .3s cubic-bezier(.25,.9,.35,1.2)}                          /* ぐるん／落ち着き */
+  .note .who{
+    font-size:10px;color:var(--ink-faint);
+    text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font-family:"Shippori Mincho",serif;margin:4px 2px 4px;
+  }
+  .note .acts{display:flex;align-items:center;gap:3px;margin-top:auto}
+  .sou-btn{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:2px;
+    background:#efe3c4;color:var(--ink-faint);
+    border-radius:5px;padding:4px 3px;font-size:10px;font-weight:700;
+    box-shadow:inset 0 0 0 1px rgba(140,110,60,.2);
+  }
+  .sou-btn .n{color:var(--shu-deep);display:inline-block}
+  .sou-btn.done{background:#f3d9c9;color:var(--shu-deep);box-shadow:inset 0 0 0 1px var(--shu)}
+  .sou-btn:hover{filter:brightness(1.04)}
+  .sou-btn.pop .n{animation:souPop .45s ease-out}
+  @keyframes souPop{0%{transform:scale(1)}35%{transform:scale(1.55);color:var(--shu)}100%{transform:scale(1)}}
+  .del-btn{
+    background:rgba(181,52,31,.06);color:#9c7f5e;font-size:11px;font-weight:700;
+    padding:5px 9px;border-radius:5px;letter-spacing:.06em;
+    box-shadow:inset 0 0 0 1px rgba(181,52,31,.22);
+  }
+  .del-btn:hover{background:rgba(181,52,31,.14);color:var(--shu-deep)}
+  .del-btn.done{color:#c9b48f;cursor:default;box-shadow:inset 0 0 0 1px rgba(140,110,60,.2)}
+  /* 選択中（最前面）の半紙だけボタンが効く。非選択はボタンを淡色＝押せない見た目に */
+  .note .acts button{opacity:.45;transition:opacity .15s}
+  .note.sel .acts button, .note.mine .acts button{opacity:1}
+  .note.sel{outline:2px solid rgba(181,52,31,.55);outline-offset:2px;border-radius:3px}
+  .admin-line{
+    display:flex;align-items:center;gap:4px;margin-top:6px;flex-wrap:wrap;
+    font-size:9px;color:var(--ink-faint);
+    border-top:1px dashed rgba(140,110,60,.3);padding-top:5px;
+  }
+  .admin-line .stat{background:#e8dcbb;border-radius:4px;padding:2px 5px}
+  .admin-line .stat.warn{background:#f0cdbf;color:var(--shu-deep)}
+  .mini{font-size:9px;padding:3px 7px;border-radius:5px;font-weight:700}
+  .mini.restore{background:#d8e8cf;color:#2f5a23}
+  .mini.del{background:#f0cdbf;color:var(--shu-deep)}
+  .hidden-badge{
+    position:absolute;top:6px;left:6px;z-index:2;
+    background:var(--shu);color:var(--paper);font-size:9px;font-weight:700;
+    padding:2px 5px;border-radius:3px;font-family:"Shippori Mincho",serif;
+  }
+
+  /* ghost preview while placing */
+  .ghost{
+    position:absolute;width:104px;pointer-events:none;display:none;z-index:30;
+    opacity:.8;transform-origin:50% 0;filter:drop-shadow(0 8px 10px rgba(0,0,0,.4));
+  }
+  .ghost.show{display:block}
+  .ghost img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:2px;background:var(--paper);padding:5px}
+  /* 置けない位置（下の半紙が3割超隠れる）では半紙全体が赤っぽくなる */
+  .ghost.blocked::after{content:"";position:absolute;inset:0;border-radius:3px;background:rgba(190,30,20,.5);pointer-events:none}
+  .ghost.blocked{filter:drop-shadow(0 8px 10px rgba(0,0,0,.4)) drop-shadow(0 0 3px rgba(190,30,20,.9))}
+
+  /* angle adjust bar (floating bottom-center) */
+  /* PC: 半紙中央を軸にした円形ダイヤルの回転スライダー */
+  .rotor{position:fixed;z-index:55;display:none;touch-action:none;cursor:grab}
+  .rotor.show{display:block}
+  .rotor:active{cursor:grabbing}
+  .rotor svg{display:block;overflow:visible;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+  .rotor #rotorHandle{cursor:grab}
+  .rotor-cancel{
+    position:absolute;left:50%;top:0;transform:translateX(-50%);
+    font-size:13px;line-height:1;padding:6px 14px;border-radius:999px;
+    background:#e7d9bb;color:var(--ink-faint);font-family:"Zen Kaku Gothic New",sans-serif;
+    box-shadow:0 2px 6px rgba(0,0,0,.3), inset 0 0 0 1px rgba(140,110,60,.4);
+    cursor:pointer;user-select:none;white-space:nowrap;
+  }
+  .rotor-cancel:hover{filter:brightness(1.05)}
+  .rotor-hint{
+    position:absolute;left:50%;transform:translateX(-50%);
+    white-space:nowrap;font-size:11px;font-family:"Zen Kaku Gothic New",sans-serif;
+    color:#6b5a3f;background:rgba(245,238,222,.92);padding:3px 10px;border-radius:999px;
+    box-shadow:0 2px 6px rgba(0,0,0,.2), inset 0 0 0 1px rgba(140,110,60,.3);pointer-events:none;
+  }
+  /* 初回ガイド：中央で点滅→左上のバー位置へ移動 */
+  .guide{
+    position:fixed;z-index:80;
+    display:flex;align-items:center;gap:10px;
+    padding:13px 20px;border-radius:13px;
+    background:linear-gradient(150deg,#efe6cf,#e5d7b4);
+    color:var(--ink-faint);
+    font-family:"Shippori Mincho",serif;font-weight:700;font-size:16px;white-space:nowrap;
+    box-shadow:0 12px 32px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.4);
+    opacity:0;pointer-events:none;cursor:pointer;
+    transition:left .8s cubic-bezier(.85,0,.12,1), top .8s cubic-bezier(.85,0,.12,1), transform .8s cubic-bezier(.85,0,.12,1), opacity .4s;
+  }
+  .guide .g-plus{
+    width:24px;height:24px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--shu);color:#fff;font-size:17px;line-height:1;
+  }
+  .guide.show{opacity:1;pointer-events:auto;animation:guidePulse 1s ease-in-out infinite}
+  @keyframes guidePulse{
+    0%,100%{box-shadow:0 12px 32px rgba(0,0,0,.45), 0 0 0 0 rgba(181,52,31,0)}
+    50%{box-shadow:0 12px 32px rgba(0,0,0,.45), 0 0 0 7px rgba(181,52,31,.30)}
+  }
+
+  /* nav cluster: 半紙めぐり + ミニマップ */
+  .nav-cluster{
+    position:fixed;right:14px;bottom:14px;z-index:24;
+    display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  }
+  .meguri{
+    display:flex;align-items:center;gap:6px;
+    background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
+    padding:6px 8px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
+  }
+  .meguri button{
+    width:36px;height:32px;border-radius:7px;border:none;cursor:pointer;
+    background:#e3d7b8;color:var(--ink-faint);font-size:15px;font-weight:700;line-height:1;
+    display:flex;align-items:center;justify-content:center;padding:0;
+  }
+  .meguri button:hover{filter:brightness(1.05)}
+  .meguri button:active{transform:scale(.96)}
+  .meguri.hint{animation:meguriHint 1.1s ease-in-out infinite}
+  @keyframes meguriHint{
+    0%,100%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 0 rgba(181,52,31,0)}
+    50%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 7px rgba(181,52,31,.38)}
+  }
+  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:0 2px;white-space:nowrap}
+  .minimap{
+    width:184px;background:linear-gradient(155deg,#f3ecdc,#e7ddc6);
+    border:1px solid rgba(90,70,40,.4);border-radius:8px;overflow:hidden;
+    box-shadow:0 6px 16px rgba(0,0,0,.35);cursor:pointer;touch-action:none;
+  }
+  .minimap canvas{display:block;width:184px;height:67px}
+  @media(max-width:560px){
+    .nav-cluster{right:10px;bottom:10px}
+    .minimap{width:140px}
+    .minimap canvas{width:140px;height:51px}
+    .meguri button{width:42px;height:38px;font-size:16px}
+  }
+
+  .note.found{outline:3px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 1.5s ease-out forwards}
+  @keyframes foundpulse{0%{outline-color:var(--shu)}70%{outline-color:var(--shu)}100%{outline-color:rgba(181,52,31,0)}}
+
+  @keyframes drop{from{opacity:0;transform:translateY(-22px)}to{opacity:1}}
+
+  /* admin bar */
+  .gear{
+    position:fixed;left:16px;bottom:16px;z-index:40;
+    width:42px;height:42px;border-radius:50%;
+    background:rgba(26,23,20,.55);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;font-size:20px;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);
+  }
+  .gear:hover{background:rgba(26,23,20,.8)}
+  .admin-banner{
+    background:rgba(140,36,20,.94);
+    border:1px solid var(--shu-deep);color:#fff5ef;
+    padding:9px 14px;border-radius:8px;font-size:12px;
+    font-family:"Shippori Mincho",serif;letter-spacing:.06em;
+    box-shadow:0 6px 16px rgba(0,0,0,.3);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+
+  .empty,.loading{
+    text-align:center;padding:48px 20px;
+    color:var(--ink-faint);font-family:"Shippori Mincho",serif;
+    background:rgba(255,255,255,.55);border-radius:12px;
+  }
+  .empty .big{font-size:40px;display:block;margin-bottom:14px;opacity:.45}
+  .err{
+    background:#fff;
+    border:1px solid var(--shu);color:var(--shu-deep);
+    padding:14px 16px;border-radius:8px;font-size:13px;line-height:1.7;
+    box-shadow:0 6px 16px rgba(0,0,0,.2);
+  }
+
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:var(--sumi);color:var(--paper);
+    font-family:"Shippori Mincho",serif;letter-spacing:.1em;
+    padding:11px 22px;border-radius:30px;font-size:14px;
+    opacity:0;pointer-events:none;transition:.3s;z-index:60;
+    box-shadow:0 6px 20px rgba(0,0,0,.4);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="wall-scroll" id="wallScroll">
+    <div class="wall-sizer" id="wallSizer">
+      <div class="wall" id="wall">
+        <div id="notes"></div>
+        <div class="ghost" id="ghost"><img id="ghostImg" alt=""></div>
+      </div>
+    </div>
+  </div>
+
+  <header class="float-header">
+    <div class="title">ふたば(<span class="shu">偽</span>)お習字<span class="seal" title="ふたば"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 C12 17, 12 14, 12 10.5" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M12 12.5 C7.5 12.5, 4.5 9.5, 4.5 5.2 C9 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/><path d="M12 12.5 C16.5 12.5, 19.5 9.5, 19.5 5.2 C15 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/></svg></span></div>
+    <div class="subtitle">本家が実装されたら即閉鎖</div>
+  </header>
+
+  <div class="float-tools">
+    <div class="zoom-ctl">
+      <div class="zbtn" id="zoomOut" title="縮小">－</div>
+      <input type="range" id="zoomRange" min="0.5" max="2" step="0.1" value="0.5">
+      <div class="zbtn" id="zoomIn" title="拡大">＋</div>
+      <span class="zval" id="zoomVal">50%</span>
+    </div>
+    <div class="status"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></div>
+  </div>
+
+  <div id="msg" class="float-msg"></div>
+
+  <!-- 浮いている半紙パネル -->
+  <section class="float-desk" id="floatDesk">
+    <div class="desk-bar">
+      <span class="desk-bar-title">半紙</span>
+      <button class="desk-toggle" id="deskToggle" title="しまう／ひらく">−</button>
+    </div>
+    <div class="desk-body" id="deskBody">
+      <div class="canvas-frame">
+        <canvas id="pad"></canvas>
+        <div class="seal-stamp" aria-hidden="true">
+          <span>園</span><span>双</span>
+          <span>祭</span><span>葉</span>
+          <span class="num">21</span><span>学</span>
+        </div>
+      </div>
+
+      <div class="tools">
+        <div class="row" id="colors">
+          <span class="tool-label">墨</span>
+          <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
+          <div class="swatch" data-color="#b5341f" style="background:#b5341f"></div>
+          <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c"></div>
+          <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
+          <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
+          <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
+        </div>
+        <div class="row">
+          <span class="tool-label">太さ</span>
+          <div class="size-wrap">
+            <div class="size-dots">
+              <i style="left:calc(8px + 0.0000*(100% - 16px))"></i><i style="left:calc(8px + 0.0909*(100% - 16px))"></i><i style="left:calc(8px + 0.1818*(100% - 16px))"></i><i style="left:calc(8px + 0.2727*(100% - 16px))"></i><i style="left:calc(8px + 0.3636*(100% - 16px))"></i><i style="left:calc(8px + 0.4545*(100% - 16px))"></i><i style="left:calc(8px + 0.5455*(100% - 16px))"></i><i style="left:calc(8px + 0.6364*(100% - 16px))"></i><i style="left:calc(8px + 0.7273*(100% - 16px))"></i><i style="left:calc(8px + 0.8182*(100% - 16px))"></i><i style="left:calc(8px + 0.9091*(100% - 16px))"></i><i style="left:calc(100% - 8px)"></i>
+            </div>
+            <input type="range" id="size" min="0" max="11" step="1" value="2">
+
+          </div>
+        </div>
+        <div class="row">
+          <span class="tool-label">筆</span>
+          <div class="brush-seg" id="brushSeg">
+            <button class="brush-opt active" data-brush="taper">先細</button>
+            <button class="brush-opt" data-brush="round">丸筆</button>
+            <button class="brush-opt" data-brush="flat">平筆</button>
+          </div>
+        </div>
+
+        <div class="btns" style="margin-bottom:8px">
+          <button class="btn-ghost" id="undo">戻</button>
+          <button class="btn-ghost" id="fillBtn">塗</button>
+          <button class="btn-ghost" id="photoBtn">写真</button>
+          <button class="btn-ghost" id="clear">消</button>
+          <button class="btn-ghost" id="bigBtn" title="表示だけ1.5倍にして描きやすくする（画質・保存サイズは変わりません）">拡大</button>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" style="display:none">
+        <div class="hint">お習字撮影は自分のもの限定。要撮影登録</div>
+      </div>
+      <div class="desk-foot">
+        <input class="name-field" id="who" type="text" maxlength="16" placeholder="名前（空欄ならランダム）">
+        <div class="btns">
+          <button class="btn-post" id="post">貼 る</button>
+        </div>
+      </div>
+    </div>
+    <div class="desk-more" id="deskMore" aria-hidden="true">▼</div>
+  </section>
+
+  <div class="rotor" id="rotor"></div>
+  <div class="guide" id="guide"><span>半紙を広げる</span><span class="g-plus">＋</span></div>
+  <div class="guide" id="guide2"><span>半紙めぐり</span><span class="g-plus">見</span></div>
+
+  <div class="nav-cluster">
+    <div class="meguri">
+      <button id="prevNote" title="前の半紙へ" aria-label="前の半紙へ">◀</button>
+      <span class="lab">半紙めぐり</span>
+      <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
+    </div>
+    <div class="minimap" id="minimap" title="タップで移動">
+      <canvas id="miniCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="gear" id="gear" title="運営メニュー">⚙</div>
+
+<script type="module">
+/* ============ お習字オンライン（Firebase版） ============ */
+
+/* ===================== 接続先の切り替え（trial=victorycats / prod=daikikoushirou） =====================
+   ここの ENV を変えるだけで Firebase / Supabase の接続先がまとめて切り替わります。
+   ・公開テスト（victorycats組織）で動かす時 → ENV = "trial"
+   ・本番（daikikoushirou）に戻す時        → ENV = "prod"
+   ※ お習字が Supabase で使うのは Storage バケットだけ（DB/認証/関数は無し＝全部Firebase側）。
+     移行は「victorycats配下に board-images バケット＋INSERTポリシーを用意して、下の trial に URL と anon を入れる」だけ。 */
+const ENV = "prod";   // ← 公開テスト時は "trial" に変える
+
+// 本番（現行）Firebase
+const FB_PROD = {
+  apiKey: "AIzaSyDqNpkHF4VZ8yUK3pc_6jxAHoOiMllPBUs",
+  authDomain: "fg21-dk2027-writeboard.firebaseapp.com",
+  databaseURL: "https://fg21-dk2027-writeboard-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "fg21-dk2027-writeboard",
+  storageBucket: "fg21-dk2027-writeboard.firebasestorage.app",
+  messagingSenderId: "37028778656",
+  appId: "1:37028778656:web:585e364ce0a83f25646fc5"
+};
+// 公開テスト用 Firebase（別プロジェクトを作るならここを差し替え。同じFirebaseを使い回すなら FB_PROD のままでOK）
+const FB_TRIAL = FB_PROD;
+
+const ENVS = {
+  prod: {
+    firebase: FB_PROD,
+    supaUrl:  "https://oicwpmyvophbzfaqfbka.supabase.co",   // daikikoushirou board プロジェクト
+    supaAnon: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pY3dwbXl2b3BoYnpmYXFmYmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjE0NzcsImV4cCI6MjA5NjU5NzQ3N30.A-p35FfNVAyCw2GMZ3DNnQwwlTSp1y_ZiJQOrzVP_lw",
+    bucket:   "board-images"
+  },
+  trial: {
+    firebase: FB_TRIAL,
+    supaUrl:  "（victorycats配下に作る新プロジェクトの URL：Settings > API の Project URL）",
+    supaAnon: "（その新プロジェクトの anon public キー）",
+    bucket:   "board-images"
+  }
+};
+const CFG = ENVS[ENV] || ENVS.prod;
+const firebaseConfig = CFG.firebase;
+/* ====================================================================================================== */
+/* ↑↑↑ databaseURL が空だと共有ボードは動きません ↑↑↑ */
+
+const DEL_THRESHOLD = 5;          // del がこの数たまるとクライアント側でソフト非表示（恒久削除は運営のみ）
+// ★運営（オーナー）の Firebase Auth UID。下の手順で取得して貼り付ける。
+//   Firebaseコンソール → Authentication → Users → 作成したメールアカウントの「ユーザーUID」
+//   ※同じUIDをデータベースのルールにも貼り付けること（下のメッセージ参照）。秘密情報ではない。
+const ADMIN_UID = "VRZS1oZuihN7if6GD2yuP1qvDik1";
+const POST_COOLDOWN_MS = 40000;   // 連続投稿の最短間隔（サーバ側ルールと一致させること）
+let lastPostAt = (function(){ try{ return +localStorage.getItem("fg_lastPost")||0; }catch(e){ return 0; } })();   // 端末に残る前回投稿時刻（事前警告用）
+
+/* ---------- ボード切替（満杯で保存→新ボード） ---------- */
+const BOARD_LIMIT = 300;          // この枚数でボード満杯（サーバ側ルールと一致させること）
+const WARN_REMAIN = [60, 10];     // 残りこの枚数で運営へ通知（make.com 経由）
+const NOTIFY_WEBHOOK = "https://hook.us2.make.com/k68lp6o4rnvp7hkh8eag5osdd1rqq1lk";  // 残り60/10をPOST
+let boardId = null;               // 現在のボード番号（meta/board）
+let boardCount = 0;               // 現在ボードの累積投稿数（boards/{id}/count）
+let boardSubs = [];               // 現在ボードの購読解除関数
+function bpath(sub){ return "boards/" + boardId + "/" + sub; }   // 現在ボードのパス
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getDatabase, ref, push, set, update, remove, get, serverTimestamp, goOffline, goOnline,
+  onValue, onChildAdded, onChildChanged, onChildRemoved, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import {
+  getAuth, onAuthStateChanged, signInAnonymously,
+  signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+/* ---------- 画像置き場（Supabase Storage） ---------- */
+// 画像“本体”だけ Supabase に保存。Firebaseには画像のパス文字列(imgPath)のみ持たせる（将来R2へ移しやすい形）
+const SUPA_URL    = CFG.supaUrl;     // 上の ENV 切替で決まる
+const SUPA_ANON   = CFG.supaAnon;
+const SUPA_BUCKET = CFG.bucket;
+let supa = null;
+try { supa = createClient(SUPA_URL, SUPA_ANON); } catch(e) { console.error("Supabase init failed", e); }
+function imgUrl(path){ return SUPA_URL + "/storage/v1/object/public/" + SUPA_BUCKET + "/" + path; }   // 公開URLの組み立て
+function isSafePath(p){ return typeof p==="string" && p.length<200 && /^[A-Za-z0-9_./-]+$/.test(p) && !p.includes(".."); }   // 変な値を弾く
+
+let db = null, auth = null;
+try {
+  const app = initializeApp(firebaseConfig);
+  db = getDatabase(app);
+  auth = getAuth(app);
+} catch(e) {
+  console.error("Firebase init failed", e);
+}
+let myUid = null;            // 自分の認証UID（匿名 or 運営）
+let authStarted = false;     // 認証完了後に一度だけ購読開始
+
+/* ---------- canvas drawing ---------- */
+const pad = document.getElementById("pad");
+const ctx = pad.getContext("2d", { willReadFrequently: true });
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const PAPER = "#f7f4ec";
+let color = "#1a1714";
+let size = 14;
+let erasing = false;
+let brushType = "taper";              // "taper"=先細, "flat"=平筆
+const NIB = -35 * Math.PI/180;        // 平筆のニブ角度
+let drawing = false;
+let last = null;
+let lastMid = null;   // 中点スムージング用：直前のセグメント終点（点列化を防ぐ）
+let lastTime = 0;
+let lastWidth = 0;
+let lastDir = null;   // 直近の運筆方向（抜きの三角テールに使う）
+let penOff = false;   // 描画中にカーソルが描画エリア外に出ているか
+let strokeLen = 0;    // ストローク開始からの累積距離（入りの筆圧ランプ用）
+let fillMode = false; // 塗りつぶし（バケツ）モード
+let undoStack = [];
+
+let canvasScale = 1;   // 表示倍率（1 or 1.5）。内部解像度はこれに依らず一定に保つ
+function setupCanvas(){
+  const rect = pad.getBoundingClientRect();
+  const baseW = rect.width / canvasScale;          // 表示が1.5倍でも内部は等倍基準
+  const w = Math.round(baseW * DPR);
+  const h = Math.round(baseW * 1.5 * DPR);
+  // preserve current drawing on resize
+  let prev = null;
+  if (pad.width) { prev = document.createElement("canvas"); prev.width = pad.width; prev.height = pad.height; prev.getContext("2d").drawImage(pad,0,0); }
+  pad.width = w; pad.height = h;
+  ctx.fillStyle = PAPER; ctx.fillRect(0,0,w,h);
+  if (prev) ctx.drawImage(prev,0,0,w,h);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+}
+window.addEventListener("resize", ()=>{ const d=pad.toDataURL(); const img=new Image(); img.onload=()=>{ setupCanvas(); ctx.drawImage(img,0,0,pad.width,pad.height); }; img.src=d; });
+
+function pos(e){
+  const r = pad.getBoundingClientRect();
+  const cx = (e.touches? e.touches[0].clientX : e.clientX) - r.left;
+  const cy = (e.touches? e.touches[0].clientY : e.clientY) - r.top;
+  return { x: cx * (pad.width / r.width), y: cy * (pad.height / r.height) };
+}
+function pushUndo(){
+  try{ undoStack.push(ctx.getImageData(0,0,pad.width,pad.height)); if(undoStack.length>12) undoStack.shift(); }catch(e){}
+}
+function start(e){
+  e.preventDefault();
+  if(fillMode){ pushUndo(); const fp = pos(e); floodFill(fp.x, fp.y); return; } // バケツ：タップ位置を塗る
+  pushUndo();
+  drawing = true; last = pos(e); lastMid = last; lastTime = performance.now(); lastDir = null; penOff = false; strokeLen = 0;
+  if(!erasing && brushType==="flat"){ flatDab(last); return; }
+  if(!erasing && brushType==="round"){ dot(last, size*DPR); return; } // 丸筆：一定の太さ
+  lastWidth = erasing ? size*2*DPR : Math.max(1, size*0.12)*DPR; // 入り：ごく細い種点から
+  dot(last, lastWidth);
+}
+function flatNib(){ const h=size/2*DPR; return { nx:Math.cos(NIB)*h, ny:Math.sin(NIB)*h }; }
+function flatDab(p){
+  const {nx,ny}=flatNib();
+  ctx.strokeStyle=color; ctx.lineWidth=Math.max(2, size*0.18*DPR); ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(p.x+nx,p.y+ny); ctx.lineTo(p.x-nx,p.y-ny); ctx.stroke();
+}
+// a→b をニブ（固定角の平筆）で連続的に塗る。点が飛んでもドットにならないよう細かく補間
+function flatStroke(a,b){
+  const {nx,ny}=flatNib();
+  const lw = Math.max(2, size*0.18*DPR);
+  const d = Math.hypot(b.x-a.x, b.y-a.y);
+  const n = Math.max(1, Math.ceil(d/(lw*0.5)));   // ニブ太さより細かい間隔で重ねる
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineCap="round";
+  for(let i=0;i<=n;i++){
+    const t=i/n, x=a.x+(b.x-a.x)*t, y=a.y+(b.y-a.y)*t;
+    ctx.beginPath(); ctx.moveTo(x+nx,y+ny); ctx.lineTo(x-nx,y-ny); ctx.stroke();
+  }
+}
+function resumeAt(p){            // エリアに戻った：同じ太さのまま継ぎ目なく再開（線でつながない）
+  penOff = false;
+  last = p; lastMid = p; lastTime = performance.now(); lastDir = null;
+}
+function move(e){
+  if(!drawing) return; e.preventDefault();
+  const p = pos(e);
+  const inside = p.x>=0 && p.x<=pad.width && p.y>=0 && p.y<=pad.height;
+  if(!inside){ penOff = true; return; }     // 外：描かない・ストロークも終わらせない
+  if(penOff || !last){ resumeAt(p); return; } // 戻ってきた→同じストロークとして再開
+
+  if(!erasing && brushType==="flat"){ flatStroke(last, p); last = p; return; }
+  if(!erasing && brushType==="round"){          // 丸筆：太さ一定・丸い筆。前回点→現在点を必ず一本の線でつなぐ
+    ctx.strokeStyle=color; ctx.lineWidth=size*DPR; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+    last = p; return;
+  }
+
+  const now = performance.now();
+  const dx = p.x-last.x, dy = p.y-last.y;
+  const dist = Math.hypot(dx,dy);
+
+  let targetW;
+  if(erasing){
+    targetW = size*2*DPR;
+  } else {
+    // 先細：入りは細い点から、開始距離に応じて本体の太さまで立ち上げる（速度には依存しない）
+    const base = size*DPR;
+    strokeLen += dist;
+    const head = Math.min(1, strokeLen/(base*2.0));   // base*2pxかけて 0.08→1.0
+    targetW = base * (0.08 + 0.92*head);
+  }
+  // なめらかに太さを変化させる
+  const w = erasing ? targetW : lastWidth + (targetW-lastWidth)*0.5;
+
+  ctx.strokeStyle = erasing ? PAPER : color;
+  ctx.lineWidth = w;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(last.x,last.y);
+  ctx.lineTo(p.x,p.y);        // 前回点→現在点を必ず一本の線でつなぐ（高速でも途切れない）
+  ctx.stroke();
+
+  if(dist>0.5){ lastDir = { x:dx/dist, y:dy/dist }; }
+  last = p; lastTime = now; lastWidth = w;
+}
+// 抜き：運筆方向へ延長して0へ細める（先端を点にする）
+function taperTail(){
+  if(!last || !lastDir || lastWidth<=0.6) return;
+  const steps = 6;
+  const len = Math.min(lastWidth*1.6, size*DPR*1.4);
+  const startP = last;                       // 線が実際に終わっている点から繋ぐ
+  let x = startP.x, y = startP.y, w0 = lastWidth;
+  ctx.strokeStyle = color; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for(let i=1;i<=steps;i++){
+    const nx = startP.x + lastDir.x*(len*i/steps);
+    const ny = startP.y + lastDir.y*(len*i/steps);
+    const w1 = lastWidth*(1 - i/steps);   // 先端まで0へ
+    ctx.lineWidth = Math.max(0.3, (w0+w1)/2);
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
+    x = nx; y = ny; w0 = w1;
+  }
+}
+function dot(p,w){
+  ctx.fillStyle = erasing ? PAPER : color;
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,(w||(erasing?size*2:size)*DPR)/2,0,Math.PI*2);
+  ctx.fill();
+}
+function end(){
+  const wasDrawing = drawing;
+  if(drawing && !erasing && brushType==="taper") taperTail();
+  drawing=false; last=null; lastDir=null;
+  if(wasDrawing) scheduleDraftSave();   // 描き終わりごとに下書き退避
+}
+/* ---------- 描きかけの自動退避（端末ローカル） ---------- */
+let draftTimer = 0;
+function saveDraftNow(){ try{ LS.set("fg_draft", pad.toDataURL("image/png")); }catch(e){} }
+function scheduleDraftSave(){ clearTimeout(draftTimer); draftTimer = setTimeout(saveDraftNow, 800); }
+function restoreDraft(){
+  const d = LS.get("fg_draft"); if(!d) return;
+  const im = new Image();
+  im.onload = ()=>{ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle=PAPER; ctx.fillRect(0,0,pad.width,pad.height); ctx.drawImage(im,0,0,pad.width,pad.height); ctx.restore(); };
+  im.src = d;
+}
+window.addEventListener("pagehide", saveDraftNow);
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) saveDraftNow(); });
+function hexToRgb(hex){
+  hex = String(hex).replace("#","");
+  if(hex.length===3) hex = hex.split("").map(c=>c+c).join("");
+  const n = parseInt(hex,16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+// バケツ塗りつぶし（クリック地点と地続きの同系色領域を現在色で塗る）
+function floodFill(sx, sy){
+  const W = pad.width, H = pad.height;
+  sx = Math.max(0, Math.min(W-1, Math.round(sx)));
+  sy = Math.max(0, Math.min(H-1, Math.round(sy)));
+  let img;
+  try{ img = ctx.getImageData(0,0,W,H); }catch(e){ return; }
+  const data = img.data;
+  const i0 = (sy*W+sx)*4;
+  const tr=data[i0], tg=data[i0+1], tb=data[i0+2], ta=data[i0+3];
+  const [fr,fg,fb] = hexToRgb(erasing ? PAPER : color);
+  if(Math.abs(tr-fr)<3 && Math.abs(tg-fg)<3 && Math.abs(tb-fb)<3 && ta===255) return; // 既に同色
+  const tol = 48;
+  const match = (i)=> Math.abs(data[i]-tr)<=tol && Math.abs(data[i+1]-tg)<=tol &&
+                      Math.abs(data[i+2]-tb)<=tol && Math.abs(data[i+3]-ta)<=tol;
+  const seen = new Uint8Array(W*H);
+  const stack = [[sx,sy]];
+  while(stack.length){
+    const [px,py] = stack.pop();
+    let x = px;
+    while(x>=0 && !seen[py*W+x] && match((py*W+x)*4)) x--;
+    x++;
+    let up=false, down=false;
+    while(x<W && !seen[py*W+x] && match((py*W+x)*4)){
+      const p=(py*W+x)*4;
+      data[p]=fr; data[p+1]=fg; data[p+2]=fb; data[p+3]=255;
+      seen[py*W+x]=1;
+      if(py>0){ const a=((py-1)*W+x); if(!seen[a] && match(a*4)){ if(!up){ stack.push([x,py-1]); up=true; } } else up=false; }
+      if(py<H-1){ const b=((py+1)*W+x); if(!seen[b] && match(b*4)){ if(!down){ stack.push([x,py+1]); down=true; } } else down=false; }
+      x++;
+    }
+  }
+  // 1px 外側に拡張して塗る（境界のにじみ・隙間を埋める）
+  const add = [];
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const id=y*W+x;
+      if(seen[id]) continue;
+      let near=false;
+      for(let dy=-1;dy<=1 && !near;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          if(!dy && !dx) continue;
+          const ny=y+dy, nx=x+dx;
+          if(ny>=0&&ny<H&&nx>=0&&nx<W && seen[ny*W+nx]){ near=true; break; }
+        }
+      }
+      if(near) add.push(id);
+    }
+  }
+  for(const id of add){ const p=id*4; data[p]=fr; data[p+1]=fg; data[p+2]=fb; data[p+3]=255; }
+  ctx.putImageData(img,0,0);
+  scheduleDraftSave();
+}
+
+pad.addEventListener("mousedown",start);
+window.addEventListener("mousemove",move);
+window.addEventListener("mouseup",end);
+pad.addEventListener("touchstart",start,{passive:false});
+window.addEventListener("touchmove",move,{passive:false});
+window.addEventListener("touchend",end);
+window.addEventListener("touchcancel",end);
+
+/* color picker */
+document.getElementById("colors").addEventListener("click",e=>{
+  const sw = e.target.closest(".swatch"); if(!sw) return;
+  document.querySelectorAll(".swatch").forEach(s=>s.classList.remove("active"));
+  sw.classList.add("active");
+  const c = sw.dataset.color;
+  if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
+});
+// 太さは全段クリッキーな12段。位置(0〜11)→筆の太さ。最細は2px、最太は描画幅の約40%
+const SIZE_STEPS = 12;
+function sizeFromPos(i){
+  i = Math.max(0, Math.min(SIZE_STEPS-1, Math.round(i)));
+  const cw = (pad.getBoundingClientRect().width) || 248;     // 描画エリア幅(CSS px)
+  const min = 2, max = Math.round(cw*0.40);
+  const t = i/(SIZE_STEPS-1);
+  return Math.max(2, Math.round(min + (max-min)*Math.pow(t, 1.7)));  // 細い側を細かく
+}
+document.getElementById("size").addEventListener("input",e=>{
+  const pos = Math.round(+e.target.value);   // 0〜11 の段（スライダー自体が段に吸い付く）
+  e.target.value = pos;
+  size = sizeFromPos(pos);
+  LS.set("fg_sizePos", pos);   // 次回に引き継ぐ（段番号）
+});
+document.getElementById("brushSeg").addEventListener("click",e=>{
+  const b = e.target.closest(".brush-opt"); if(!b) return;
+  document.querySelectorAll(".brush-opt").forEach(o=>o.classList.remove("active"));
+  b.classList.add("active");
+  brushType = b.dataset.brush;
+  LS.set("fg_brush", brushType);   // 次回に引き継ぐ
+  setFillMode(false);   // 筆を選んだら塗りつぶしは解除
+});
+
+/* 塗りつぶし（バケツ）モードの切り替え */
+const fillBtn = document.getElementById("fillBtn");
+function setFillMode(on){
+  fillMode = on;
+  fillBtn.classList.toggle("active", on);
+}
+fillBtn.addEventListener("click", ()=> setFillMode(!fillMode));
+
+/* 現場のお習字を写真でのせる */
+const photoInput = document.getElementById("photoInput");
+document.getElementById("photoBtn").addEventListener("click", ()=> photoInput.click());
+function loadImgEl(file){
+  return new Promise((res,rej)=>{
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = ()=>{ URL.revokeObjectURL(url); res(img); };
+    img.onerror = (e)=>{ URL.revokeObjectURL(url); rej(e); };
+    img.src = url;
+  });
+}
+function drawPhotoCover(img){
+  const cw = pad.width, ch = pad.height;            // 半紙キャンバス（2:3）
+  const iw = img.width, ih = img.height;
+  const cr = cw/ch, ir = iw/ih;
+  let sx, sy, sw, sh;
+  if(ir > cr){ sh = ih; sw = ih*cr; sx = (iw-sw)/2; sy = 0; }   // 横長→左右を切る
+  else       { sw = iw; sh = iw/cr; sx = 0; sy = (ih-sh)/2; }   // 縦長→上下を切る
+  ctx.fillStyle = PAPER; ctx.fillRect(0,0,cw,ch);
+  ctx.drawImage(img, sx,sy,sw,sh, 0,0, cw,ch);                   // はみ出しを切って全面に
+  scheduleDraftSave();
+}
+photoInput.addEventListener("change", async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";                              // 同じ写真を選び直せるように
+  if(!file) return;
+  try{
+    let img;
+    try{ img = await createImageBitmap(file, {imageOrientation:"from-image"}); }  // EXIF回転を反映
+    catch(_){ img = await loadImgEl(file); }
+    pushUndo();
+    drawPhotoCover(img);
+    if(img.close) img.close();
+    toast("写真をのせました。貼る場所を選んでね");
+  }catch(err){
+    console.error(err); toast("写真を読み込めませんでした");
+  }
+});
+function doUndo(){ const s=undoStack.pop(); if(s) ctx.putImageData(s,0,0); scheduleDraftSave(); }
+document.getElementById("undo").addEventListener("click", doUndo);
+document.getElementById("clear").addEventListener("click",()=>{ pushUndo(); ctx.fillStyle=PAPER; ctx.fillRect(0,0,pad.width,pad.height); scheduleDraftSave(); });
+
+/* ---------- export (downscaled) ---------- */
+const SEAL_SRC = "data:image/png;base64,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";
+const sealImg = new Image();
+sealImg.src = SEAL_SRC;   // ふたば朱印（透過PNG）。起動時に先読みし、書き出し時に合成
+function drawSeal(o, cx, cy, side){
+  if(sealImg.complete && sealImg.naturalWidth){ o.drawImage(sealImg, cx, cy, side, side); }
+}
+function exportImage(){
+  const out = document.createElement("canvas");
+  out.width = 220; out.height = 330;
+  const o = out.getContext("2d");
+  o.fillStyle = PAPER; o.fillRect(0,0,220,330);
+  o.drawImage(pad,0,0,220,330);
+  const side = 62, margin = 14;
+  drawSeal(o, 220-margin-side, 330-margin-side, side);
+  // WebP対応ブラウザはWebPで書き出し（JPEGより2〜3割小さい）。非対応(古いSafari等)は自動でJPEG
+  let data = out.toDataURL("image/webp", 0.72);
+  if(!data.startsWith("data:image/webp")) data = out.toDataURL("image/jpeg", 0.7);
+  return data;
+}
+function exportImageBlob(){   // アップロード用：同じ絵をBlobで（WebP優先・非対応はJPEG）
+  const out = document.createElement("canvas");
+  out.width = 220; out.height = 330;
+  const o = out.getContext("2d");
+  o.fillStyle = PAPER; o.fillRect(0,0,220,330);
+  o.drawImage(pad,0,0,220,330);
+  const side = 62, margin = 14;
+  drawSeal(o, 220-margin-side, 330-margin-side, side);
+  return new Promise(res=>{
+    out.toBlob(b=>{
+      if(b && b.type==="image/webp") res({ blob:b, ext:"webp", type:"image/webp" });
+      else out.toBlob(b2=> res(b2 ? { blob:b2, ext:"jpg", type:"image/jpeg" } : null), "image/jpeg", 0.7);
+    }, "image/webp", 0.72);
+  });
+}
+function isBlank(){
+  // sample a downscale and check variance vs paper
+  const t=document.createElement("canvas"); t.width=40;t.height=60;
+  const tc=t.getContext("2d", { willReadFrequently: true }); tc.drawImage(pad,0,0,40,60);
+  const d=tc.getImageData(0,0,40,60).data;
+  for(let i=0;i<d.length;i+=4){ if(Math.abs(d[i]-244)>22||Math.abs(d[i+1]-236)>22||Math.abs(d[i+2]-216)>22) return false; }
+  return true;
+}
+
+/* ---------- board (Firebase Realtime DB) ---------- */
+const NOTE_W = 104, NOTE_H = 196;
+const WALL_W = 6000, WALL_H = 2200;
+const ZOOM_MAX = 2;
+let zoomMin = 0.5;   // 画面サイズに応じて「全体が収まる倍率」に更新
+let zoom = 0.5;
+const notesEl  = document.getElementById("notes");
+const wallEl   = document.getElementById("wall");
+const sizerEl  = document.getElementById("wallSizer");
+const scrollEl = document.getElementById("wallScroll");
+const ghostEl  = document.getElementById("ghost");
+const ghostImg = document.getElementById("ghostImg");
+const msgEl    = document.getElementById("msg");
+const countEl  = document.getElementById("count");
+// 端末ローカル保存（未対応・ブロック時も壊れないよう try/catch）
+const LS = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+
+const posts = new Map();    // id -> {name,t,sou,del,hidden,nx,ny,angle}（画像は別パス）
+let postsLoaded = false;    // 初回ロード完了（完了まで「まだ誰も〜」を出さない）
+function loadIdSet(key){ try{ const v = LS.get(key); return new Set(v ? JSON.parse(v) : []); }catch(e){ return new Set(); } }
+const souDone = loadIdSet("fg_sou");   // 端末ごと：同じ半紙へのそうだねは1回だけ（リロードでも維持）
+const delDone = loadIdSet("fg_del");   // 端末ごと：同じ半紙へのdelは1回だけ（連打抑止）
+function saveVotes(){ LS.set("fg_sou", JSON.stringify([...souDone])); LS.set("fg_del", JSON.stringify([...delDone])); }
+let justVoted = null;       // 直前にそうだねした半紙（カウントをポンと跳ねさせる）
+let admin = false;
+let placing = false;        // 位置決め中
+let placeDragging = false;  // スマホで指ドラッグ配置中
+let pendingImg = null;      // 貼る予定の画像
+let lastDrawing = null;     // 貼る直前のキャンバス（キャンセル時に描き戻す）
+let editingId = null;       // 角度微調整中の自分の投稿
+const renderedIds = new Set(); // 既に表示済みの半紙（登場アニメの再生抑制用）
+let zCounter = 100;
+const zOverride = new Map();    // id -> z（クリックで上げた半紙）
+let activeNoteId = null;        // 「選択中＝最前面」の半紙。これ以外はボタンを押せない
+function raiseNote(id){
+  zCounter++; zOverride.set(id, zCounter);
+  const el = notesEl.querySelector('.note[data-id="'+id+'"]');
+  if(el) el.style.zIndex = zCounter;
+}
+function setActive(id){
+  if(activeNoteId === id) return;
+  if(activeNoteId){
+    const prev = notesEl.querySelector('.note[data-id="'+activeNoteId+'"]');
+    if(prev) prev.classList.remove("sel");
+  }
+  activeNoteId = id;
+  const el = notesEl.querySelector('.note[data-id="'+id+'"]');
+  if(el) el.classList.add("sel");
+}
+
+/* ---------- 画像キャッシュ（メモリ + IndexedDB） ---------- */
+const imgCache = new Map();   // id -> dataURL（このセッション）
+const imgState = new Map();   // id -> "loading" | "loaded" | "error"
+let idbPromise = null;
+function openIDB(){
+  if(idbPromise) return idbPromise;
+  idbPromise = new Promise((res)=>{
+    try{
+      const req = indexedDB.open("futaba-oshuji", 1);
+      req.onupgradeneeded = ()=>{ const d=req.result; if(!d.objectStoreNames.contains("imgs")) d.createObjectStore("imgs"); };
+      req.onsuccess = ()=> res(req.result);
+      req.onerror  = ()=> res(null);
+    }catch(_){ res(null); }
+  });
+  return idbPromise;
+}
+async function idbGet(id){
+  const db = await openIDB(); if(!db) return null;
+  return new Promise(res=>{
+    try{ const tx=db.transaction("imgs","readonly").objectStore("imgs").get(id);
+      tx.onsuccess=()=>res(tx.result||null); tx.onerror=()=>res(null);
+    }catch(_){ res(null); }
+  });
+}
+async function idbPut(id, data){
+  const db = await openIDB(); if(!db) return;
+  try{ db.transaction("imgs","readwrite").objectStore("imgs").put(data, id); }catch(_){}
+}
+async function idbDel(id){
+  const db = await openIDB(); if(!db) return;
+  try{ db.transaction("imgs","readwrite").objectStore("imgs").delete(id); }catch(_){}
+}
+function isImgData(d){ return typeof d==="string" && d.startsWith("data:image/"); }   // XSS対策：画像以外は弾く
+function seedImage(id, data){   // 自分の投稿などをキャッシュに先置き
+  if(!isImgData(data)) return;
+  imgCache.set(id, data); imgState.set(id, "loaded"); idbPut(id, data);
+}
+function noteImgSrc(id){
+  const data = imgCache.get(id);
+  if(isImgData(data)) return data;                       // 自分の投稿など（dataURL・このセッション）
+  const p = posts.get(id);
+  if(p && isSafePath(p.imgPath)) return imgUrl(p.imgPath);// Supabase 公開URL
+  if(p && isImgData(p.img)) return p.img;                // 旧：埋め込みdataURL
+  return null;
+}
+function setNoteImg(id){
+  const src = noteImgSrc(id); if(!src) return;           // プロパティ代入（XSS安全）
+  const el = notesEl.querySelector('.note[data-id="'+id+'"] .note-img');
+  if(el){ el.src = src; el.classList.add("ready"); }
+}
+async function loadImage(id){
+  if(imgState.get(id)==="loaded" || imgState.get(id)==="loading") return;
+  const p = posts.get(id);
+  if(p && isImgData(p.img)){ seedImage(id, p.img); setNoteImg(id); return; }      // 旧：埋め込み
+  if(imgCache.has(id)){ imgState.set(id,"loaded"); setNoteImg(id); return; }       // 自分の投稿（dataURL）
+  if(p && isSafePath(p.imgPath)){ imgState.set(id,"loaded"); setNoteImg(id); return; } // Supabase：ブラウザがHTTPキャッシュ
+  // 旧データ救済：base64がRTDBにある場合だけ取得
+  imgState.set(id, "loading");
+  const local = await idbGet(id);
+  if(isImgData(local)){ imgCache.set(id, local); imgState.set(id,"loaded"); setNoteImg(id); return; }
+  try{
+    const snap = await get(ref(db, bpath("imgs/"+id)));
+    const data = snap && snap.val();
+    if(isImgData(data)){ imgCache.set(id, data); imgState.set(id,"loaded"); idbPut(id, data); setNoteImg(id); }
+    else { imgState.set(id, "error"); }
+  }catch(e){ imgState.set(id, "error"); }
+}
+// 表示範囲（＋余白）にある半紙の画像だけ読み込む
+let lazyScheduled = false;
+function scheduleLazy(){ if(lazyScheduled) return; lazyScheduled=true; requestAnimationFrame(()=>{ lazyScheduled=false; ensureImagesInView(); }); }
+function ensureImagesInView(){
+  if(!notesEl) return;
+  if(NOTE_W*zoom < 56) return;   // 全体を引きで見ている時（半紙が極小）は取得を保留＝大量DL抑制
+  const marginX = scrollEl.clientWidth*0.25, marginY = scrollEl.clientHeight*0.25;  // 先読みを控えめに
+  const x0 = scrollEl.scrollLeft/zoom - marginX/zoom;
+  const x1 = (scrollEl.scrollLeft+scrollEl.clientWidth)/zoom + marginX/zoom;
+  const y0 = scrollEl.scrollTop/zoom - marginY/zoom;
+  const y1 = (scrollEl.scrollTop+scrollEl.clientHeight)/zoom + marginY/zoom;
+  posts.forEach((p,id)=>{
+    if(p.hidden && !admin) return;
+    if(imgState.get(id)==="loaded" || imgState.get(id)==="loading") return;
+    const cx = nxOf(p,id)*(WALL_W-NOTE_W) + NOTE_W/2;
+    const cy = nyOf(p,id)*(WALL_H-NOTE_H) + NOTE_H/2;
+    if(cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1) loadImage(id);
+  });
+}
+
+function tapeColor(){ const a=[ -5,-3,3,5,-2,2 ]; return a[Math.floor(Math.random()*a.length)]; }
+function esc(s){ return (s||"").replace(/[<>&"]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c])); }
+function rndAngle(){ return Math.round(Math.random()*5) * (Math.random()<0.5?-1:1); } // 初期は垂直から±5°
+function hashFrac(str, salt){ let h=2166136261; const s=(str||"")+salt; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return ((h>>>0)%10000)/10000; }
+function nxOf(p,id){ return (typeof p.nx==="number") ? p.nx : hashFrac(id,"x"); }
+function nyOf(p,id){ return (typeof p.ny==="number") ? p.ny : hashFrac(id,"y"); }
+function angOf(p,id){ return (typeof p.angle==="number") ? p.angle : Math.round(hashFrac(id,"a")*44-22); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+function setMsg(html){ msgEl.innerHTML = html || ""; }
+
+function render(){
+  const list = [...posts.entries()].map(([id,p])=>({id,...p}));
+  // 運営は全部表示。一般表示は「運営が非表示」または「delがしきい値以上」を隠す（恒久削除は運営のみ）
+  // さらに、キーが安全な文字のみの半紙だけを描画（細工キーによるXSSを遮断）
+  const visible = (admin ? list : list.filter(p=> !p.hidden && (p.del||0) < DEL_THRESHOLD))
+    .filter(p=> typeof p.id==="string" && /^[A-Za-z0-9_-]+$/.test(p.id));
+  visible.sort((a,b)=> (a.t||0)-(b.t||0)); // 古い順に重ねる（新しいものが上）
+  countEl.textContent = visible.length ? visible.length + " 枚" : (postsLoaded ? "まだ0枚" : "読み込み中…");
+
+  // メッセージ帯（運営/空）。placing中の案内は別途出すので上書きしない
+  if(!placing){
+    if(admin){
+      setMsg('<div class="admin-banner"><span>運営モード（ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'枚）</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="archiveAndAdvance()">保存して新ボードへ</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="exitAdmin()">終了</span></div>');
+    } else if(!visible.length){
+      if(postsLoaded){
+        setMsg('<div class="empty"><span class="big">習</span>まだ誰も貼っていません。<br>左で書いて「貼る」を押そう。</div>');
+      } else {
+        setMsg('<div class="loading">読み込み中…</div>');   // ロード中は空メッセージを出さない
+      }
+    } else {
+      setMsg("");
+    }
+  }
+
+  notesEl.innerHTML = visible.map(p=>{
+    const left = clamp(nxOf(p,p.id),0,1) * (WALL_W-NOTE_W);
+    const top  = clamp(nyOf(p,p.id),0,1) * (WALL_H-NOTE_H);
+    const ang  = angOf(p,p.id);
+    const aNorm = ((ang%360)+360)%360;
+    const flippedCls = (aNorm>90 && aNorm<270) ? " flipped" : "";   // 上下反転している半紙
+    const imgHtml = `<img class="note-img" alt="">`;   // srcはinnerHTMLに入れず、後でプロパティ代入（XSS安全）
+    const souCls = (souDone.has(p.id) ? "sou-btn done" : "sou-btn") + (p.id===justVoted ? " pop" : "");
+    if(p.id===justVoted) justVoted = null;
+    const delCls = delDone.has(p.id) ? "del-btn done" : "del-btn";
+    const hiddenBadge = p.hidden ? '<span class="hidden-badge">非表示</span>' : '';
+    const mine = (p.id===editingId) ? " mine" : "";
+    const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
+    const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
+    const adminLine = admin ? `
+      <div class="admin-line">
+        <span class="stat">そうだね ${p.sou||0}</span>
+        <span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span>
+        <span style="flex:1"></span>
+        ${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }
+        <button class="mini del" onclick="adminDelete('${p.id}')">削除</button>
+      </div>` : '';
+    const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
+    return `
+    <div class="note${mine}${rotoring}${fresh}${flippedCls} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
+      <span class="tape" style="--r:${tapeColor()}deg"></span>
+      <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
+      <div class="who">${esc(p.name)||"としあき"}</div>
+      <div class="acts">
+        <button class="${souCls}" onclick="vote('sou','${p.id}')">そうだね<span class="n"> ${p.sou||0}</span></button>
+        <button class="${delCls}" onclick="vote('del','${p.id}')">del</button>
+      </div>
+      ${adminLine}
+    </div>`;
+  }).join("");
+
+  // 再描画でHTMLを作り直すと画像が空になるので、キャッシュ済み・読み込み済みの半紙は貼り直す
+  visible.forEach(p=>{ if(imgCache.has(p.id) || imgState.get(p.id)==="loaded") setNoteImg(p.id); });
+
+  if(activeNoteId){
+    const ae = notesEl.querySelector('.note[data-id="'+activeNoteId+'"]');
+    if(ae) ae.classList.add("sel");
+  }
+
+  renderedIds.clear();
+  visible.forEach(p=> renderedIds.add(p.id));
+
+  if(typeof drawMinimap === "function") drawMinimap();
+  scheduleLazy();   // 表示範囲の画像を読み込む
+  tryNavGuide();    // 初回：見る半紙が来たら「半紙めぐり」ガイドを飛ばす
+}
+
+/* 初回オンボーディング：見る動線（半紙めぐり）も、半紙バーと同じく中央→右下へ飛んでアピール */
+let navGuideArmed = false, navGuideStarted = false;
+function tryNavGuide(){
+  if(!navGuideArmed || navGuideStarted) return;
+  const meguri = document.querySelector(".meguri");
+  const g2 = document.getElementById("guide2");
+  const hasNotes = [...posts.values()].some(p=> admin || (!p.hidden && (p.del||0) < DEL_THRESHOLD));
+  if(!meguri || !g2 || !hasNotes) return;          // 見る対象がある時だけ
+  navGuideStarted = true; navGuideArmed = false;
+  const cx = window.innerWidth/2, cy = window.innerHeight/2;
+  g2.style.left = cx + "px"; g2.style.top = (cy+44) + "px"; g2.style.transform = "translate(-50%,-50%)";
+  g2.classList.add("show");
+  let done = false;
+  const finish = ()=>{ if(done) return; done = true; g2.classList.remove("show"); meguri.classList.remove("hint"); setTimeout(()=>g2.remove(), 450); };
+  g2.addEventListener("click", ()=>{ stopNavHint(); finish(); });
+  const CENTER_DWELL = 1500, MOVE = 800, LINGER = 900;
+  setTimeout(()=>{                                  // 右下の「半紙めぐり」へ移動
+    if(done) return;
+    const r = meguri.getBoundingClientRect();
+    g2.style.left = r.left + "px"; g2.style.top = r.top + "px"; g2.style.transform = "translate(0,0)";
+    meguri.classList.add("hint");                   // 到着で本体を点滅
+  }, CENTER_DWELL);
+  setTimeout(finish, CENTER_DWELL + MOVE + LINGER);
+}
+function stopNavHint(){
+  navGuideArmed = false; navGuideStarted = true;     // 以後アピールしない
+  const m = document.querySelector(".meguri"); if(m) m.classList.remove("hint");
+  const g2 = document.getElementById("guide2"); if(g2 && g2.classList.contains("show")){ g2.classList.remove("show"); setTimeout(()=>g2.remove(),450); }
+}
+
+function showConnError(){
+  setMsg('<div class="err">共有ボードに接続できませんでした。ページ上部の firebaseConfig（特に databaseURL）が正しく貼られているか確認してください。ローカルのファイルを直接開いた場合も動かないことがあります（github.io などに置いてください）。</div>');
+}
+
+function listen(){
+  if(!db){ showConnError(); return; }
+  // meta/board を監視し、変わったらそのボードを購読し直す（古いボードはアプリから見えなくなる）
+  onValue(ref(db, "meta/board"), snap=>{
+    let id = snap && snap.val();
+    if(id == null) id = 1;                 // 未設定なら1番ボードから
+    if(id !== boardId) switchToBoard(id);
+  });
+}
+function unsubBoard(){ boardSubs.forEach(fn=>{ try{ fn(); }catch(e){} }); boardSubs = []; }
+function switchToBoard(id){
+  unsubBoard();
+  boardId = id;
+  // ローカル状態をまっさらに
+  posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
+  zOverride.clear(); activeNoteId = null; editingId = null;
+  postsLoaded = false; boardCount = 0; didInitialFocus = false;
+  setActiveCount();
+  render();
+
+  const postsRef = ref(db, bpath("posts"));
+  try{
+    get(postsRef).then(snap=>{
+      const v = snap && snap.val();
+      if(v){ Object.keys(v).forEach(k=> posts.set(k, v[k]||{})); }
+      postsLoaded = true; render();
+      if(!didInitialFocus && posts.size){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 300); }
+    }).catch(()=>{ postsLoaded = true; render(); });
+
+    boardSubs.push(onChildAdded(postsRef, snap=>{
+      posts.set(snap.key, snap.val()||{});
+      render();
+      if(!didInitialFocus){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 500); }
+    }));
+    boardSubs.push(onChildChanged(postsRef, snap=>{ posts.set(snap.key, snap.val()||{}); render(); }));
+    boardSubs.push(onChildRemoved(postsRef, snap=>{
+      const id2 = snap.key;
+      posts.delete(id2); imgCache.delete(id2); imgState.delete(id2); idbDel(id2);
+      render();
+    }));
+    // 枚数（満杯判定・残数表示・通知のトリガ）
+    boardSubs.push(onValue(ref(db, bpath("count")), s=>{
+      boardCount = (s && s.val()) || 0;
+      setActiveCount();
+      maybeNotifyRemaining();
+      maybeAutoArchive();   // 運営タブのみ：満員で自動保存→新ボード
+    }));
+  }catch(e){ console.error(e); showConnError(); }
+}
+function remaining(){ return Math.max(0, BOARD_LIMIT - boardCount); }
+function setActiveCount(){
+  // 残数の小さい表示（カウント帯の隣）。満杯なら満員表示
+  const el = document.getElementById("remain");
+  if(!el) return;
+  const r = remaining();
+  if(r <= 0){ el.textContent = "満員"; el.className = "remain full"; }
+  else if(r <= 60){ el.textContent = "あと"+r+"枚で新ボード"; el.className = "remain warn"; }
+  else { el.textContent = ""; el.className = "remain"; }
+}
+// 残り60・残り10を最初に観測した1人だけが運営へ通知（make.com）。フラグで重複防止
+async function maybeNotifyRemaining(){
+  if(!db || boardId == null) return;
+  for(const w of WARN_REMAIN){
+    if(remaining() <= w){
+      const flagRef = ref(db, bpath("notified/r"+w));
+      try{
+        const res = await runTransaction(flagRef, cur => cur ? undefined : true);  // 既にtrueなら中止
+        if(res.committed && res.snapshot.val() === true){
+          notifyOwner(w);
+        }
+      }catch(e){}
+    }
+  }
+}
+function notifyOwner(remain){
+  try{
+    fetch(NOTIFY_WEBHOOK, {
+      method:"POST", mode:"no-cors",
+      headers:{ "Content-Type":"text/plain;charset=UTF-8" },   // text/plain でCORSプリフライト回避
+      body: JSON.stringify({ board:boardId, remaining:remain, count:boardCount, limit:BOARD_LIMIT, at:new Date().toISOString() })
+    }).catch(()=>{});
+  }catch(e){}
+}
+
+/* ---------- placement (位置決め) ---------- */
+function enterPlacing(){
+  placing = true;
+  placeDragging = false;
+  ghostImg.src = pendingImg;
+  ghostEl.classList.add("show");
+  ghostEl.classList.remove("blocked");
+  wallEl.classList.add("placing");
+  scrollEl.classList.add("placing-lock");   // 配置中はタッチスクロールを止め、指でゴーストを動かす
+  postBtn.textContent = "場所を選ぶ…";
+  setMsg('<div class="placing-hint"><span>貼りたい場所へ。PCはクリック／スマホは指でドラッグして離す</span><span class="cancel" onclick="cancelPlacing()">やめる</span></div>');
+  deskPrevCollapsed = floatDesk.classList.contains("collapsed");
+  setDeskCollapsed(true);   // 場所選び中は「半紙にかく」を最小化
+  scrollEl.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+function cancelPlacing(){
+  placing = false;
+  placeDragging = false;
+  ghostEl.classList.remove("show");
+  wallEl.classList.remove("placing");
+  scrollEl.classList.remove("placing-lock");
+  postBtn.textContent = "貼 る";
+  setDeskCollapsed(deskPrevCollapsed);
+  render();
+}
+window.cancelPlacing = cancelPlacing;
+
+function wallCoords(clientX, clientY){
+  const r = wallEl.getBoundingClientRect(); // r is the scaled, scrolled rect
+  const x = clamp((clientX - r.left)/zoom - NOTE_W/2, 0, WALL_W-NOTE_W);
+  const y = clamp((clientY - r.top)/zoom - 10,        0, WALL_H-NOTE_H);
+  return {x, y};
+}
+/* 重なり制御：下の半紙の画像部分が最低7割は露出する位置にだけ置ける（覆ってよいのは3割まで） */
+function noteImgRect(x,y){ const m=6, w=NOTE_W-2*m; return {x:x+m, y:y+m, w, h:w*1.5}; }
+function rectInter(a,b){
+  const ix = Math.max(0, Math.min(a.x+a.w,b.x+b.w) - Math.max(a.x,b.x));
+  const iy = Math.max(0, Math.min(a.y+a.h,b.y+b.h) - Math.max(a.y,b.y));
+  return ix*iy;
+}
+function worstCover(x,y){
+  const nr = {x, y, w:NOTE_W, h:NOTE_H};   // 新しい半紙が覆う全体の矩形
+  let worst = 0;
+  posts.forEach((p,id)=>{
+    if(p.hidden && !admin) return;
+    const ex = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W);
+    const ey = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
+    const ir = noteImgRect(ex,ey);
+    const cov = rectInter(nr, ir)/(ir.w*ir.h);   // 下の画像がどれだけ隠れるか
+    if(cov>worst) worst = cov;
+  });
+  return worst;
+}
+const COVER_MAX = 0.3;                       // 覆ってよい上限＝3割（＝7割は露出）
+function canPlaceAt(x,y){ return worstCover(x,y) <= COVER_MAX; }
+wallEl.addEventListener("pointermove", e=>{
+  if(!placing) return;
+  const {x,y} = wallCoords(e.clientX, e.clientY);
+  ghostEl.style.left = x+"px"; ghostEl.style.top = y+"px";
+  ghostEl.classList.toggle("blocked", !canPlaceAt(x,y));   // 7割隠れる位置は赤く
+});
+wallEl.addEventListener("click", async e=>{
+  if(!placing) return;
+  const {x,y} = wallCoords(e.clientX, e.clientY);
+  if(!canPlaceAt(x,y)){ ghostEl.classList.add("blocked"); toast("ここは重なりすぎ。別の場所へ"); return; }  // 置けない
+  const nx = (WALL_W-NOTE_W) ? x/(WALL_W-NOTE_W) : 0;
+  const ny = (WALL_H-NOTE_H) ? y/(WALL_H-NOTE_H) : 0;
+  await createPost(nx, ny);
+});
+// スマホ：指で押してドラッグ→離して確定（赤＝置けない／消える＝置ける のプレビュー付き）
+wallEl.addEventListener("touchstart", e=>{
+  if(!placing || e.touches.length!==1) return;
+  e.preventDefault();             // スクロールとエミュレートclickを抑制（タップでの二重確定を防ぐ）
+  placeDragging = true;
+  const t = e.touches[0];
+  const {x,y} = wallCoords(t.clientX, t.clientY);
+  ghostEl.style.left = x+"px"; ghostEl.style.top = y+"px";
+  ghostEl.classList.toggle("blocked", !canPlaceAt(x,y));
+}, {passive:false});
+wallEl.addEventListener("touchmove", e=>{
+  if(!placing || !placeDragging || e.touches.length!==1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  const {x,y} = wallCoords(t.clientX, t.clientY);
+  ghostEl.style.left = x+"px"; ghostEl.style.top = y+"px";
+  ghostEl.classList.toggle("blocked", !canPlaceAt(x,y));
+}, {passive:false});
+wallEl.addEventListener("touchend", async e=>{
+  if(!placing || !placeDragging) return;
+  placeDragging = false;
+  const t = e.changedTouches[0];
+  const {x,y} = wallCoords(t.clientX, t.clientY);
+  if(!canPlaceAt(x,y)){ ghostEl.classList.add("blocked"); toast("ここは重なりすぎ。別の場所へ"); return; }
+  const nx = (WALL_W-NOTE_W) ? x/(WALL_W-NOTE_W) : 0;
+  const ny = (WALL_H-NOTE_H) ? y/(WALL_H-NOTE_H) : 0;
+  await createPost(nx, ny);
+}, {passive:false});
+notesEl.addEventListener("click", e=>{
+  if(placing) return;
+  const note = e.target.closest(".note"); if(!note) return;
+  raiseNote(note.dataset.id);
+  setActive(note.dataset.id);
+});
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && placing) cancelPlacing(); });
+document.addEventListener("keydown", e=>{
+  if((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key==="z" || e.key==="Z")){
+    const t = e.target;
+    if(t && (t.tagName==="INPUT" || t.tagName==="TEXTAREA")) return; // 入力欄では文字のUNDOを優先
+    e.preventDefault();
+    doUndo();
+  }
+});
+
+/* ---------- create / post ---------- */
+const postBtn = document.getElementById("post");
+postBtn.addEventListener("click", ()=>{
+  if(placing){ cancelPlacing(); return; }
+  if(!db){ showConnError(); return; }
+  if(isBlank()){ toast("なにか書いてね"); return; }
+  if(remaining() <= 0){ toast("満員です。運営の切り替えを待ってね"); return; }   // ボード満杯
+  const wait = Math.ceil((lastPostAt + POST_COOLDOWN_MS - Date.now())/1000);
+  if(wait > 0){ toast("あと "+wait+" 秒で投稿できます"); return; }   // 連投クールダウン（事前警告）
+  pendingImg = exportImage();
+  enterPlacing();
+});
+
+async function createPost(nx, ny){
+  if(!db || !myUid){ toast("接続中です。少し待ってね"); return; }
+  if(boardId == null){ toast("接続中です。少し待ってね"); return; }   // ボード未取得
+  const RANDOM_NAMES = ["としあき","ﾄﾁｬｷ","としくん","「」","kakko","空白","jun","ぴるす","鍵最高","アージュ","雪の降る町","心理","ハデス","雨坊主","心太","ネギさま","こまち","jun君","自転車で来た","音ゲーの常連","DDRの常連"];
+  let name = document.getElementById("who").value.trim().slice(0,16);
+  if(!name) name = RANDOM_NAMES[Math.floor(Math.random()*RANDOM_NAMES.length)]; // 空欄ならランダム
+  const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
+  const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
+  const img = pendingImg;
+  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid };  // 画像は含めない・作成者UID付き
+  postBtn.disabled = true;
+  let reserved = false;
+  try{
+    // まず枚数枠を予約（トランザクションで満杯を確実に判定）
+    const cres = await runTransaction(ref(db, bpath("count")), c => {
+      c = c || 0;
+      if(c >= BOARD_LIMIT) return;   // 満杯 → 中止
+      return c + 1;
+    });
+    if(!cres.committed){ postBtn.disabled=false; cancelPlacing(); toast("満員です。運営の切り替えを待ってね"); return; }
+    reserved = true;
+
+    const id = push(ref(db, bpath("posts"))).key;   // キーだけ先に確保（まだ書かない）
+    seedImage(id, img);                              // 先にキャッシュ（自分の画像は即表示）
+
+    // 画像本体は Supabase Storage へ。失敗時は従来どおり Firebase に base64 で保存（無停止フォールバック）
+    let imgPath = null;
+    const useSupa = supa && !SUPA_ANON.startsWith("（");
+    if(useSupa){
+      try{
+        const fileBlob = await (await fetch(img)).blob();
+        const ext = (fileBlob.type === "image/webp") ? "webp" : "jpg";
+        const path = "boards/" + boardId + "/" + id + "." + ext;
+        const { error } = await supa.storage.from(SUPA_BUCKET).upload(path, fileBlob, { contentType: fileBlob.type, upsert: false });
+        if(error) throw error;
+        imgPath = path;
+      }catch(e){ console.error("Supabase upload失敗→Firebaseへ退避", e); imgPath = null; }
+    }
+    if(imgPath) meta.imgPath = imgPath;
+
+    // メタを書き込み。imgPathが無い時だけ画像base64も書く。確定時のみスロットルも進める
+    const writes = { [bpath("posts/"+id)]: meta };
+    if(!imgPath) writes[bpath("imgs/"+id)] = img;
+    if(finalNow) writes["throttle/"+myUid] = serverTimestamp();
+    await update(ref(db), writes);
+    reserved = false;   // 書き込み成功＝枠は確定
+    if(finalNow){ lastPostAt = Date.now(); LS.set("fg_lastPost", String(lastPostAt)); }
+    editingId = id;
+    posts.set(id, meta);
+    // 後片付け
+    placing = false; placeDragging = false; ghostEl.classList.remove("show"); wallEl.classList.remove("placing"); scrollEl.classList.remove("placing-lock");
+    postBtn.textContent = "貼 る";
+    setDeskCollapsed(true);   // 貼ったら半紙は閉じる（PC・モバイルとも）
+    lastDrawing = pad.toDataURL();   // キャンセル時に戻せるよう退避
+    ctx.fillStyle=PAPER; ctx.fillRect(0,0,pad.width,pad.height); undoStack=[];
+    LS.del("fg_draft");   // 貼ったので下書きは破棄
+    setMsg("");
+    if(finalNow){
+      editingId = null;          // モバイルは角度調整なし（ランダム±4°のまま）
+      render();
+    } else {
+      render();
+      openRotor(id, angle);      // PCは半紙中央を軸にした弧型スライダーで回転（確定でクールダウン消費）
+    }
+  }catch(e){
+    console.error(e);
+    if(reserved && db){ runTransaction(ref(db, bpath("count")), c => Math.max(0,(c||0)-1)).catch(()=>{}); }  // 予約枠を返す
+    const wait = Math.ceil((lastPostAt + POST_COOLDOWN_MS - Date.now())/1000);
+    if(wait > 0){
+      cancelPlacing();
+      toast("あと "+wait+" 秒で投稿できます");   // 連投クールダウン中（端末が把握）
+    } else if(String(e && (e.code||e.message)).indexOf("PERMISSION_DENIED")>=0){
+      cancelPlacing();
+      toast("少し時間をおいて試してね");          // サーバ側で拒否（クールダウン等）
+    } else { toast("貼れませんでした…"); showConnError(); }
+  }
+  postBtn.disabled = false;
+}
+
+/* ---------- 半紙の回転を適用（ダイヤルから使用） ---------- */
+function setNoteTransform(id, rot){
+  const el = notesEl.querySelector('.note[data-id="'+id+'"]');
+  if(el) el.style.transform = "rotate("+rot+"deg)";
+}
+
+/* ---------- PC: 円形ダイヤルで回転（静止は±20°）。横を越えて引き回すと反対側へ「ぐるん」 ---------- */
+const rotorEl = document.getElementById("rotor");
+let rotorId = null, rotorR = 0, rotorArc = 0, rotorAngle = 0, rotorOpenedAt = 0, rotorDragging = false;
+const ROTOR_MAX = 20;                        // 静止時の傾き上限（上向き・反転とも±20°）
+function rotorCenter(){
+  const p = posts.get(rotorId); if(!p) return null;
+  const r = wallEl.getBoundingClientRect();  // 拡縮・スクロール済みの矩形
+  return {
+    cx: r.left + (clamp(nxOf(p,rotorId),0,1)*(WALL_W-NOTE_W) + NOTE_W/2)*zoom,
+    cy: r.top  + (clamp(nyOf(p,rotorId),0,1)*(WALL_H-NOTE_H) + NOTE_H/2)*zoom
+  };
+}
+function rotorPoint(angle, C, Rr){           // 角度→ダイヤル上の座標（真下=0、左で＋）
+  const rad = angle*Math.PI/180;
+  return { x:(C - Math.sin(rad)*Rr), y:(C + Math.cos(rad)*Rr) };
+}
+function rotorArcPts(from, to, C, Rr){
+  let s = ""; for(let t=from;t<=to;t+=1){ const q=rotorPoint(t,C,Rr); s += q.x.toFixed(1)+","+q.y.toFixed(1)+" "; } return s.trim();
+}
+function buildRotor(){
+  const Rarc = NOTE_H*zoom*0.5 + 42;          // ダイヤル半径
+  const PAD = 52;                             // 当たり判定の余白
+  const R = Rarc + PAD; rotorR = R; rotorArc = Rarc;
+  const h = rotorPoint(rotorAngle, R, Rarc);
+  const cancelTop = Math.max(2, R - NOTE_H*zoom*0.5 - 42);   // 「やめる」は半紙の上あたり
+  rotorEl.style.width = rotorEl.style.height = (2*R)+"px";
+  rotorEl.innerHTML =
+    `<svg width="${2*R}" height="${2*R}" viewBox="0 0 ${2*R} ${2*R}">`+
+    `<circle cx="${R}" cy="${R}" r="${Rarc}" fill="none" stroke="rgba(181,52,31,.16)" stroke-width="2"/>`+
+    `<polyline points="${rotorArcPts(-ROTOR_MAX,ROTOR_MAX,R,Rarc)}" fill="none" stroke="rgba(181,52,31,.5)" stroke-width="3" stroke-linecap="round"/>`+
+    `<polyline points="${rotorArcPts(180-ROTOR_MAX,180+ROTOR_MAX,R,Rarc)}" fill="none" stroke="rgba(181,52,31,.5)" stroke-width="3" stroke-linecap="round"/>`+
+    `<line id="rotorStem" x1="${R}" y1="${R}" x2="${h.x.toFixed(1)}" y2="${h.y.toFixed(1)}" stroke="rgba(181,52,31,.35)" stroke-width="2"/>`+
+    `<circle cx="${R}" cy="${R}" r="3" fill="rgba(181,52,31,.6)"/>`+
+    `<circle id="rotorHandle" cx="${h.x.toFixed(1)}" cy="${h.y.toFixed(1)}" r="13" fill="#b5341f" stroke="#fff" stroke-width="3"/>`+
+    `</svg>`+
+    `<button class="rotor-cancel" id="rotorCancel" title="やめる（Esc）" style="top:${cancelTop.toFixed(0)}px">やめる</button>`+
+    `<div class="rotor-hint" style="top:${(R+Rarc+8).toFixed(0)}px">ドラッグで回転・外をクリックで確定・Escで取消</div>`;
+}
+function positionRotor(){
+  const c = rotorCenter(); if(!c) return;
+  rotorEl.style.left = (c.cx - rotorR) + "px";
+  rotorEl.style.top  = (c.cy - rotorR) + "px";
+}
+function rotorNoteEl(){ return rotorId ? notesEl.querySelector('.note[data-id="'+rotorId+'"]') : null; }
+function moveHandle(){
+  const h = rotorPoint(rotorAngle, rotorR, rotorArc);
+  const hd = rotorEl.querySelector("#rotorHandle"), st = rotorEl.querySelector("#rotorStem");
+  if(hd){ hd.setAttribute("cx", h.x.toFixed(1)); hd.setAttribute("cy", h.y.toFixed(1)); }
+  if(st){ st.setAttribute("x2", h.x.toFixed(1)); st.setAttribute("y2", h.y.toFixed(1)); }
+}
+function applyRotor(write){
+  const p = posts.get(rotorId); if(p) p.angle = rotorAngle;
+  setNoteTransform(rotorId, rotorAngle);
+  moveHandle();
+  if(write && db) update(ref(db, bpath("posts/"+rotorId)), { angle:rotorAngle }).catch(()=>{});
+}
+// いちばん近い静止角（上向き0±20 か 反転180±20）。巻き数を保つので戻り回転が最短
+function snapAngle(a){
+  const anchor = Math.round(a/180)*180;
+  return anchor + clamp(Math.round(a-anchor), -ROTOR_MAX, ROTOR_MAX);
+}
+function angleFromPointer(e){
+  const c = rotorCenter(); if(!c) return 0;
+  const dx = e.clientX - c.cx, dy = e.clientY - c.cy;
+  return Math.atan2(-dx, dy) * 180/Math.PI;   // 真下=0、左へ回すと＋
+}
+function rotorDrag(e){
+  let raw = angleFromPointer(e);
+  while(raw - rotorAngle >  180) raw -= 360;  // 連続化（巻き戻り防止）
+  while(raw - rotorAngle < -180) raw += 360;
+  rotorAngle = raw;
+  applyRotor(false);                          // ドラッグ中は指の角度にそのまま追従（DB書き込み無し）
+}
+function rotorRelease(){
+  rotorAngle = snapAngle(rotorAngle);         // 上向き／反転の±20°に落ち着く
+  const el = rotorNoteEl();
+  if(el){ el.classList.add("snapping"); setTimeout(()=>el.classList.remove("snapping"), 320); }  // ぐるん／settle
+  applyRotor(true);
+}
+function openRotor(id, angle){
+  rotorId = id;
+  rotorAngle = snapAngle(angle);
+  buildRotor();
+  positionRotor();
+  rotorEl.classList.add("show");
+  rotorOpenedAt = Date.now();
+}
+function closeRotor(){
+  if(!rotorEl.classList.contains("show")) return;
+  rotorRelease();                              // 最終状態にスナップして保存
+  rotorEl.classList.remove("show");
+  const el = rotorNoteEl();
+  if(el){ el.classList.remove("mine"); el.classList.remove("rotoring"); }   // テープが生えてくる
+  rotorId = null; editingId = null; rotorDragging = false;
+  // ここで初めて連投クールダウンを消費（やめた場合は消費しない）
+  lastPostAt = Date.now(); LS.set("fg_lastPost", String(lastPostAt));
+  if(db && myUid){ set(ref(db, "throttle/"+myUid), serverTimestamp()).catch(()=>{}); }
+}
+function cancelRotor(){                         // 位置決めをやめる＝貼るのを取りやめ（半紙を消す）
+  if(!rotorEl.classList.contains("show")) return;
+  const id = rotorId;
+  rotorDragging = false;
+  rotorEl.classList.remove("show");
+  rotorId = null; editingId = null;
+  if(!id) return;
+  // 貼った直後の半紙を取り消す（自分・他者の画面から消す）
+  posts.delete(id); imgCache.delete(id); imgState.delete(id); idbDel(id);
+  zOverride.delete(id);
+  if(activeNoteId === id) activeNoteId = null;
+  render();
+  if(db){
+    remove(ref(db, bpath("posts/"+id))).catch(()=>{});
+    remove(ref(db, bpath("imgs/"+id))).catch(()=>{});
+    runTransaction(ref(db, bpath("count")), c => Math.max(0,(c||0)-1)).catch(()=>{});   // 予約した枚数枠を返す
+  }
+  // 描いた内容をキャンバスに戻し、半紙を開いて描き直し／貼り直しできるようにする
+  if(lastDrawing){
+    const im = new Image();
+    im.onload = ()=>{ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle=PAPER; ctx.fillRect(0,0,pad.width,pad.height); ctx.drawImage(im,0,0,pad.width,pad.height); ctx.restore(); scheduleDraftSave(); };
+    im.src = lastDrawing;
+  }
+  setDeskCollapsed(false);
+}
+rotorEl.addEventListener("pointerdown", e=>{
+  if(e.target.closest("#rotorCancel")){ e.preventDefault(); e.stopPropagation(); cancelRotor(); return; }  // やめる
+  e.preventDefault(); rotorDragging = true; rotorDrag(e);
+});
+window.addEventListener("pointermove", e=>{ if(rotorDragging) rotorDrag(e); });
+window.addEventListener("pointerup", ()=>{ if(rotorDragging){ rotorDragging = false; rotorRelease(); } });
+// 外側をクリックで確定（開いた直後の一瞬は無視）
+document.addEventListener("pointerdown", e=>{
+  if(rotorEl.classList.contains("show") && (Date.now()-rotorOpenedAt > 400) && !rotorEl.contains(e.target)) closeRotor();
+});
+scrollEl.addEventListener("scroll", ()=>{ if(rotorEl.classList.contains("show")) positionRotor(); }, {passive:true});
+// 回転位置決め中はEscでキャンセル（最初の角度に戻して閉じる）
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && rotorEl.classList.contains("show")){ e.preventDefault(); cancelRotor(); } });
+
+/* ---------- voting (transaction) ---------- */
+// この半紙の上に他の半紙が重なっている（=覆われている）か
+function isCovered(id){
+  const p = posts.get(id); if(!p) return false;
+  const z = zOverride.get(id) || 0;
+  const ax = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W), ay = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
+  for(const [oid,op] of posts){
+    if(oid===id || (op.hidden && !admin)) continue;
+    const oz = zOverride.get(oid) || 0;
+    const above = (oz>z) || (oz===z && (op.t||0) > (p.t||0));   // 上に表示されている方
+    if(!above) continue;
+    const ox = clamp(nxOf(op,oid),0,1)*(WALL_W-NOTE_W), oy = clamp(nyOf(op,oid),0,1)*(WALL_H-NOTE_H);
+    const ix = Math.min(ax+NOTE_W,ox+NOTE_W)-Math.max(ax,ox);
+    const iy = Math.min(ay+NOTE_H,oy+NOTE_H)-Math.max(ay,oy);
+    if(ix>0 && iy>0) return true;
+  }
+  return false;
+}
+async function vote(type, id){
+  if(!db) return;
+  if(id !== activeNoteId && isCovered(id)){   // 覆われている半紙だけ、まず前に出す（誤操作防止）
+    raiseNote(id); setActive(id);
+    return;
+  }
+  setActive(id);   // 覆われていない半紙はそのまま投票（選択だけ反映）
+  if(type==="sou"){
+    if(souDone.has(id)){ toast("もう押したよ"); return; }
+    souDone.add(id); saveVotes();
+    try{ await runTransaction(ref(db, bpath("posts/"+id+"/sou")), v => (v||0)+1); justVoted = id; render(); toast("そうだね！"); }
+    catch(e){ souDone.delete(id); saveVotes(); toast("失敗しました"); }
+  } else {
+    if(delDone.has(id)){ toast("通報済み"); return; }
+    if(!confirm("この投稿を削除依頼（del）しますか？")) return;
+    delDone.add(id); saveVotes();
+    try{
+      await runTransaction(ref(db, bpath("posts/"+id+"/del")), v => (v||0)+1);   // 報告カウントを1だけ加算
+      toast("delしました");
+    }catch(e){ delDone.delete(id); saveVotes(); toast("失敗しました"); }
+  }
+}
+window.vote = vote;
+
+/* ---------- admin（運営）：認証で本人だけ。権限はDBルールが最終判定 ---------- */
+function updateGearLabel(){
+  const g = document.getElementById("gear");
+  if(g){ g.textContent = admin ? "★" : "⚙"; g.title = admin ? "運営モード（タップで終了）" : "運営ログイン"; }
+}
+document.getElementById("gear").addEventListener("click", async ()=>{
+  if(!auth){ toast("認証が使えません"); return; }
+  if(admin){ exitAdmin(); return; }
+  const email = prompt("運営メールアドレス");
+  if(email === null) return;
+  const pw = prompt("運営パスワード");
+  if(pw === null) return;
+  try{
+    await signInWithEmailAndPassword(auth, email.trim(), pw);   // onAuthStateChanged が admin を判定
+    // ログインできても本人UIDでなければ運営にはならない
+    setTimeout(()=>{ toast(admin ? "運営モードON" : "このアカウントは運営ではありません"); if(!admin){ exitAdmin(); } }, 300);
+  }catch(e){ console.error(e); toast("ログインに失敗しました"); }
+});
+async function exitAdmin(){
+  admin = false; render(); updateGearLabel();
+  try{ if(auth){ await signOut(auth); } }catch(e){}   // 匿名に戻す（onAuthStateChangedで再サインイン）
+  toast("運営モードOFF");
+}
+window.exitAdmin = exitAdmin;
+
+async function adminRestore(id){
+  if(!db || !admin) return;
+  try{ await update(ref(db, bpath("posts/"+id)), { hidden:false, del:0 }); toast("復活しました"); }
+  catch(e){ toast("権限がないか失敗しました"); }
+}
+window.adminRestore = adminRestore;
+
+async function adminDelete(id){
+  if(!db || !admin) return;
+  if(!confirm("完全に削除します。元に戻せません。よろしいですか？")) return;
+  try{
+    await remove(ref(db, bpath("posts/"+id)));
+    remove(ref(db, bpath("imgs/"+id))).catch(()=>{});
+    imgCache.delete(id); imgState.delete(id); idbDel(id);
+    toast("削除しました");
+  }
+  catch(e){ toast("権限がないか失敗しました"); }
+}
+window.adminDelete = adminDelete;
+
+// 運営：現在のボードを1枚の大画像に合成して自動ダウンロード→新しい空ボードへ切替
+async function archiveAndAdvance(auto){
+  if(!db || !admin){ if(!auto) toast("運営のみ"); return false; }
+  if(!auto && !confirm("このボードを画像に保存し、新しい空のボードへ切り替えます。\n現在の半紙は新ボードには表示されなくなります。\nよろしいですか？")) return false;
+  toast(auto ? "満員：自動で保存して新ボードへ…" : "画像を作成中…", 4000);
+  try{
+    // 表示対象（運営は全件）の半紙を集める
+    const list = [...posts.entries()].map(([id,p])=>({id,...p})).filter(p=> typeof p.id==="string");
+    // 旧base64データだけ先読み（Supabase画像はURLから直接読む）
+    await Promise.all(list.map(async p=>{
+      if(isImgData(imgCache.get(p.id)) || isSafePath(p.imgPath)) return;
+      try{ const s = await get(ref(db, bpath("imgs/"+p.id))); const d = s && s.val(); if(isImgData(d)) imgCache.set(p.id, d); }catch(e){}
+    }));
+    // 大きなキャンバスへ合成
+    const cv = document.createElement("canvas"); cv.width = WALL_W; cv.height = WALL_H;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#ece3cd"; g.fillRect(0,0,WALL_W,WALL_H);   // 壁の色
+    const loadImg = src => new Promise(res=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
+    for(const p of list){
+      const src = noteImgSrc(p.id); if(!src) continue;        // dataURL か Supabase 公開URL
+      const im = await loadImg(src); if(!im) continue;
+      const x = clamp(nxOf(p,p.id),0,1)*(WALL_W-NOTE_W);
+      const y = clamp(nyOf(p,p.id),0,1)*(WALL_H-NOTE_H);
+      const w = NOTE_W, h = NOTE_W*1.5;          // 半紙の画像部（2:3）
+      g.save();
+      g.translate(x + w/2, y + h/2);
+      g.rotate((p.angle||0)*Math.PI/180);
+      g.drawImage(im, -w/2, -h/2, w, h);
+      g.restore();
+    }
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+    // 記録画像を Supabase に保存（自動・手動とも）
+    if(supa && !SUPA_ANON.startsWith("（")){
+      try{
+        const blob = await new Promise(res=> cv.toBlob(res, "image/jpeg", 0.85));
+        if(blob){
+          const apath = "archives/board-"+(boardId||1)+"-"+stamp+".jpg";
+          await supa.storage.from(SUPA_BUCKET).upload(apath, blob, { contentType:"image/jpeg", upsert:false });
+        }
+      }catch(e){ console.error("アーカイブ保存失敗", e); }
+    }
+    // 手動時はブラウザにもダウンロード（自動はクリック起点が無く弾かれ得るので保存先はSupabase）
+    if(!auto){
+      const url = cv.toDataURL("image/jpeg", 0.85);
+      const a = document.createElement("a");
+      a.href = url; a.download = "oshuji-board-"+(boardId||1)+"-"+stamp+".jpg";
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    // 新しいボードへ（運営のみ書ける）。全クライアントが meta/board 監視で自動移行
+    await set(ref(db, "meta/board"), (boardId||1) + 1);
+    toast(auto ? "満員のため新ボードへ自動切替しました" : "保存しました。新しいボードに切り替えました", 4000);
+    return true;
+  }catch(e){ console.error(e); toast("保存に失敗しました"); return false; }
+}
+window.archiveAndAdvance = archiveAndAdvance;
+
+// 運営タブだけ：満員を検知したら自動で保存→新ボード（複数タブでも1つだけ実行）
+let autoArchiving = false;
+async function maybeAutoArchive(){
+  if(!admin || autoArchiving || boardId == null) return;
+  if(remaining() > 0) return;
+  autoArchiving = true;
+  try{
+    const claim = await runTransaction(ref(db, bpath("archiving")), c => c ? undefined : true);  // 旗を立てた1人だけ実行
+    if(claim.committed && claim.snapshot.val() === true){
+      const ok = await archiveAndAdvance(true);
+      if(!ok){ remove(ref(db, bpath("archiving"))).catch(()=>{}); }   // 失敗時は旗を戻して再試行可能に
+    }
+  }catch(e){ console.error(e); }
+  finally{ autoArchiving = false; }
+}
+
+const IS_LOCAL = (location.protocol === "file:");   // ローカルで直接開いた状態
+function showAuthError(){
+  if(IS_LOCAL){
+    setMsg('<div class="empty"><span class="big">習</span>ローカルで開いています。共有ボードは公開URL（GitHub Pages）でのみ動きます。<br>ここでは描き味のお試しだけできます。</div>');
+  } else {
+    setMsg('<div class="err">認証に接続できませんでした。Firebaseコンソールで「Authentication → Sign-in method」の匿名ログインを有効にしてください。</div>');
+  }
+}
+
+/* ---------- zoom & scroll ---------- */
+function applyZoom(){
+  wallEl.style.transform = "scale("+zoom+")";
+  sizerEl.style.width  = (WALL_W*zoom)+"px";
+  sizerEl.style.height = (WALL_H*zoom)+"px";
+  const zr = document.getElementById("zoomRange");
+  const zv = document.getElementById("zoomVal");
+  if(zr) zr.value = zoom;
+  if(zv) zv.textContent = Math.round(zoom*100)+"%";
+  if(typeof drawMinimap === "function") drawMinimap();
+  scheduleLazy();
+}
+function computeZoomMin(){
+  const fitH = scrollEl.clientHeight / WALL_H;
+  zoomMin = Math.max(0.05, Math.floor(fitH*100)/100);
+  const zr = document.getElementById("zoomRange");
+  if(zr){ zr.min = zoomMin; zr.step = 0.01; }
+  if(zoom < zoomMin){ zoomTo(zoomMin); }
+}
+// anchorClientX/Y を指定すると、その画面位置の指す壁の点を固定したままズーム
+function zoomTo(z, anchorClientX, anchorClientY){
+  const prev = zoom;
+  z = clamp(Math.round(z*100)/100, zoomMin, ZOOM_MAX);
+  if(z === zoom){ applyZoom(); return; }
+  const r = scrollEl.getBoundingClientRect();
+  const ax = (anchorClientX==null) ? scrollEl.clientWidth/2  : (anchorClientX - r.left);
+  const ay = (anchorClientY==null) ? scrollEl.clientHeight/2 : (anchorClientY - r.top);
+  const natX = (scrollEl.scrollLeft + ax) / zoom;
+  const natY = (scrollEl.scrollTop  + ay) / zoom;
+  zoom = z;
+  applyZoom();
+  scrollEl.scrollLeft = clamp(natX*zoom - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(natY*zoom - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  notifyZoomedOut(prev);
+}
+let lastZoomOutNote = 0;
+function notifyZoomedOut(prev){
+  // 半紙が小さすぎて画像読み込みを保留する領域（NOTE_W*zoom<56）に、引きで入った瞬間だけ案内
+  if(!didInitialFocus) return;
+  if(NOTE_W*zoom < 56 && NOTE_W*prev >= 56 && Date.now()-lastZoomOutNote > 6000){
+    lastZoomOutNote = Date.now();
+    toast("最大ズームアウト状態では個別の半紙が読み込まれません。", 3800);
+  }
+}
+document.getElementById("zoomRange").addEventListener("input", e=> zoomTo(+e.target.value));
+document.getElementById("zoomIn").addEventListener("click", ()=> zoomTo(zoom+0.1));
+document.getElementById("zoomOut").addEventListener("click", ()=> zoomTo(zoom-0.1));
+window.addEventListener("resize", ()=>{ computeZoomMin(); drawMinimap(); });
+
+// ホイールで拡大率調整（カーソル位置を中心に。全体が見えるところまで縮小可）
+scrollEl.addEventListener("wheel", e=>{
+  e.preventDefault();
+  zoomTo(zoom + (e.deltaY<0 ? 0.1 : -0.1), e.clientX, e.clientY);
+}, {passive:false});
+
+// 2本指ピンチで拡大縮小（スマホ用。1本指は通常スクロール）
+let pinchActive=false, pinchStartDist=0, pinchStartZoom=1;
+function touchDist(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+scrollEl.addEventListener("touchstart", e=>{
+  if(e.touches.length===2){
+    pinchActive=true;
+    pinchStartDist=touchDist(e.touches[0],e.touches[1]) || 1;
+    pinchStartZoom=zoom;
+    e.preventDefault();
+  }
+}, {passive:false});
+scrollEl.addEventListener("touchmove", e=>{
+  if(pinchActive && e.touches.length===2){
+    e.preventDefault();
+    const d = touchDist(e.touches[0],e.touches[1]);
+    const mx = (e.touches[0].clientX+e.touches[1].clientX)/2;
+    const my = (e.touches[0].clientY+e.touches[1].clientY)/2;
+    zoomTo(pinchStartZoom * (d/pinchStartDist), mx, my);
+  }
+}, {passive:false});
+scrollEl.addEventListener("touchend", e=>{ if(e.touches.length<2) pinchActive=false; });
+scrollEl.addEventListener("touchcancel", ()=>{ pinchActive=false; });
+
+/* ダブルクリック／ダブルタップ：何もない所は拡大、半紙はフォーカスして拡大（PC・モバイル共通） */
+function doubleActivate(clientX, clientY, noteElm){
+  const hit = document.elementFromPoint(clientX, clientY);
+  const ne = noteElm || (hit ? hit.closest(".note") : null);
+  if(ne){
+    const id = ne.dataset.id, p = posts.get(id);
+    if(p){ raiseNote(id); setActive(id); centerOnNote(id, p, Math.min(ZOOM_MAX, Math.max(1.5, zoom))); return; }
+  }
+  zoomTo(Math.min(ZOOM_MAX, Math.max(1.5, zoom*1.6)), clientX, clientY);   // 何もない所は拡大
+}
+scrollEl.addEventListener("dblclick", e=>{
+  if(placing) return;
+  e.preventDefault();
+  doubleActivate(e.clientX, e.clientY, e.target.closest(".note"));
+});
+let lastTapT=0, lastTapX=0, lastTapY=0;
+scrollEl.addEventListener("touchend", e=>{
+  if(placing || pinchActive || e.changedTouches.length!==1) return;
+  const t = e.changedTouches[0], now = Date.now();
+  if(now-lastTapT < 300 && Math.hypot(t.clientX-lastTapX, t.clientY-lastTapY) < 30){
+    lastTapT = 0;
+    doubleActivate(t.clientX, t.clientY, null);   // ダブルタップ
+  } else {
+    lastTapT = now; lastTapX = t.clientX; lastTapY = t.clientY;
+  }
+}, {passive:true});
+
+// 左ドラッグでボード内を動かす（マウスのみ。タッチは標準スクロール）
+let panning=false, panMoved=false, panSX=0, panSY=0, panSL=0, panST=0, suppressClick=false;
+scrollEl.addEventListener("pointerdown", e=>{
+  if(e.button!==0 || e.pointerType!=="mouse") return;
+  panning=true; panMoved=false;
+  panSX=e.clientX; panSY=e.clientY;
+  panSL=scrollEl.scrollLeft; panST=scrollEl.scrollTop;
+});
+window.addEventListener("pointermove", e=>{
+  if(!panning) return;
+  const dx=e.clientX-panSX, dy=e.clientY-panSY;
+  if(!panMoved && (Math.abs(dx)+Math.abs(dy))>5){ panMoved=true; scrollEl.classList.add("grabbing"); }
+  if(panMoved){ scrollEl.scrollLeft = panSL-dx; scrollEl.scrollTop = panST-dy; }
+});
+window.addEventListener("pointerup", ()=>{
+  if(panning && panMoved) suppressClick=true; // ドラッグ後のクリックは無効化
+  panning=false; scrollEl.classList.remove("grabbing");
+});
+scrollEl.addEventListener("click", e=>{
+  if(suppressClick){ e.stopPropagation(); e.preventDefault(); suppressClick=false; }
+}, true);
+
+function randomStartScroll(){
+  const vw = scrollEl.clientWidth, vh = scrollEl.clientHeight;
+  const maxX = Math.max(0, WALL_W*zoom - vw);
+  const maxY = Math.max(0, WALL_H*zoom - vh);
+  scrollEl.scrollLeft = Math.random()*maxX;
+  scrollEl.scrollTop  = Math.random()*maxY;
+}
+
+/* ---------- minimap ---------- */
+const miniCanvas = document.getElementById("miniCanvas");
+function drawMinimap(){
+  if(!miniCanvas) return;
+  const mmW = miniCanvas.clientWidth, mmH = miniCanvas.clientHeight;
+  if(!mmW || !mmH) return;
+  if(miniCanvas.width !== Math.round(mmW*DPR)){ miniCanvas.width = Math.round(mmW*DPR); miniCanvas.height = Math.round(mmH*DPR); }
+  const g = miniCanvas.getContext("2d");
+  g.setTransform(DPR,0,0,DPR,0,0);
+  g.clearRect(0,0,mmW,mmH);
+  const sx = mmW/WALL_W, sy = mmH/WALL_H;
+  for(const [id,p] of posts){
+    if(p.hidden && !admin) continue;
+    const x = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W)*sx;
+    const y = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H)*sy;
+    g.fillStyle = p.hidden ? "rgba(181,52,31,.55)" : "#3a332b";
+    g.fillRect(x, y, Math.max(2, NOTE_W*sx), Math.max(2, NOTE_H*sy*0.85));
+  }
+  const vx = (scrollEl.scrollLeft/(WALL_W*zoom))*mmW;
+  const vy = (scrollEl.scrollTop /(WALL_H*zoom))*mmH;
+  const vw = Math.min(mmW, (scrollEl.clientWidth /(WALL_W*zoom))*mmW);
+  const vh = Math.min(mmH, (scrollEl.clientHeight/(WALL_H*zoom))*mmH);
+  g.strokeStyle = "#b5341f"; g.lineWidth = 1.5;
+  g.strokeRect(vx+0.5, vy+0.5, Math.max(3,vw-1), Math.max(3,vh-1));
+}
+function miniJump(clientX, clientY){
+  stopNavHint();   // 見る動線を選択（点滅を止める）
+  const r = miniCanvas.getBoundingClientRect();
+  const fx = clamp((clientX-r.left)/r.width, 0, 1);
+  const fy = clamp((clientY-r.top )/r.height,0, 1);
+  scrollEl.scrollLeft = clamp(fx*WALL_W*zoom - scrollEl.clientWidth/2,  0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(fy*WALL_H*zoom - scrollEl.clientHeight/2, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+}
+let miniDown=false;
+miniCanvas.addEventListener("pointerdown", e=>{ miniDown=true; miniJump(e.clientX,e.clientY); e.preventDefault(); });
+miniCanvas.addEventListener("pointermove", e=>{ if(miniDown){ miniJump(e.clientX,e.clientY); e.preventDefault(); } });
+window.addEventListener("pointerup", ()=>{ miniDown=false; });
+
+let mmRaf=0;
+scrollEl.addEventListener("scroll", ()=>{ if(!mmRaf) mmRaf=requestAnimationFrame(()=>{ mmRaf=0; drawMinimap(); }); scheduleLazy(); });
+
+/* ---------- 半紙めぐり ---------- */
+let meguriIdx = -1;
+function visibleByRecency(){
+  return [...posts.entries()].filter(([id,p])=> admin || !p.hidden)
+    .sort((a,b)=> (b[1].t||0)-(a[1].t||0));
+}
+// 「半紙にかく」パネルに隠れない着地点（ビューポート内の座標）を返す
+function focusAnchor(){
+  const vw = scrollEl.clientWidth, vh = scrollEl.clientHeight;
+  let ax = vw/2, ay = vh/2;
+  const half = (NOTE_H*zoom)/2 + 10;   // 半紙の高さ半分ぶんの余白
+  if(floatDesk && !floatDesk.classList.contains("collapsed")){
+    const d = floatDesk.getBoundingClientRect(), sc = scrollEl.getBoundingClientRect();
+    const dLeft = d.left - sc.left, dRight = d.right - sc.left, dBottom = d.bottom - sc.top;
+    if(dLeft <= ax && dRight >= ax){            // 机が画面中央の列を覆っている
+      const avail = vh - dBottom;
+      if(avail >= NOTE_H*zoom + 60){            // 机の下に半紙が収まる→その中央へ
+        ay = dBottom + avail/2;
+      } else {                                   // 下が狭い→机の右側に寄せる
+        ax = Math.min(vw - half, (dRight + vw)/2);
+      }
+    }
+  }
+  return {ax, ay};
+}
+function centerOnNote(id, p, targetZoom){
+  const target = (targetZoom != null) ? targetZoom : ((window.innerWidth <= 560) ? 1.0 : 1.3);  // 既定: PC130%/モバイル100%
+  const z = clamp(target, zoomMin, ZOOM_MAX);
+  if(z !== zoom){ zoom = z; applyZoom(); }
+  const px = (clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
+  const py = (clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
+  const {ax, ay} = focusAnchor();
+  scrollEl.scrollLeft = clamp(px - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(py - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  drawMinimap();
+  raiseNote(id);   // フォーカス対象を最前面に（下になっていても見えるように）
+  requestAnimationFrame(()=>{
+    notesEl.querySelectorAll('.note.found').forEach(n=> n.classList.remove("found"));  // 他の半紙の赤枠は消す
+    const el = notesEl.querySelector('.note[data-id="'+id+'"]');
+    if(el){ void el.offsetWidth; el.classList.add("found"); }
+  });
+}
+function gotoNote(step){
+  stopNavHint();   // 見る動線を選択（点滅を止める）
+  const list = visibleByRecency();
+  if(!list.length){ toast("まだ半紙がないよ"); return; }
+  meguriIdx = ((meguriIdx + step) % list.length + list.length) % list.length;
+  const [id,p] = list[meguriIdx];
+  centerOnNote(id, p);
+}
+document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
+document.getElementById("nextNote").addEventListener("click", ()=> gotoNote(1));
+
+/* ---------- 起動時：貼られた半紙のどれかにランダムでフォーカス ---------- */
+let didInitialFocus = false;
+let focusTimer = null;
+// 指定ズームで寄せたとき、その半紙の中心が画面の安全な縦範囲に収まるか
+function focusReachable(id, p, z){
+  const vh = scrollEl.clientHeight;
+  const {ay} = focusAnchor();
+  const py = (clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * z;
+  const st = clamp(py - ay, 0, Math.max(0, WALL_H*z - vh));
+  const sy = py - st;                       // 画面上のY
+  const topSafe = 60;                        // ヘッダーぶん
+  const bottomSafe = vh - 150;               // 半紙めぐり／マップぶん
+  return sy >= topSafe && sy <= bottomSafe;
+}
+function initialFocus(){
+  if(didInitialFocus) return;
+  const full = visibleByRecency();
+  if(!full.length) return;       // まだ無ければ何もしない（次の追加で再トライ）
+  didInitialFocus = true;
+  const focusZoom = clamp(1.0 + Math.random()*(ZOOM_MAX-1.0), 1.0, ZOOM_MAX);  // 100%以上でランダム
+  let list = full;
+  if(window.innerWidth <= 560){  // モバイル: 下部UIに隠れる位置にしか置けない半紙は候補から外す
+    const ok = full.filter(([id,p])=> focusReachable(id, p, focusZoom));
+    if(ok.length) list = ok;     // 候補があれば絞り込み、無ければ全体から選ぶ
+  }
+  const [id,p] = list[Math.floor(Math.random()*list.length)];
+  meguriIdx = full.findIndex(e=> e[0]===id);   // めぐりの番号は全体基準で合わせる
+  centerOnNote(id, p, focusZoom);   // 開いたときは100%以上のランダム倍率でフォーカス
+}
+
+/* ---------- toast ---------- */
+let toastT=null;
+function toast(msg, ms){
+  const el=document.getElementById("toast");
+  el.textContent=msg; el.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("show"), ms || 1800);
+}
+
+/* ---------- floating desk collapse ---------- */
+const floatDesk = document.getElementById("floatDesk");
+const deskToggleBtn = document.getElementById("deskToggle");
+const deskBar = floatDesk.querySelector(".desk-bar");
+const deskBarTitle = floatDesk.querySelector(".desk-bar-title");
+let deskPrevCollapsed = false;
+const isMobileView = ()=> window.innerWidth <= 560;
+function setDeskCollapsed(c){
+  floatDesk.classList.toggle("collapsed", c);
+  deskToggleBtn.textContent = c ? "＋" : "−";
+  deskBarTitle.textContent = c ? "半紙を広げる" : "半紙";
+  requestAnimationFrame(updateDeskMore);
+}
+deskBar.addEventListener("click", ()=> setDeskCollapsed(!floatDesk.classList.contains("collapsed")));
+
+/* もっと下に道具がある時だけ ▼ を出す（モバイル・スクロール可能・最下部でない） */
+const deskBodyEl = document.getElementById("deskBody");
+const deskMoreEl = document.getElementById("deskMore");
+const deskFootEl = floatDesk.querySelector(".desk-foot");
+function updateDeskMore(){
+  if(!deskMoreEl || !deskBodyEl) return;
+  const collapsed = floatDesk.classList.contains("collapsed");
+  const more = (deskBodyEl.scrollHeight - deskBodyEl.scrollTop - deskBodyEl.clientHeight) > 8;
+  const show = !collapsed && isMobileView() && more;
+  if(show) deskMoreEl.style.bottom = ((deskFootEl ? deskFootEl.offsetHeight : 90) + 6) + "px";
+  deskMoreEl.classList.toggle("show", show);
+}
+if(deskBodyEl){
+  deskBodyEl.addEventListener("scroll", updateDeskMore, {passive:true});
+  deskMoreEl.addEventListener("click", ()=> deskBodyEl.scrollBy({top:deskBodyEl.clientHeight*0.6, behavior:"smooth"}));
+}
+window.addEventListener("resize", updateDeskMore);
+if(window.visualViewport) window.visualViewport.addEventListener("resize", updateDeskMore);
+
+/* 大きく描く：表示だけ1.5倍（内部解像度・保存サイズは不変）。座標は表示サイズ基準なので描画はそのまま */
+const bigBtn = document.getElementById("bigBtn");
+function setBig(on){
+  canvasScale = on ? 1.5 : 1;
+  floatDesk.classList.toggle("big", on);
+  bigBtn.classList.toggle("active", on);
+  LS.set("fg_big", on ? "1" : "0");
+  requestAnimationFrame(updateDeskMore);   // 高さが変わるのでスクロール合図を更新
+}
+bigBtn.addEventListener("click", ()=> setBig(!floatDesk.classList.contains("big")));
+if(LS.get("fg_big")==="1") setBig(true);    // 前回の設定を引き継ぐ
+
+/* 初回ガイド：画面中央で点滅 → 左上の「半紙を広げる」バーへスッと移動 → 短く点滅して消える */
+function runGuide(){
+  const guide = document.getElementById("guide");
+  if(!guide || !floatDesk.classList.contains("collapsed") || LS.get("fg_guideSeen")){ floatDesk.classList.remove("guiding"); return; }
+  LS.set("fg_guideSeen", "1");               // 端末ごとに初回だけ
+  navGuideArmed = true; navGuideStarted = false;  // 見る動線も中央→右下へ飛ばす（半紙が来たら作動）
+  tryNavGuide();                             // 既に半紙が読み込まれていればこの場で発火
+  floatDesk.classList.add("guiding");        // 中央表示中は左上の実バーを隠す
+  guide.style.left = (window.innerWidth/2) + "px";
+  guide.style.top  = (window.innerHeight/2) + "px";
+  guide.style.transform = "translate(-50%,-50%)";
+  guide.classList.add("show");
+  let done = false;
+  const reveal = ()=> floatDesk.classList.remove("guiding");   // 実バーを出す
+  const finish = ()=>{ if(done) return; done = true; reveal(); guide.classList.remove("show"); setTimeout(()=>guide.remove(), 450); };
+  guide.addEventListener("click", ()=>{ setDeskCollapsed(false); stopNavHint(); finish(); });   // 描くを選択
+  const CENTER_DWELL = 1500, MOVE = 800, LINGER = 600;
+  setTimeout(()=>{                            // 左上へ移動
+    if(done) return;
+    const r = floatDesk.getBoundingClientRect();
+    guide.style.left = r.left + "px";
+    guide.style.top  = r.top + "px";
+    guide.style.transform = "translate(0,0)";
+  }, CENTER_DWELL);
+  setTimeout(reveal, CENTER_DWELL + MOVE);     // 到着で実バーをフェードイン
+  setTimeout(finish, CENTER_DWELL + MOVE + LINGER);
+}
+
+/* ---------- init ---------- */
+setupCanvas();
+restoreDraft();   // 前回の描きかけがあれば復帰
+// デフォルトの太さ／筆：前回の設定があれば引き継ぐ。無ければランダム（太さは0〜15%）
+(function(){
+  const sl = document.getElementById("size");
+  const savedPos = LS.get("fg_sizePos"), savedBrush = LS.get("fg_brush");
+  const pos = (savedPos!=null && !isNaN(+savedPos)) ? clamp(Math.round(+savedPos),0,SIZE_STEPS-1) : Math.floor(Math.random()*3); // 既定は細めの段をランダム
+  sl.value = pos;
+  size = sizeFromPos(pos);
+  brushType = ["taper","round","flat"].includes(savedBrush) ? savedBrush : ["taper","round","flat"][Math.floor(Math.random()*3)];
+  document.querySelectorAll(".brush-opt").forEach(o=> o.classList.toggle("active", o.dataset.brush===brushType));
+})();
+if (document.fonts && document.fonts.load) { document.fonts.load('700 20px "Shippori Mincho"').catch(()=>{}); }
+computeZoomMin();
+applyZoom();
+setDeskCollapsed(true);   // 初期状態は閉じる（PC・モバイルとも）
+floatDesk.classList.add("guiding");   // ガイドが中央にいる間は左上バーを隠す（runGuideで到着時に表示）
+requestAnimationFrame(()=>{ randomStartScroll(); drawMinimap(); });
+
+/* ---------- 同時接続100枠の節約：放置・裏タブは自動で接続を解放、操作/再表示で再接続 ---------- */
+const IDLE_MS = 4*60*1000;     // 4分操作がなければ切断
+let dbOnline = true, idleTimer = 0, hiddenTimer = 0;
+function goIdleOffline(){
+  if(!db || IS_LOCAL || !dbOnline) return;
+  if(admin) return;   // 運営タブは満員監視のため接続を維持（自動切替のため）
+  dbOnline = false;
+  try{ goOffline(db); }catch(e){}   // RTDB接続を解放（リスナーは残り、再接続で同期し直す）
+}
+function wakeOnline(){
+  if(!db || IS_LOCAL) return;
+  if(!dbOnline){ dbOnline = true; try{ goOnline(db); }catch(e){} }   // 触ったら再接続
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(goIdleOffline, IDLE_MS);
+}
+["pointerdown","keydown","wheel","touchstart"].forEach(ev=> window.addEventListener(ev, wakeOnline, {passive:true}));
+if(scrollEl) scrollEl.addEventListener("scroll", wakeOnline, {passive:true});
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden){ clearTimeout(hiddenTimer); hiddenTimer = setTimeout(goIdleOffline, 25000); }  // 裏タブは25秒で解放
+  else { clearTimeout(hiddenTimer); wakeOnline(); }
+});
+
+/* ---------- 認証：全員まず匿名サインイン。運営はメール/パスワードで本人だけ ---------- */
+function startBoard(){ if(authStarted) return; authStarted = true; listen(); wakeOnline(); }
+if(auth && !IS_LOCAL){
+  onAuthStateChanged(auth, user=>{
+    myUid = user ? user.uid : null;
+    admin = !!(user && !user.isAnonymous && user.uid === ADMIN_UID);   // 本人UIDのみ運営
+    if(!user){ signInAnonymously(auth).catch(e=>{ console.error(e); showAuthError(); }); return; }
+    startBoard();          // 認証できた時だけ購読を開始（ルールが auth!=null を要求）
+    render(); updateGearLabel();
+  });
+  signInAnonymously(auth).catch(e=>{ console.error(e); showAuthError(); });
+} else if(IS_LOCAL){
+  showAuthError();         // ローカルは共有不可の穏やかな案内のみ（描画の試用は可能）
+} else {
+  showConnError();
+}
+setTimeout(runGuide, 450);   // 初回ガイド通知
+</script>
+</body>
+</html>
