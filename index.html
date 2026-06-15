@@ -1367,7 +1367,7 @@ function render(){
     const delCls = delDone.has(p.id) ? "del-btn done" : "del-btn";
     const hiddenBadge = p.hidden ? '<span class="hidden-badge">非表示</span>' : '';
     const repoBtn = (p.id===graceNoteId && p.uid===myUid && !repositioningId)
-      ? `<button class="repo-btn" onclick="startReposition('${p.id}')">位置を直す</button>` : '';
+      ? `<button class="repo-btn" onclick="startReposition(event,'${p.id}')">位置を直す</button>` : '';
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
@@ -1574,7 +1574,8 @@ async function commitPlace(nx, ny){
   if(repositioningId){ await repositionPost(nx, ny); }   // 位置直しなら移動だけ
   else { await createPost(nx, ny); }                     // 通常は新規投稿
 }
-function startReposition(id){
+function startReposition(e, id){
+  if(e){ e.stopPropagation(); e.preventDefault(); }   // このタップが壁の確定ハンドラに伝播して即置きされるのを防ぐ
   const p = posts.get(id);
   if(!p || p.uid !== myUid) return;     // 自分の半紙だけ
   repositioningId = id;
@@ -1582,6 +1583,11 @@ function startReposition(id){
   const ni = notesEl.querySelector('.note[data-id="'+id+'"] .note-img');
   const src = (ni && ni.src) || imgCache.get(id) || "";
   if(src) ghostImg.src = src;           // ゴーストを対象の半紙画像に
+  // ゴーストを今の半紙位置から開始（自然な掴み直し感）
+  const left = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W);
+  const top  = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
+  ghostEl.style.left = left+"px"; ghostEl.style.top = top+"px";
+  ghostEl.classList.toggle("blocked", !canPlaceAt(left,top));
   setMsg('<div class="placing-hint"><span>新しい位置へドラッグして離す（2本指でズーム）</span><span class="cancel" onclick="cancelPlacing()">やめる</span></div>');
 }
 window.startReposition = startReposition;
