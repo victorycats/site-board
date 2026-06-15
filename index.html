@@ -1367,7 +1367,10 @@ function render(){
     if(p.id===justVoted) justVoted = null;
     const delCls = delDone.has(p.id) ? "del-btn done" : "del-btn";
     const hiddenBadge = p.hidden ? '<span class="hidden-badge">非表示</span>' : '';
-    const repoBtn = (p.id===graceNoteId && p.uid===myUid && !repositioningId)
+    const isMyGrace = (p.id===graceNoteId && p.uid===myUid);   // 貼った直後の自分の半紙
+    const souBtn = isMyGrace ? '' : `<button class="${souCls}" onclick="vote('sou','${p.id}')">そうだね<span class="n"> ${p.sou||0}</span></button>`;
+    const delBtn = isMyGrace ? '' : `<button class="${delCls}" onclick="vote('del','${p.id}')">del</button>`;
+    const repoBtn = (isMyGrace && !repositioningId)
       ? `<button class="repo-btn" onclick="startReposition(event,'${p.id}')">位置を直す</button>` : '';
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
@@ -1387,8 +1390,8 @@ function render(){
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
       <div class="acts">
-        <button class="${souCls}" onclick="vote('sou','${p.id}')">そうだね<span class="n"> ${p.sou||0}</span></button>
-        <button class="${delCls}" onclick="vote('del','${p.id}')">del</button>
+        ${souBtn}
+        ${delBtn}
         ${repoBtn}
       </div>
       ${adminLine}
