@@ -94,7 +94,7 @@
   }
   .float-desk.guiding{opacity:0;pointer-events:none}
   .desk-bar{
-    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    display:flex;align-items:center;justify-content:flex-start;gap:8px;
     padding:10px 12px 8px;flex:0 0 auto;
   }
   .desk-bar-title{
@@ -174,6 +174,12 @@
   }
   .swatch.active{border-color:var(--sumi);box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--sumi)}
   .swatch.active::after{content:"";position:absolute;inset:0;border-radius:50%}
+  @media(max-width:560px){
+    /* モバイルで色パレットが1行に収まるよう一回り小さく */
+    #colors{gap:6px}
+    #colors .tool-label{min-width:24px}
+    #colors .swatch{width:26px;height:26px;border-width:1px}
+  }
   .tool-label{font-size:12px;color:var(--ink-faint);font-weight:500;min-width:40px}
   .brush-seg{display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid rgba(140,110,60,.35);flex:1}
   .brush-opt{
@@ -429,6 +435,16 @@
   .login-cancel{background:#e3d8c0;color:var(--ink-faint)}
   .login-ok{background:var(--shu);color:#fff}
   .login-ok:hover{background:var(--shu-deep)}
+  /* 色パレット編集 */
+  #palSlots{display:flex;flex-direction:column;gap:8px}
+  .pal-fixed{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-faint)}
+  .pal-chip{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.15);display:inline-block;vertical-align:middle}
+  .pal-slot{display:flex;align-items:center;gap:8px}
+  .pal-slot input[type=color]{width:46px;height:34px;border:1px solid var(--paper-edge);border-radius:8px;background:#fffdf7;padding:2px;cursor:pointer}
+  .pal-slot .pal-hex{flex:1;font-size:13px;color:var(--ink-faint);font-family:monospace}
+  .pal-slot .pal-del{width:30px;height:30px;border:none;border-radius:7px;background:#e3d8c0;color:var(--ink-faint);cursor:pointer;font-weight:700;font-size:16px;line-height:1}
+  .pal-add{background:#e7d9bb;color:var(--ink-faint);border:none;border-radius:9px;padding:9px;cursor:pointer;font-weight:700;font-size:13px}
+  .pal-add:disabled{opacity:.4;cursor:default}
   .rotor-hint{
     position:absolute;left:50%;transform:translateX(-50%);
     white-space:nowrap;font-size:11px;font-family:"Zen Kaku Gothic New",sans-serif;
@@ -573,8 +589,8 @@
   <!-- 浮いている半紙パネル -->
   <section class="float-desk" id="floatDesk">
     <div class="desk-bar">
-      <span class="desk-bar-title">半紙</span>
       <button class="desk-toggle" id="deskToggle" title="しまう／ひらく">−</button>
+      <span class="desk-bar-title">半紙</span>
     </div>
     <div class="desk-body" id="deskBody">
       <div class="canvas-frame">
@@ -662,6 +678,23 @@
     <div class="login-btns">
       <button class="login-cancel" id="loginCancel">キャンセル</button>
       <button class="login-ok" id="loginOk">ログイン</button>
+    </div>
+  </div>
+</div>
+
+<div class="login-mask" id="palMask">
+  <div class="login-card">
+    <div class="login-title">色パレット設定</div>
+    <div class="pal-fixed">
+      <span class="pal-chip" style="background:#1a1714"></span>墨（左端・固定）
+      <span style="opacity:.5">…</span>
+      <span class="pal-chip" style="background:#f7f4ec"></span>消しゴム（右端・固定）
+    </div>
+    <div id="palSlots"></div>
+    <button class="pal-add" id="palAdd">＋ 色を追加（最大4）</button>
+    <div class="login-btns">
+      <button class="login-cancel" id="palCancel">キャンセル</button>
+      <button class="login-ok" id="palSave">保存</button>
     </div>
   </div>
 </div>
@@ -996,6 +1029,25 @@ document.getElementById("colors").addEventListener("click",e=>{
   const c = sw.dataset.color;
   if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
 });
+/* パレット：墨(左端固定)＋中間色(最大4)＋消しゴム(右端固定)。中間色は meta/palette で全員共有 */
+const PAL_BLACK = "#1a1714";
+const PAL_DEFAULT_MID = ["#b5341f","#1d5a8c","#2f7d3b","#e6b800"];
+let paletteMid = PAL_DEFAULT_MID.slice();
+function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
+function renderPalette(){
+  const wrap = document.getElementById("colors");
+  if(!wrap) return;
+  const cur = erasing ? "ERASER" : color;        // 今の選択を覚える
+  const mids = (paletteMid||[]).filter(isHex6).slice(0,4);
+  let html = '<span class="tool-label">墨</span>';
+  html += '<div class="swatch" data-color="'+PAL_BLACK+'" style="background:'+PAL_BLACK+'"></div>';
+  mids.forEach(c=>{ html += '<div class="swatch" data-color="'+c+'" style="background:'+c+'"></div>'; });
+  html += '<div class="swatch" data-color="ERASER" style="background:'+PAPER+'" title="消しゴム"></div>';
+  wrap.innerHTML = html;
+  // 選択を復元（無くなっていたら墨）。描画状態も合わせる
+  let sel = wrap.querySelector('.swatch[data-color="'+cur+'"]') || wrap.querySelector('.swatch[data-color="'+PAL_BLACK+'"]');
+  if(sel){ sel.classList.add("active"); const c=sel.dataset.color; if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; } }
+}
 // 太さは全段クリッキーな12段。位置(0〜11)→筆の太さ。最細は2px、最太は描画幅の約40%
 const SIZE_STEPS = 12;
 function sizeFromPos(i){
@@ -1289,7 +1341,7 @@ function render(){
   // メッセージ帯（運営/空）。placing中の案内は別途出すので上書きしない
   if(!placing){
     if(admin){
-      setMsg('<div class="admin-banner"><span>運営モード（ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'枚）</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="toggleImgPost()">画像投稿：'+(imgPostOn?'ON':'OFF')+'</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="archiveAndAdvance()">保存して新ボードへ</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="exitAdmin()">終了</span></div>');
+      setMsg('<div class="admin-banner"><span>運営モード（ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'枚）</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="toggleImgPost()">画像投稿：'+(imgPostOn?'ON':'OFF')+'</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="openPaletteEditor()">色設定</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="archiveAndAdvance()">保存して新ボードへ</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="exitAdmin()">終了</span></div>');
     } else if(!visible.length){
       if(postsLoaded){
         setMsg('<div class="empty"><span class="big">習</span>まだ誰も貼っていません。<br>左で書いて「貼る」を押そう。</div>');
@@ -1399,6 +1451,13 @@ function listen(){
   onValue(ref(db, "meta/imgPost"), snap=>{
     imgPostOn = (snap && snap.val()) !== false;
     applyImgPostState();
+  });
+  // 色パレット（中間色をカンマ区切り文字列で共有）。未設定=デフォルト4色、空文字=中間色なし
+  onValue(ref(db, "meta/palette"), snap=>{
+    const s = snap ? snap.val() : null;
+    paletteMid = (s == null) ? PAL_DEFAULT_MID.slice()
+               : String(s).split(",").map(x=>x.trim()).filter(isHex6).slice(0,4);
+    renderPalette();
   });
 }
 function unsubBoard(){ boardSubs.forEach(fn=>{ try{ fn(); }catch(e){} }); boardSubs = []; }
@@ -1925,6 +1984,47 @@ async function toggleImgPost(){
   }catch(e){ toast("権限がないか失敗しました"); }
 }
 window.toggleImgPost = toggleImgPost;
+
+/* 運営：色パレット編集（中間色 最大4。墨と消しゴムは固定）。meta/palette に保存し全員へ反映 */
+let palEdit = [];
+const palMask  = document.getElementById("palMask");
+const palSlots = document.getElementById("palSlots");
+const palAdd   = document.getElementById("palAdd");
+function normHex(c){ return isHex6(c) ? c.toLowerCase() : "#888888"; }
+function renderPalSlots(){
+  palSlots.innerHTML = "";
+  palEdit.forEach((c,idx)=>{
+    const row = document.createElement("div"); row.className = "pal-slot";
+    const inp = document.createElement("input"); inp.type = "color"; inp.value = normHex(c);
+    const hex = document.createElement("span"); hex.className = "pal-hex"; hex.textContent = normHex(c);
+    inp.addEventListener("input", ()=>{ palEdit[idx] = inp.value; hex.textContent = inp.value; });
+    const del = document.createElement("button"); del.className = "pal-del"; del.textContent = "×"; del.title = "削除";
+    del.addEventListener("click", ()=>{ palEdit.splice(idx,1); renderPalSlots(); });
+    row.append(inp, hex, del);
+    palSlots.appendChild(row);
+  });
+  palAdd.disabled = palEdit.length >= 4;
+}
+function openPaletteEditor(){
+  if(!admin) return;
+  palEdit = (paletteMid||[]).filter(isHex6).slice(0,4).map(normHex);
+  renderPalSlots();
+  palMask.classList.add("show");
+}
+function closePal(){ palMask.classList.remove("show"); }
+palAdd.addEventListener("click", ()=>{ if(palEdit.length < 4){ palEdit.push("#888888"); renderPalSlots(); } });
+document.getElementById("palCancel").addEventListener("click", closePal);
+palMask.addEventListener("click", e=>{ if(e.target === palMask) closePal(); });
+document.getElementById("palSave").addEventListener("click", async ()=>{
+  if(!db || !admin) return;
+  const vals = palEdit.map(normHex);                 // カンマ区切り文字列で保存（空=中間色なし）
+  try{
+    await set(ref(db, "meta/palette"), vals.join(","));
+    toast("色パレットを保存しました");
+    closePal();
+  }catch(e){ console.error(e); toast("権限がないか失敗しました"); }
+});
+window.openPaletteEditor = openPaletteEditor;
 
 async function adminRestore(id){
   if(!db || !admin) return;
