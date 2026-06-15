@@ -501,10 +501,11 @@
 
   /* admin bar */
   .gear{
+    display:none;   /* 非表示。運営ログインは隠しコマンド（白紙＋名前欄enter＋投稿）から */
     position:fixed;left:16px;bottom:16px;z-index:40;
     width:42px;height:42px;border-radius:50%;
     background:rgba(26,23,20,.55);color:var(--paper);
-    display:flex;align-items:center;justify-content:center;font-size:20px;
+    align-items:center;justify-content:center;font-size:20px;
     box-shadow:0 4px 12px rgba(0,0,0,.4);
   }
   .gear:hover{background:rgba(26,23,20,.8)}
@@ -1593,6 +1594,12 @@ const postBtn = document.getElementById("post");
 postBtn.addEventListener("click", ()=>{
   if(placing){ cancelPlacing(); return; }
   if(!db){ showConnError(); return; }
+  // 隠しコマンド：半紙が白紙＋名前欄が「enter」なら運営ログインを開く（投稿はしない）
+  if(isBlank() && document.getElementById("who").value.trim().toLowerCase() === "enter"){
+    document.getElementById("who").value = "";
+    if(admin){ toast("すでに運営モードです"); } else { openLogin(); }
+    return;
+  }
   if(isBlank()){ toast("なにか書いてね"); return; }
   if(remaining() <= 0){ toast("満員です。運営の切り替えを待ってね"); return; }   // ボード満杯
   const wait = Math.ceil((lastPostAt + POST_COOLDOWN_MS - Date.now())/1000);
