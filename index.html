@@ -372,6 +372,13 @@
   }
   .del-btn:hover{background:rgba(181,52,31,.14);color:var(--shu-deep)}
   .del-btn.done{color:#c9b48f;cursor:default;box-shadow:inset 0 0 0 1px rgba(140,110,60,.2)}
+  .repo-btn{
+    background:rgba(47,125,59,.10);color:#2f7d3b;font-size:11px;font-weight:700;
+    padding:5px 9px;border-radius:5px;letter-spacing:.04em;
+    box-shadow:inset 0 0 0 1px rgba(47,125,59,.38);
+  }
+  .repo-btn:hover{background:rgba(47,125,59,.18)}
+  .note .acts .repo-btn{opacity:1}   /* 位置直しは自分の最新半紙だけ。常にはっきり表示 */
   /* 選択中（最前面）の半紙だけボタンが効く。非選択はボタンを淡色＝押せない見た目に */
   .note .acts button{opacity:.45;transition:opacity .15s}
   .note.sel .acts button, .note.mine .acts button{opacity:1}
@@ -1204,6 +1211,8 @@ let placeDragging = false;  // スマホで指ドラッグ配置中
 let pendingImg = null;      // 貼る予定の画像
 let lastDrawing = null;     // 貼る直前のキャンバス（キャンセル時に描き戻す）
 let editingId = null;       // 角度微調整中の自分の投稿
+let graceNoteId = null;     // 貼った直後、位置を直せる自分の半紙（次に貼るまで有効）
+let repositioningId = null; // 位置直し中の半紙ID（ドロップでnx/nyだけ更新）
 const renderedIds = new Set(); // 既に表示済みの半紙（登場アニメの再生抑制用）
 let zCounter = 100;
 const zOverride = new Map();    // id -> z（クリックで上げた半紙）
@@ -1357,6 +1366,8 @@ function render(){
     if(p.id===justVoted) justVoted = null;
     const delCls = delDone.has(p.id) ? "del-btn done" : "del-btn";
     const hiddenBadge = p.hidden ? '<span class="hidden-badge">非表示</span>' : '';
+    const repoBtn = (p.id===graceNoteId && p.uid===myUid && !repositioningId)
+      ? `<button class="repo-btn" onclick="startReposition('${p.id}')">位置を直す</button>` : '';
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
@@ -1377,6 +1388,7 @@ function render(){
       <div class="acts">
         <button class="${souCls}" onclick="vote('sou','${p.id}')">そうだね<span class="n"> ${p.sou||0}</span></button>
         <button class="${delCls}" onclick="vote('del','${p.id}')">del</button>
+        ${repoBtn}
       </div>
       ${adminLine}
     </div>`;
@@ -1460,6 +1472,7 @@ function switchToBoard(id){
   // ローカル状態をまっさらに
   posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
   zOverride.clear(); activeNoteId = null; editingId = null;
+  graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
   setActiveCount();
   render();
@@ -1546,6 +1559,7 @@ function enterPlacing(){
 function cancelPlacing(){
   placing = false;
   placeDragging = false;
+  repositioningId = null;   // 位置直しの中断
   ghostEl.classList.remove("show");
   wallEl.classList.remove("placing");
   scrollEl.classList.remove("placing-lock");
@@ -1554,6 +1568,40 @@ function cancelPlacing(){
   render();
 }
 window.cancelPlacing = cancelPlacing;
+
+// ---- 貼った直後の位置直し（猶予中は自分の最新半紙を動かせる。次に貼るまで有効） ----
+async function commitPlace(nx, ny){
+  if(repositioningId){ await repositionPost(nx, ny); }   // 位置直しなら移動だけ
+  else { await createPost(nx, ny); }                     // 通常は新規投稿
+}
+function startReposition(id){
+  const p = posts.get(id);
+  if(!p || p.uid !== myUid) return;     // 自分の半紙だけ
+  repositioningId = id;
+  enterPlacing();                       // 配置UIを流用（ピンチズームもそのまま使える）
+  const ni = notesEl.querySelector('.note[data-id="'+id+'"] .note-img');
+  const src = (ni && ni.src) || imgCache.get(id) || "";
+  if(src) ghostImg.src = src;           // ゴーストを対象の半紙画像に
+  setMsg('<div class="placing-hint"><span>新しい位置へドラッグして離す（2本指でズーム）</span><span class="cancel" onclick="cancelPlacing()">やめる</span></div>');
+}
+window.startReposition = startReposition;
+async function repositionPost(nx, ny){
+  const id = repositioningId;
+  repositioningId = null;
+  if(db && id){
+    try{
+      await update(ref(db, bpath("posts/"+id)), { nx, ny });   // 位置(nx/ny)だけ更新＝枠も画像もそのまま・クールダウン無関係
+      const p = posts.get(id); if(p){ p.nx = nx; p.ny = ny; posts.set(id, p); }
+      toast("位置を直しました");
+    }catch(e){ console.error(e); toast("位置を直せませんでした"); }
+  }
+  placing = false; placeDragging = false;
+  ghostEl.classList.remove("show"); wallEl.classList.remove("placing"); scrollEl.classList.remove("placing-lock");
+  postBtn.textContent = "貼 る";
+  setMsg("");
+  setDeskCollapsed(deskPrevCollapsed);
+  render();   // 位置直しボタンは graceNoteId のまま残る＝何度でも直せる
+}
 
 function wallCoords(clientX, clientY){
   const r = wallEl.getBoundingClientRect(); // r is the scaled, scrolled rect
@@ -1572,6 +1620,7 @@ function worstCover(x,y){
   const nr = {x, y, w:NOTE_W, h:NOTE_H};   // 新しい半紙が覆う全体の矩形
   let worst = 0;
   posts.forEach((p,id)=>{
+    if(id === repositioningId) return;   // 位置直し中の本人は重なり判定から除外
     if(p.hidden && !admin) return;
     const ex = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W);
     const ey = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
@@ -1595,7 +1644,7 @@ wallEl.addEventListener("click", async e=>{
   if(!canPlaceAt(x,y)){ ghostEl.classList.add("blocked"); toast("ここは重なりすぎ。別の場所へ"); return; }  // 置けない
   const nx = (WALL_W-NOTE_W) ? x/(WALL_W-NOTE_W) : 0;
   const ny = (WALL_H-NOTE_H) ? y/(WALL_H-NOTE_H) : 0;
-  await createPost(nx, ny);
+  await commitPlace(nx, ny);
 });
 // スマホ：指で押してドラッグ→離して確定（赤＝置けない／消える＝置ける のプレビュー付き）
 wallEl.addEventListener("touchstart", e=>{
@@ -1624,7 +1673,7 @@ wallEl.addEventListener("touchend", async e=>{
   if(!canPlaceAt(x,y)){ ghostEl.classList.add("blocked"); toast("ここは重なりすぎ。別の場所へ"); return; }
   const nx = (WALL_W-NOTE_W) ? x/(WALL_W-NOTE_W) : 0;
   const ny = (WALL_H-NOTE_H) ? y/(WALL_H-NOTE_H) : 0;
-  await createPost(nx, ny);
+  await commitPlace(nx, ny);
 }, {passive:false});
 notesEl.addEventListener("click", e=>{
   if(placing) return;
@@ -1720,6 +1769,7 @@ async function createPost(nx, ny){
     setMsg("");
     if(finalNow){
       editingId = null;          // モバイルは角度調整なし（ランダム±4°のまま）
+      graceNoteId = id;          // 貼った直後だけ位置を直せる（次に貼るまで／本人のみ）
       render();
     } else {
       render();
