@@ -1538,7 +1538,7 @@ function enterPlacing(){
   wallEl.classList.add("placing");
   scrollEl.classList.add("placing-lock");   // 配置中はタッチスクロールを止め、指でゴーストを動かす
   postBtn.textContent = "場所を選ぶ…";
-  setMsg('<div class="placing-hint"><span>貼りたい場所へ。PCはクリック／スマホは指でドラッグして離す</span><span class="cancel" onclick="cancelPlacing()">やめる</span></div>');
+  setMsg('<div class="placing-hint"><span>貼りたい場所へ。PCはクリック／スマホは指でドラッグして離す（2本指でズーム）</span><span class="cancel" onclick="cancelPlacing()">やめる</span></div>');
   deskPrevCollapsed = floatDesk.classList.contains("collapsed");
   setDeskCollapsed(true);   // 場所選び中は「半紙にかく」を最小化
   scrollEl.scrollIntoView({behavior:"smooth", block:"nearest"});
@@ -1599,7 +1599,8 @@ wallEl.addEventListener("click", async e=>{
 });
 // スマホ：指で押してドラッグ→離して確定（赤＝置けない／消える＝置ける のプレビュー付き）
 wallEl.addEventListener("touchstart", e=>{
-  if(!placing || e.touches.length!==1) return;
+  if(!placing) return;
+  if(e.touches.length !== 1){ placeDragging = false; return; }   // 2本目=ピンチズーム → 設置ドラッグを中断（誤設置防止）
   e.preventDefault();             // スクロールとエミュレートclickを抑制（タップでの二重確定を防ぐ）
   placeDragging = true;
   const t = e.touches[0];
@@ -1616,7 +1617,7 @@ wallEl.addEventListener("touchmove", e=>{
   ghostEl.classList.toggle("blocked", !canPlaceAt(x,y));
 }, {passive:false});
 wallEl.addEventListener("touchend", async e=>{
-  if(!placing || !placeDragging) return;
+  if(!placing || !placeDragging || pinchActive) return;   // ピンチ中は確定しない
   placeDragging = false;
   const t = e.changedTouches[0];
   const {x,y} = wallCoords(t.clientX, t.clientY);
