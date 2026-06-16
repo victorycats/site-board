@@ -246,6 +246,45 @@
     width:27%;aspect-ratio:1;pointer-events:none;opacity:.92;
   }
   .seal-stamp img{width:100%;height:100%;display:block}
+  /* 道具の右タブ＋スライドアウト（半紙はそのまま、道具が上にニュッと出る） */
+  .tool-tabs{
+    position:fixed;z-index:48;transform:translateY(-50%);
+    display:none;flex-direction:column;gap:6px;
+  }
+  .float-desk.tabsmode .tool-tabs{display:flex}
+  .float-desk:not(.tabsmode) .tool-pop{display:none}   /* インライン時はpopを使わない */
+  /* バーの「道具の出し方」切替ボタン */
+  .desk-layout{
+    margin-left:auto;height:26px;min-width:28px;padding:0 9px;border-radius:7px;border:none;cursor:pointer;
+    background:#d8c8a2;color:var(--ink-faint);font-size:13px;font-weight:700;line-height:1;
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  }
+  .desk-layout:hover{filter:brightness(1.04)}
+  .tool-tab{
+    background:rgba(216,200,162,.97);color:var(--ink-faint);
+    border:none;border-radius:9px 0 0 9px;padding:9px 7px;
+    font-family:"Shippori Mincho",serif;font-size:12px;font-weight:700;line-height:1.15;
+    letter-spacing:.04em;cursor:pointer;white-space:nowrap;
+    box-shadow:-2px 2px 7px rgba(0,0,0,.22), inset 0 0 0 1px rgba(140,110,60,.3);
+  }
+  .tool-tab.active{background:var(--shu);color:#fff}
+  .tool-pop{
+    position:fixed;z-index:50;
+    transform:translateX(12px) scale(.98);transform-origin:left center;
+    opacity:0;pointer-events:none;
+    transition:transform .2s ease, opacity .16s ease;
+    width:min(260px,86vw);box-sizing:border-box;
+    background:linear-gradient(150deg,#efe6cf,#e5d7b4);
+    border-radius:12px;padding:12px 12px 4px;
+    box-shadow:0 12px 30px rgba(0,0,0,.42), inset 0 0 0 1px var(--paper-edge);
+  }
+  .tool-pop.open{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}
+  .tool-pop .row{margin-bottom:0}
+  @media(max-width:560px){
+    /* 半紙を開いている間は、めぐり・ミニマップ・板のズームを隠す（描画に集中） */
+    .stage.desk-open .float-tools,
+    .stage.desk-open .nav-cluster{display:none}
+  }
 
   /* ---- wide wall / board ---- */
   .board-head{
@@ -596,14 +635,18 @@
     <div class="desk-bar">
       <button class="desk-toggle" id="deskToggle" title="しまう／ひらく">−</button>
       <span class="desk-bar-title">半紙</span>
+      <button class="desk-layout" id="deskLayout" title="道具の出し方を切替">右</button>
     </div>
     <div class="desk-body" id="deskBody">
       <div class="canvas-frame">
         <canvas id="pad"></canvas>
         <div class="seal-stamp" aria-hidden="true"><img id="sealStampImg" alt=""></div>
-      </div>
-
-      <div class="tools">
+        <div class="tool-tabs">
+          <button class="tool-tab" data-pop="color" type="button">色 ›</button>
+          <button class="tool-tab" data-pop="size" type="button">太さ ›</button>
+          <button class="tool-tab" data-pop="brush" type="button">筆 ›</button>
+        </div>
+        <div class="tool-pop" data-pop="color">
         <div class="row" id="colors">
           <span class="tool-label">墨</span>
           <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
@@ -613,6 +656,8 @@
           <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
           <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
         </div>
+        </div>
+        <div class="tool-pop" data-pop="size">
         <div class="row">
           <span class="tool-label">太さ</span>
           <div class="size-wrap">
@@ -623,6 +668,8 @@
 
           </div>
         </div>
+        </div>
+        <div class="tool-pop" data-pop="brush">
         <div class="row">
           <span class="tool-label">筆</span>
           <div class="brush-seg" id="brushSeg">
@@ -632,6 +679,11 @@
           </div>
         </div>
 
+        </div>
+      </div>
+
+      <div class="tools">
+        <div class="tools-inline" id="toolsInline"></div>
         <div class="btns" style="margin-bottom:8px">
           <button class="btn-ghost" id="undo">戻</button>
           <button class="btn-ghost" id="fillBtn">塗</button>
@@ -1029,6 +1081,7 @@ document.getElementById("colors").addEventListener("click",e=>{
   sw.classList.add("active");
   const c = sw.dataset.color;
   if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
+  closeToolPop();   // 色を選んだら閉じる
 });
 /* パレット：墨(左端固定)＋中間色(最大4)＋消しゴム(右端固定)。中間色は meta/palette で全員共有 */
 const PAL_BLACK = "#1a1714";
@@ -1071,6 +1124,7 @@ document.getElementById("brushSeg").addEventListener("click",e=>{
   brushType = b.dataset.brush;
   LS.set("fg_brush", brushType);   // 次回に引き継ぐ
   setFillMode(false);   // 筆を選んだら塗りつぶしは解除
+  closeToolPop();       // 筆を選んだら閉じる
 });
 
 /* 塗りつぶし（バケツ）モードの切り替え */
@@ -1215,6 +1269,10 @@ let pendingImg = null;      // 貼る予定の画像
 let lastDrawing = null;     // 貼る直前のキャンバス（キャンセル時に描き戻す）
 let editingId = null;       // 角度微調整中の自分の投稿
 let graceNoteId = null;     // 貼った直後、位置を直せる自分の半紙（次に貼るまで有効）
+const flashNotes = new Map();   // 新規投稿の白点滅: id -> 消える時刻(ms)
+const seenNoteIds = new Set();  // 既知の投稿（初期ロード分は点滅させない）
+let flashArmed = false;         // 初期ロード後だけ点滅を有効化
+let flashRaf = 0;
 let repositioningId = null; // 位置直し中の半紙ID（ドロップでnx/nyだけ更新）
 const renderedIds = new Set(); // 既に表示済みの半紙（登場アニメの再生抑制用）
 let zCounter = 100;
@@ -1479,6 +1537,8 @@ function switchToBoard(id){
   posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
   zOverride.clear(); activeNoteId = null; editingId = null;
   graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
+  flashNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 点滅もリセット。初期ロード分は光らせない
+  setTimeout(()=>{ flashArmed = true; }, 1800);                  // 既存分の流し込みが落ち着いてから有効化
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
   setActiveCount();
   render();
@@ -1487,13 +1547,16 @@ function switchToBoard(id){
   try{
     get(postsRef).then(snap=>{
       const v = snap && snap.val();
-      if(v){ Object.keys(v).forEach(k=> posts.set(k, v[k]||{})); }
+      if(v){ Object.keys(v).forEach(k=>{ posts.set(k, v[k]||{}); seenNoteIds.add(k); }); }
       postsLoaded = true; render();
       if(!didInitialFocus && posts.size){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 300); }
     }).catch(()=>{ postsLoaded = true; render(); });
 
     boardSubs.push(onChildAdded(postsRef, snap=>{
-      posts.set(snap.key, snap.val()||{});
+      const id3 = snap.key;
+      posts.set(id3, snap.val()||{});
+      if(flashArmed && !seenNoteIds.has(id3)) flashNote(id3);   // 新規投稿をマップで白点滅
+      seenNoteIds.add(id3);
       render();
       if(!didInitialFocus){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 500); }
     }));
@@ -2351,6 +2414,17 @@ function randomStartScroll(){
 
 /* ---------- minimap ---------- */
 const miniCanvas = document.getElementById("miniCanvas");
+function flashNote(id){
+  flashNotes.set(id, Date.now() + 6000);   // 6秒間 白点滅
+  if(!flashRaf) flashRaf = requestAnimationFrame(flashTick);
+}
+function flashTick(){
+  flashRaf = 0;
+  const now = Date.now();
+  for(const [id,exp] of flashNotes){ if(exp <= now) flashNotes.delete(id); }
+  drawMinimap();
+  if(flashNotes.size) flashRaf = requestAnimationFrame(flashTick);
+}
 function drawMinimap(){
   if(!miniCanvas) return;
   const mmW = miniCanvas.clientWidth, mmH = miniCanvas.clientHeight;
@@ -2360,12 +2434,23 @@ function drawMinimap(){
   g.setTransform(DPR,0,0,DPR,0,0);
   g.clearRect(0,0,mmW,mmH);
   const sx = mmW/WALL_W, sy = mmH/WALL_H;
+  const now = Date.now();
+  const blinkOn = Math.floor(now/260)%2===0;   // 約2回/秒の点滅
   for(const [id,p] of posts){
     if(p.hidden && !admin) continue;
     const x = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W)*sx;
     const y = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H)*sy;
+    const w = Math.max(2, NOTE_W*sx), h = Math.max(2, NOTE_H*sy*0.85);
+    const fexp = flashNotes.get(id);
+    if(fexp && fexp > now && blinkOn){
+      g.save();
+      g.fillStyle = "#ffffff"; g.shadowColor = "rgba(255,255,255,.95)"; g.shadowBlur = 6;
+      g.fillRect(x-1, y-1, w+2, h+2);   // 新規投稿：白く光る
+      g.restore();
+      continue;
+    }
     g.fillStyle = p.hidden ? "rgba(181,52,31,.55)" : "#3a332b";
-    g.fillRect(x, y, Math.max(2, NOTE_W*sx), Math.max(2, NOTE_H*sy*0.85));
+    g.fillRect(x, y, w, h);
   }
   const vx = (scrollEl.scrollLeft/(WALL_W*zoom))*mmW;
   const vy = (scrollEl.scrollTop /(WALL_H*zoom))*mmH;
@@ -2486,15 +2571,93 @@ const floatDesk = document.getElementById("floatDesk");
 const deskToggleBtn = document.getElementById("deskToggle");
 const deskBar = floatDesk.querySelector(".desk-bar");
 const deskBarTitle = floatDesk.querySelector(".desk-bar-title");
+const stageEl = document.querySelector(".stage");
+const canvasFrame = floatDesk.querySelector(".canvas-frame");
 let deskPrevCollapsed = false;
 const isMobileView = ()=> window.innerWidth <= 560;
 function setDeskCollapsed(c){
   floatDesk.classList.toggle("collapsed", c);
+  if(stageEl) stageEl.classList.toggle("desk-open", !c);   // 開いてる間はナビを隠す（モバイル・CSS側で判定）
+  if(c) closeToolPop();                                     // 畳んだら道具popも閉じる
   deskToggleBtn.textContent = c ? "＋" : "−";
   deskBarTitle.textContent = c ? "半紙を広げる" : "半紙";
-  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); });
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); syncFloatingTools(); });
 }
 deskToggleBtn.addEventListener("click", e=>{ e.stopPropagation(); setDeskCollapsed(!floatDesk.classList.contains("collapsed")); });
+
+// 右タブを押すと、その道具がパネルの外（半紙の右）にスライドして出る。1つだけ開く
+let openPop = null;
+const toolTabsEl = canvasFrame.querySelector(".tool-tabs");
+function positionTabs(){
+  if(!toolTabsEl) return;
+  if(!floatDesk.classList.contains("tabsmode") || floatDesk.classList.contains("collapsed")) return;
+  const cf = canvasFrame.getBoundingClientRect();
+  if(!cf.width) return;
+  toolTabsEl.style.left = (cf.right - 4) + "px";          // パネルの外側へ少し出す（半紙にはかからない）
+  toolTabsEl.style.top  = (cf.top + cf.height*0.42) + "px";
+}
+function positionPop(pop, tab){
+  const cf = canvasFrame.getBoundingClientRect();
+  const tabsR = toolTabsEl ? toolTabsEl.getBoundingClientRect().right : cf.right;
+  const tr = tab.getBoundingClientRect();
+  const gap = 6, margin = 6, maxW = 260;
+  const left = Math.max(tabsR, cf.right) + gap;                   // タブの右・半紙の右より左には絶対に出さない
+  const width = Math.max(96, Math.min(maxW, window.innerWidth - left - margin));  // 入らなければ左へ寄せず幅を縮める
+  pop.style.left = left + "px";
+  pop.style.width = width + "px";                                 // 幅をJSで確定（半紙に被らない範囲）
+  const popH = pop.offsetHeight || 120;                           // 幅確定後に高さを測る
+  let top = tr.top + tr.height/2 - popH/2;                        // タブの高さに合わせる
+  top = Math.max(6, Math.min(window.innerHeight - popH - 6, top));
+  pop.style.top = top + "px";
+}
+function repositionOpenPop(){
+  if(!openPop) return;
+  const tab = canvasFrame.querySelector('.tool-tab[data-pop="'+openPop+'"]');
+  const pop = canvasFrame.querySelector('.tool-pop[data-pop="'+openPop+'"]');
+  if(tab && pop) positionPop(pop, tab);
+}
+function syncFloatingTools(){ positionTabs(); repositionOpenPop(); }   // タブ＆popをパネルに追従
+function setToolPop(name){
+  canvasFrame.querySelectorAll(".tool-pop").forEach(p=>{
+    const on = p.dataset.pop===name;
+    if(on){ const tab = canvasFrame.querySelector('.tool-tab[data-pop="'+name+'"]'); if(tab) positionPop(p, tab); }
+    p.classList.toggle("open", on);
+  });
+  canvasFrame.querySelectorAll(".tool-tab").forEach(t=> t.classList.toggle("active", t.dataset.pop===name));
+  openPop = name;
+}
+function closeToolPop(){ try{ if(openPop) setToolPop(null); }catch(e){} }
+canvasFrame.querySelectorAll(".tool-tab").forEach(t=>{
+  t.addEventListener("click", e=>{
+    e.stopPropagation();
+    const name = t.dataset.pop;
+    setToolPop(openPop===name ? null : name);   // 同じタブで開閉トグル
+  });
+});
+// 初期状態（半紙オープン）をナビ表示に反映
+if(stageEl) stageEl.classList.toggle("desk-open", !floatDesk.classList.contains("collapsed"));
+
+// 道具の出し方：右タブ（pop）⇄ 下インライン を切替。要素を実際に移動するので操作はどちらでも効く
+const deskLayoutBtn = document.getElementById("deskLayout");
+const toolsInline = document.getElementById("toolsInline");
+const popColor = canvasFrame.querySelector('.tool-pop[data-pop="color"]');
+const popSize  = canvasFrame.querySelector('.tool-pop[data-pop="size"]');
+const popBrush = canvasFrame.querySelector('.tool-pop[data-pop="brush"]');
+const rowColor = document.getElementById("colors");
+const rowSize  = popSize.querySelector(".row");
+const rowBrush = popBrush.querySelector(".row");
+function setToolLayout(tabs){
+  if(tabs){ popColor.appendChild(rowColor); popSize.appendChild(rowSize); popBrush.appendChild(rowBrush); }
+  else    { toolsInline.append(rowColor, rowSize, rowBrush); }   // 下に縦並び（旧仕様）
+  floatDesk.classList.toggle("tabsmode", tabs);
+  deskLayoutBtn.textContent = tabs ? "下" : "右";                // 押すと反対側へ
+  deskLayoutBtn.title = tabs ? "道具を下に並べる" : "道具を半紙の右タブにする";
+  closeToolPop();
+  LS.set("fg_toollayout", tabs ? "tabs" : "inline");
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); syncFloatingTools(); });
+}
+deskLayoutBtn.addEventListener("click", e=>{ e.stopPropagation(); setToolLayout(!floatDesk.classList.contains("tabsmode")); });
+setToolLayout(LS.get("fg_toollayout")==="tabs");   // デフォルトは下（旧仕様）。前回の選択を引き継ぐ
 
 // ---- 半紙パネルをドラッグで好きな位置へ（バーの＋/−以外を掴む） ----
 let deskDragging=false, deskMoved=false, deskOffX=0, deskOffY=0;
@@ -2513,7 +2676,7 @@ function setDeskPos(left, top, save){
 }
 function reclampDesk(){ if(floatDesk.style.left){ const r = floatDesk.getBoundingClientRect(); setDeskPos(r.left, r.top, false); } }
 deskBar.addEventListener("pointerdown", e=>{
-  if(e.target.closest("#deskToggle")) return;   // ＋/−ボタンの上では掴まない（開閉専用）
+  if(e.target.closest("button")) return;   // バー上のボタン（開閉・切替）の上では掴まない。残りで移動
   deskDragging = true; deskMoved = false;
   const r = floatDesk.getBoundingClientRect();
   deskOffX = e.clientX - r.left; deskOffY = e.clientY - r.top;
@@ -2524,6 +2687,7 @@ deskBar.addEventListener("pointermove", e=>{
   if(!deskDragging) return;
   deskMoved = true;
   setDeskPos(e.clientX - deskOffX, e.clientY - deskOffY, false);
+  syncFloatingTools();   // タブ＆popをパネルに追従
   e.preventDefault();
 });
 function endDeskDrag(e){
@@ -2537,7 +2701,7 @@ deskBar.addEventListener("pointerup", endDeskDrag);
 deskBar.addEventListener("pointercancel", endDeskDrag);
 // 起動時に保存位置を復元（クランプ）。リサイズで画面外に出ないよう再クランプ
 (function(){ try{ const s = LS.get("fg_deskpos"); if(s){ const p = JSON.parse(s); setDeskPos(p.left, p.top, false); } }catch(_){} })();
-window.addEventListener("resize", ()=>{ reclampDesk(); });
+window.addEventListener("resize", ()=>{ reclampDesk(); syncFloatingTools(); });
 
 /* もっと下に道具がある時だけ ▼ を出す（モバイル・スクロール可能・最下部でない） */
 const deskBodyEl = document.getElementById("deskBody");
@@ -2565,7 +2729,7 @@ function setBig(on){
   floatDesk.classList.toggle("big", on);
   bigBtn.classList.toggle("active", on);
   LS.set("fg_big", on ? "1" : "0");
-  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); });   // 高さ・幅が変わるので合図更新＆はみ出し補正
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); syncFloatingTools(); });   // 高さ・幅が変わるので合図更新＆はみ出し補正
 }
 bigBtn.addEventListener("click", ()=> setBig(!floatDesk.classList.contains("big")));
 if(LS.get("fg_big")==="1") setBig(true);    // 前回の設定を引き継ぐ
