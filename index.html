@@ -188,22 +188,23 @@
   .swatch.active::after{content:"";position:absolute;inset:0;border-radius:50%}
   /* 色パレット：折り返さず横1列。入りきらない分は横スクロール、右端に矢印ヒント */
   #colors{position:relative;flex-wrap:nowrap;gap:8px}
+  .swatch-wrap{position:relative;flex:1 1 auto;min-width:0;display:flex}
   .swatch-scroll{
     display:flex;align-items:center;gap:8px;
     flex:1 1 auto;min-width:0;
     overflow-x:auto;overflow-y:hidden;
     scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;
-    padding:2px 2px;     /* activeリングが切れないよう少し余白 */
+    padding:7px 4px;     /* 上下＝選択リング(4px)が切れない余白／左右＝端の色のリング分 */
   }
   .swatch-scroll::-webkit-scrollbar{display:none}
   .swatch-scroll .swatch{flex:0 0 auto}
   .swatch-more{
-    position:absolute;right:-2px;top:50%;transform:translateY(-50%);
-    width:26px;height:34px;display:none;align-items:center;justify-content:center;
+    position:absolute;top:0;bottom:0;width:26px;
+    display:none;align-items:center;justify-content:center;z-index:2;
     color:var(--ink-faint);font-size:13px;font-weight:700;cursor:pointer;
-    border-radius:0 10px 10px 0;
-    background:linear-gradient(to right, rgba(233,221,194,0), #e9ddc2 55%);  /* 右端フェードで「続きあり」を示す */
   }
+  .swatch-more.right{right:0;border-radius:0 10px 10px 0;background:linear-gradient(to right, rgba(233,221,194,0), #e9ddc2 60%)}
+  .swatch-more.left{left:0;border-radius:10px 0 0 10px;background:linear-gradient(to left, rgba(233,221,194,0), #e9ddc2 60%)}
   .swatch-more.show{display:flex}
   @media(max-width:560px){
     /* モバイルで色パレットを一回り小さく（横スクロール前提でも見やすく） */
@@ -665,16 +666,19 @@
         </div>
         <div class="row" id="colors">
           <span class="tool-label">墨</span>
-          <div class="swatch-scroll" id="swatchScroll">
-            <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
-            <div class="swatch" data-color="#b5341f" style="background:#b5341f"></div>
-            <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c"></div>
-            <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
-            <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
-            <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
-            <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
+          <div class="swatch-wrap">
+            <div class="swatch-scroll" id="swatchScroll">
+              <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
+              <div class="swatch" data-color="#b5341f" style="background:#b5341f"></div>
+              <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c"></div>
+              <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
+              <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
+              <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
+              <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
+            </div>
+            <div class="swatch-more left" id="swatchMoreL" aria-hidden="true">◀</div>
+            <div class="swatch-more right" id="swatchMore" aria-hidden="true">▶</div>
           </div>
-          <div class="swatch-more" id="swatchMore" aria-hidden="true">▶</div>
         </div>
         <div class="row">
           <span class="tool-label">太さ</span>
@@ -871,19 +875,20 @@ let undoStack = [];
 
 let canvasScale = 1;   // 表示倍率（1 or 1.5）。内部解像度はこれに依らず一定に保つ
 let landscape = false; // 半紙の向き（false=縦2:3 / true=横3:2）
-function setupCanvas(){
+function setupCanvas(clear){
   const rect = pad.getBoundingClientRect();
   if(rect.width < 1){                              // まだ幅0（レイアウト前 or 半紙を畳み中）＝ここでサイズを取ると内部0×0になり描けなくなる
-    if(!floatDesk.classList.contains("collapsed")) requestAnimationFrame(setupCanvas);  // 開いてるのに0＝レイアウト待ち。幅が出たら設定し直す（畳み中は何もしない）
+    if(!floatDesk.classList.contains("collapsed")) requestAnimationFrame(()=>setupCanvas(clear));  // 開いてるのに0＝レイアウト待ち。幅が出たら設定し直す（畳み中は何もしない）
     return;                                        // 既存の半紙を壊さずそのまま温存
   }
   const baseW = rect.width / canvasScale;          // 表示が1.5倍でも内部は等倍基準
   const ratio = landscape ? (2/3) : 1.5;           // 縦:高さ=幅*1.5 / 横:高さ=幅*2/3
   const w = Math.round(baseW * DPR);
   const h = Math.round(baseW * ratio * DPR);
-  // preserve current drawing on resize
+  // clear=true（向き切替）なら中身は引き継がない。それ以外（リサイズ等）は今の絵を保つ
   let prev = null;
-  if (pad.width) { prev = document.createElement("canvas"); prev.width = pad.width; prev.height = pad.height; prev.getContext("2d").drawImage(pad,0,0); }
+  if (!clear && pad.width) { prev = document.createElement("canvas"); prev.width = pad.width; prev.height = pad.height; prev.getContext("2d").drawImage(pad,0,0); }
+  if (clear) LS.del("fg_draft");                   // 切替で消すので下書きも破棄
   pad.width = w; pad.height = h;
   ctx.fillStyle = PAPER; ctx.fillRect(0,0,w,h);
   if (prev) ctx.drawImage(prev,0,0,w,h);
@@ -900,8 +905,17 @@ function pos(e){
 function pushUndo(){
   try{ undoStack.push(ctx.getImageData(0,0,pad.width,pad.height)); if(undoStack.length>12) undoStack.shift(); }catch(e){}
 }
+// 念のため：描き始める瞬間に半紙の内部解像度が表示サイズと合っているか確認し、ズレてたら設定し直す
+// （初期化のタイミングによっては setupCanvas が表示前に走って 0×0 等になり「描けない」ことがあるため、ここで確実に直す）
+function ensureCanvas(){
+  const r = pad.getBoundingClientRect();
+  if(r.width < 1) return;
+  const expectW = Math.round((r.width / canvasScale) * DPR);
+  if(!pad.width || Math.abs(pad.width - expectW) > 2) setupCanvas();
+}
 function start(e){
   e.preventDefault();
+  ensureCanvas();                                                                 // 描く直前に半紙サイズを保証
   if(fillMode){ pushUndo(); const fp = pos(e); floodFill(fp.x, fp.y); return; } // バケツ：タップ位置を塗る
   pushUndo();
   drawing = true; last = pos(e); lastMid = last; lastTime = performance.now(); lastDir = null; penOff = false; strokeLen = 0;
@@ -1091,17 +1105,21 @@ document.getElementById("colors").addEventListener("click",e=>{
   const c = sw.dataset.color;
   if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
 });
-/* 色パレットが入りきらない時、右端に▶（続きあり）を出し、タップで横スクロール */
+/* 色パレットが入りきらない時、左右に◀▶を出してスクロール（両方向） */
 const swatchScrollEl = document.getElementById("swatchScroll");
-const swatchMoreEl = document.getElementById("swatchMore");
+const swatchMoreEl  = document.getElementById("swatchMore");    // 右 ▶
+const swatchMoreLEl = document.getElementById("swatchMoreL");   // 左 ◀
 function updateSwatchMore(){
-  if(!swatchScrollEl || !swatchMoreEl) return;
-  const more = (swatchScrollEl.scrollWidth - swatchScrollEl.scrollLeft - swatchScrollEl.clientWidth) > 4;
-  swatchMoreEl.classList.toggle("show", more);   // 末尾まで来たら隠す＝右端の色が完全に押せる
+  if(!swatchScrollEl) return;
+  const moreR = (swatchScrollEl.scrollWidth - swatchScrollEl.scrollLeft - swatchScrollEl.clientWidth) > 4;
+  const moreL = swatchScrollEl.scrollLeft > 4;
+  if(swatchMoreEl)  swatchMoreEl.classList.toggle("show", moreR);   // 右に続きがある
+  if(swatchMoreLEl) swatchMoreLEl.classList.toggle("show", moreL);  // 左に戻れる
 }
 if(swatchScrollEl){
   swatchScrollEl.addEventListener("scroll", updateSwatchMore, {passive:true});
-  swatchMoreEl.addEventListener("click", ()=> swatchScrollEl.scrollBy({left: swatchScrollEl.clientWidth*0.6, behavior:"smooth"}));
+  if(swatchMoreEl)  swatchMoreEl.addEventListener("click",  ()=> swatchScrollEl.scrollBy({left:  swatchScrollEl.clientWidth*0.6, behavior:"smooth"}));
+  if(swatchMoreLEl) swatchMoreLEl.addEventListener("click", ()=> swatchScrollEl.scrollBy({left: -swatchScrollEl.clientWidth*0.6, behavior:"smooth"}));
 }
 window.addEventListener("resize", updateSwatchMore);
 /* パレット：墨(左端固定)＋中間色(最大5)＋消しゴム(右端固定)。中間色は meta/palette で全員共有 */
@@ -2645,7 +2663,7 @@ if(stageEl) stageEl.classList.toggle("desk-open", !floatDesk.classList.contains(
 
 /* ---------- 半紙の向き（試験的）：PCはボタン、タッチ端末は画面の向きで自動 ---------- */
 const deskOrientBtn = document.getElementById("deskOrient");
-function setLandscape(on, persist){
+function setLandscape(on, persist, clear){
   landscape = !!on;
   floatDesk.classList.toggle("land", landscape);
   if(deskOrientBtn){
@@ -2653,7 +2671,7 @@ function setLandscape(on, persist){
     deskOrientBtn.textContent = landscape ? "縦" : "横";
     deskOrientBtn.title = landscape ? "半紙を縦向きに" : "半紙を横向きに";
   }
-  requestAnimationFrame(()=>{ setupCanvas(); reclampDesk(); });   // 絵を保ったまま向きに合わせ内部解像度を取り直す
+  requestAnimationFrame(()=>{ setupCanvas(clear); reclampDesk(); });   // 向きに合わせ内部解像度を取り直す（clear=trueなら中身は消す）
   if(persist) LS.set("fg_orient", landscape ? "land" : "portrait");
 }
 const isTouchDev = window.matchMedia && matchMedia("(pointer: coarse)").matches;
@@ -2663,7 +2681,24 @@ if(isTouchDev){
 } else {
   setLandscape(LS.get("fg_orient")==="land", false);          // PCは前回の選択を復元
 }
-if(deskOrientBtn) deskOrientBtn.addEventListener("click", e=>{ e.stopPropagation(); setLandscape(!landscape, true); });
+// 半紙に色が乗っているか（PAPER以外の画素があるか）をざっくり判定。間引きスキャンで軽量
+function canvasHasInk(){
+  try{
+    const w=pad.width, h=pad.height; if(!w||!h) return false;
+    const rgb = hexToRgb(PAPER); if(!rgb) return false;
+    const d = ctx.getImageData(0,0,w,h).data;
+    for(let i=0;i<d.length;i+=4*8){   // 8画素ごとに確認（クリック時のみなので十分速い）
+      if(Math.abs(d[i]-rgb.r)>6 || Math.abs(d[i+1]-rgb.g)>6 || Math.abs(d[i+2]-rgb.b)>6) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+if(deskOrientBtn) deskOrientBtn.addEventListener("click", e=>{
+  e.stopPropagation();
+  // 普通は最初に向きを決めるので、描いた後の切替はまれ。何か描いてある時だけ「消えるよ」と確認
+  if(canvasHasInk() && !confirm("半紙の向きを変えると、いま描いたものは消えます。よろしいですか？")) return;
+  setLandscape(!landscape, true, true);   // 第3引数=clear：切替時は中身を引き継がない
+});
 
 
 // ---- 半紙パネルをドラッグで好きな位置へ（バーの＋/−以外を掴む） ----
@@ -2771,6 +2806,7 @@ function runGuide(){
 /* ---------- init ---------- */
 setupCanvas();
 restoreDraft();   // 前回の描きかけがあれば復帰
+window.addEventListener("load", ()=> requestAnimationFrame(()=>setupCanvas()));   // レイアウト確定後にもう一度（初期化が表示前に走った場合の保険）
 // デフォルトの太さ／筆：前回の設定があれば引き継ぐ。無ければランダム（太さは0〜15%）
 (function(){
   const sl = document.getElementById("size");
