@@ -96,7 +96,9 @@
   .desk-bar{
     display:flex;align-items:center;justify-content:flex-start;gap:8px;
     padding:10px 12px 8px;flex:0 0 auto;
+    cursor:move;touch-action:none;user-select:none;-webkit-user-select:none;
   }
+  .desk-bar.dragging{cursor:grabbing}
   .desk-bar-title{
     font-family:"Shippori Mincho",serif;font-weight:700;font-size:14px;
     letter-spacing:.1em;color:var(--ink-faint);
@@ -2490,9 +2492,52 @@ function setDeskCollapsed(c){
   floatDesk.classList.toggle("collapsed", c);
   deskToggleBtn.textContent = c ? "＋" : "−";
   deskBarTitle.textContent = c ? "半紙を広げる" : "半紙";
-  requestAnimationFrame(updateDeskMore);
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); });
 }
-deskBar.addEventListener("click", ()=> setDeskCollapsed(!floatDesk.classList.contains("collapsed")));
+deskToggleBtn.addEventListener("click", e=>{ e.stopPropagation(); setDeskCollapsed(!floatDesk.classList.contains("collapsed")); });
+
+// ---- 半紙パネルをドラッグで好きな位置へ（バーの＋/−以外を掴む） ----
+let deskDragging=false, deskMoved=false, deskOffX=0, deskOffY=0;
+function clampDeskPos(left, top){
+  const w = floatDesk.offsetWidth, barH = deskBar.offsetHeight || 40;
+  const maxLeft = Math.max(6, window.innerWidth  - w   - 6);
+  const maxTop  = Math.max(6, window.innerHeight - barH - 6);   // バーは必ず画面内に残す
+  return { left: clamp(left, 6, maxLeft), top: clamp(top, 6, maxTop) };
+}
+function setDeskPos(left, top, save){
+  const p = clampDeskPos(left, top);
+  floatDesk.style.left = p.left + "px";
+  floatDesk.style.top  = p.top  + "px";
+  floatDesk.style.right = "auto"; floatDesk.style.bottom = "auto";
+  if(save) LS.set("fg_deskpos", JSON.stringify(p));
+}
+function reclampDesk(){ if(floatDesk.style.left){ const r = floatDesk.getBoundingClientRect(); setDeskPos(r.left, r.top, false); } }
+deskBar.addEventListener("pointerdown", e=>{
+  if(e.target.closest("#deskToggle")) return;   // ＋/−ボタンの上では掴まない（開閉専用）
+  deskDragging = true; deskMoved = false;
+  const r = floatDesk.getBoundingClientRect();
+  deskOffX = e.clientX - r.left; deskOffY = e.clientY - r.top;
+  deskBar.classList.add("dragging");
+  try{ deskBar.setPointerCapture(e.pointerId); }catch(_){}
+});
+deskBar.addEventListener("pointermove", e=>{
+  if(!deskDragging) return;
+  deskMoved = true;
+  setDeskPos(e.clientX - deskOffX, e.clientY - deskOffY, false);
+  e.preventDefault();
+});
+function endDeskDrag(e){
+  if(!deskDragging) return;
+  deskDragging = false;
+  deskBar.classList.remove("dragging");
+  try{ deskBar.releasePointerCapture(e.pointerId); }catch(_){}
+  if(deskMoved){ const r = floatDesk.getBoundingClientRect(); setDeskPos(r.left, r.top, true); }   // 確定位置を保存
+}
+deskBar.addEventListener("pointerup", endDeskDrag);
+deskBar.addEventListener("pointercancel", endDeskDrag);
+// 起動時に保存位置を復元（クランプ）。リサイズで画面外に出ないよう再クランプ
+(function(){ try{ const s = LS.get("fg_deskpos"); if(s){ const p = JSON.parse(s); setDeskPos(p.left, p.top, false); } }catch(_){} })();
+window.addEventListener("resize", ()=>{ reclampDesk(); });
 
 /* もっと下に道具がある時だけ ▼ を出す（モバイル・スクロール可能・最下部でない） */
 const deskBodyEl = document.getElementById("deskBody");
@@ -2520,7 +2565,7 @@ function setBig(on){
   floatDesk.classList.toggle("big", on);
   bigBtn.classList.toggle("active", on);
   LS.set("fg_big", on ? "1" : "0");
-  requestAnimationFrame(updateDeskMore);   // 高さが変わるのでスクロール合図を更新
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); });   // 高さ・幅が変わるので合図更新＆はみ出し補正
 }
 bigBtn.addEventListener("click", ()=> setBig(!floatDesk.classList.contains("big")));
 if(LS.get("fg_big")==="1") setBig(true);    // 前回の設定を引き継ぐ
