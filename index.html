@@ -126,6 +126,7 @@
   .float-desk.collapsed .desk-bar{padding-bottom:10px}
   .float-desk.big{width:495px}
   .float-desk.land{width:min(520px, calc(100vw - 24px))}                                  /* 大きく描く：表示のみ1.5倍 */
+  .float-desk.land.big{width:min(760px, calc(100vw - 24px))}                              /* 横向きで「拡」：横の幅をさらに広げて大きく描く */
   @media(max-width:560px){
     .float-desk.big{width:min(450px, calc(100vw - 24px))}
   }
@@ -1843,7 +1844,8 @@ async function createPost(nx, ny){
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
   const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
   const img = pendingImg;
-  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, land: landscape };  // 画像は含めない・作成者UID付き・向き
+  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid };  // 画像は含めない・作成者UID付き
+  if(landscape) meta.land = true;   // 横向きの時だけ向き情報を付与（縦は項目を増やさない＝既存ルールのまま通る）
   postBtn.disabled = true;
   let reserved = false;
   try{
@@ -2336,6 +2338,7 @@ function zoomTo(z, anchorClientX, anchorClientY){
 function pinchZoom(z, anchorClientX, anchorClientY){
   z = clamp(Math.round(z*1000)/1000, zoomMin, ZOOM_MAX);
   if(z === zoom) return;
+  const prev = zoom;
   const r = scrollEl.getBoundingClientRect();
   const ax = anchorClientX - r.left, ay = anchorClientY - r.top;
   const natX = (scrollEl.scrollLeft + ax) / zoom;
@@ -2344,6 +2347,7 @@ function pinchZoom(z, anchorClientX, anchorClientY){
   applyZoom();
   scrollEl.scrollLeft = clamp(natX*zoom - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
   scrollEl.scrollTop  = clamp(natY*zoom - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  notifyZoomedOut(prev);   // モバイルのピンチでも広角案内を出す
 }
 let lastZoomOutNote = 0;
 function notifyZoomedOut(prev){
@@ -2585,11 +2589,13 @@ function centerOnNote(id, p, targetZoom){
 }
 function gotoNote(step){
   stopNavHint();   // 見る動線を選択（点滅を止める）
+  const meguriCollapse = ()=>{ if(!floatDesk.classList.contains("collapsed")) setDeskCollapsed(true); };  // めぐり開始＝半紙は畳んで見やすく
   const q = freshList();
   if(q.length){                                   // 白い半紙があれば、それを順に巡って消化
     const id = (step >= 0) ? q[0] : q[q.length-1];
     const p = posts.get(id);
     markFreshViewed(id);                          // 見たら白を解除
+    meguriCollapse();
     centerOnNote(id, p);
     return;
   }
@@ -2597,6 +2603,7 @@ function gotoNote(step){
   if(!list.length){ toast("まだ半紙がないよ"); return; }
   meguriIdx = ((meguriIdx + step) % list.length + list.length) % list.length;
   const [id,p] = list[meguriIdx];
+  meguriCollapse();
   centerOnNote(id, p);
 }
 document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
