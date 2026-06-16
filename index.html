@@ -411,7 +411,7 @@
     text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     font-family:"Shippori Mincho",serif;margin:4px 2px 4px;
   }
-  .note .acts{display:flex;align-items:center;gap:3px;margin-top:auto}
+  .note .acts{display:flex;align-items:center;gap:3px;margin-top:auto;flex-wrap:wrap}
   .sou-btn{
     flex:1;display:flex;align-items:center;justify-content:center;gap:2px;
     background:#efe3c4;color:var(--ink-faint);
@@ -436,6 +436,8 @@
     box-shadow:inset 0 0 0 1px rgba(47,125,59,.38);
   }
   .repo-btn:hover{background:rgba(47,125,59,.18)}
+  .repo-btn.undo-send{background:rgba(140,110,60,.10);color:#8a6e3c;box-shadow:inset 0 0 0 1px rgba(140,110,60,.42)}
+  .repo-btn.undo-send:hover{background:rgba(140,110,60,.2)}
   .note .acts .repo-btn{opacity:1}   /* 位置直しは自分の最新半紙だけ。常にはっきり表示 */
   /* 選択中（最前面）の半紙だけボタンが効く。非選択はボタンを淡色＝押せない見た目に */
   .note .acts button{opacity:.45;transition:opacity .15s}
@@ -1522,6 +1524,8 @@ function render(){
     const delBtn = isMyGrace ? '' : `<button class="${delCls}" onclick="vote('del','${p.id}')">del</button>`;
     const repoBtn = (isMyGrace && !repositioningId)
       ? `<button class="repo-btn" onclick="startReposition(event,'${p.id}')">位置を直す</button>` : '';
+    const undoBtn = (isMyGrace && !repositioningId)
+      ? `<button class="repo-btn undo-send" onclick="undoGracePost()" title="送信前（描いた状態）に戻す">戻る</button>` : '';
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
@@ -1543,6 +1547,7 @@ function render(){
         ${souBtn}
         ${delBtn}
         ${repoBtn}
+        ${undoBtn}
       </div>
       ${adminLine}
     </div>`;
@@ -1733,6 +1738,34 @@ function cancelPlacing(){
   render();
 }
 window.cancelPlacing = cancelPlacing;
+
+// 貼った直後（grace）だけ：送信を取り消して「描いた状態」に戻す
+async function undoGracePost(){
+  const id = graceNoteId;
+  if(!id || !db) return;
+  const p = posts.get(id);
+  if(!p || p.uid !== myUid){ graceNoteId = null; render(); return; }   // 自分の貼りたて以外は対象外
+  try{
+    await remove(ref(db, bpath("posts/"+id)));                          // 投稿を削除（本人なので権限あり）
+  }catch(e){ console.error(e); toast("戻せませんでした"); return; }
+  remove(ref(db, bpath("imgs/"+id))).catch(()=>{});                     // base64退避があれば削除
+  runTransaction(ref(db, bpath("count")), c => Math.max(0,(c||0)-1)).catch(()=>{});  // 枚数枠を返す
+  if(p.imgPath && supa){ try{ supa.storage.from(SUPA_BUCKET).remove([p.imgPath]).catch(()=>{}); }catch(_){}}  // Supabase画像も掃除（best-effort）
+  remove(ref(db, "throttle/"+myUid)).catch(()=>{});                     // クールダウンを返す（すぐ貼り直せる）
+  lastPostAt = 0; LS.del("fg_lastPost");
+  posts.delete(id); imgCache.delete(id); imgState.delete(id); idbDel(id);
+  graceNoteId = null; editingId = null;
+  // 描いた絵をキャンバスに戻して半紙を開く＝送信前の状態へ
+  if(lastDrawing){
+    const im = new Image();
+    im.onload = ()=>{ ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle=PAPER; ctx.fillRect(0,0,pad.width,pad.height); ctx.drawImage(im,0,0,pad.width,pad.height); undoStack=[]; scheduleDraftSave(); };
+    im.src = lastDrawing;
+  }
+  setDeskCollapsed(false);   // 半紙を開く
+  render();
+  toast("送信前に戻したよ");
+}
+window.undoGracePost = undoGracePost;
 
 // ---- 貼った直後の位置直し（猶予中は自分の最新半紙を動かせる。次に貼るまで有効） ----
 let committing = false;   // 書き込み中フラグ（同期的に立てて二重確定＝二重投稿を防ぐ）
