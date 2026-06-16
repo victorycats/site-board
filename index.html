@@ -111,11 +111,20 @@
     display:flex;align-items:center;justify-content:center;padding:0;
   }
   .desk-toggle:hover{filter:brightness(1.04)}
+  .desk-orient{
+    margin-left:auto;height:26px;min-width:30px;padding:0 9px;border-radius:7px;border:none;cursor:pointer;
+    background:#d8c8a2;color:var(--ink-faint);font-size:13px;font-weight:700;line-height:1;
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  }
+  .desk-orient:hover{filter:brightness(1.04)}
+  .desk-orient.active{background:var(--shu);color:#fff}
+  body.touch .desk-orient{display:none}   /* タッチ端末は画面の向きで自動。手動ボタンは出さない */
   .desk-body{padding:0 16px 0;overflow-x:hidden;overflow-y:auto;min-height:0;flex:1 1 auto;-webkit-overflow-scrolling:touch}
   .float-desk.collapsed .desk-body{display:none}
   .float-desk.collapsed{width:auto;max-width:none}
   .float-desk.collapsed .desk-bar{padding-bottom:10px}
-  .float-desk.big{width:495px}                                  /* 大きく描く：表示のみ1.5倍 */
+  .float-desk.big{width:495px}
+  .float-desk.land{width:min(520px, calc(100vw - 24px))}                                  /* 大きく描く：表示のみ1.5倍 */
   @media(max-width:560px){
     .float-desk.big{width:min(450px, calc(100vw - 24px))}
   }
@@ -138,6 +147,7 @@
     border:1px dashed rgba(140,110,60,.35);
     border-radius:3px;pointer-events:none;
   }
+  .float-desk.land #pad{aspect-ratio:3/2}
   #pad{
     display:block;width:100%;
     aspect-ratio:2/3;
@@ -149,11 +159,9 @@
   .tools{margin-top:10px;padding:6px 6px 0}
   /* 貼るボタンはスクロール外に常時固定（iOSでスクロールバーが出なくても見える） */
   .desk-foot{
-    position:sticky;bottom:0;z-index:2;
-    margin:8px -16px 0;padding:10px 16px 14px;
+    margin:10px -16px 0;padding:10px 16px 14px;
     background:#e7d9bb;
     border-top:1px solid rgba(140,110,60,.30);
-    box-shadow:0 -10px 12px -10px rgba(60,40,10,.20);
   }
   .desk-foot .name-field{margin-bottom:8px}
   /* もっと下に道具がある合図（モバイルでスクロール可能かつ最下部でない時だけ） */
@@ -227,6 +235,9 @@
   }
   .btn-ghost:hover{filter:brightness(1.04)}
   .btn-ghost.active{background:var(--shu);color:var(--paper);box-shadow:inset 0 0 0 1px var(--shu)}
+  /* カラーパレットより上のアクション群：高さ控えめ・等幅5ボタン */
+  .btns-act{gap:6px;margin-bottom:12px}
+  .btns-act .btn-ghost{flex:1 1 0;padding:7px 4px;font-size:13px;border-radius:7px}
   .btn-post{
     flex:1;
     background:var(--shu);color:var(--paper);
@@ -246,40 +257,6 @@
     width:27%;aspect-ratio:1;pointer-events:none;opacity:.92;
   }
   .seal-stamp img{width:100%;height:100%;display:block}
-  /* 道具の右タブ＋スライドアウト（半紙はそのまま、道具が上にニュッと出る） */
-  .tool-tabs{
-    position:fixed;z-index:48;transform:translateY(-50%);
-    display:none;flex-direction:column;gap:6px;
-  }
-  .float-desk.tabsmode .tool-tabs{display:flex}
-  .float-desk:not(.tabsmode) .tool-pop{display:none}   /* インライン時はpopを使わない */
-  /* バーの「道具の出し方」切替ボタン */
-  .desk-layout{
-    margin-left:auto;height:26px;min-width:28px;padding:0 9px;border-radius:7px;border:none;cursor:pointer;
-    background:#d8c8a2;color:var(--ink-faint);font-size:13px;font-weight:700;line-height:1;
-    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
-  }
-  .desk-layout:hover{filter:brightness(1.04)}
-  .tool-tab{
-    background:rgba(216,200,162,.97);color:var(--ink-faint);
-    border:none;border-radius:9px 0 0 9px;padding:9px 7px;
-    font-family:"Shippori Mincho",serif;font-size:12px;font-weight:700;line-height:1.15;
-    letter-spacing:.04em;cursor:pointer;white-space:nowrap;
-    box-shadow:-2px 2px 7px rgba(0,0,0,.22), inset 0 0 0 1px rgba(140,110,60,.3);
-  }
-  .tool-tab.active{background:var(--shu);color:#fff}
-  .tool-pop{
-    position:fixed;z-index:50;
-    transform:translateX(12px) scale(.98);transform-origin:left center;
-    opacity:0;pointer-events:none;
-    transition:transform .2s ease, opacity .16s ease;
-    width:min(260px,86vw);box-sizing:border-box;
-    background:linear-gradient(150deg,#efe6cf,#e5d7b4);
-    border-radius:12px;padding:12px 12px 4px;
-    box-shadow:0 12px 30px rgba(0,0,0,.42), inset 0 0 0 1px var(--paper-edge);
-  }
-  .tool-pop.open{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}
-  .tool-pop .row{margin-bottom:0}
   @media(max-width:560px){
     /* 半紙を開いている間は、めぐり・ミニマップ・板のズームを隠す（描画に集中） */
     .stage.desk-open .float-tools,
@@ -366,11 +343,15 @@
     display:flex;flex-direction:column;
     transform-origin:50% 50%;
     animation:drop .45s cubic-bezier(.2,.9,.3,1.2) both;
+    content-visibility:auto;contain-intrinsic-size:104px 196px;   /* 画面外は描画スキップ */
   }
+  .note.land{content-visibility:auto;contain-intrinsic-size:160px 150px}
   .note.no-anim{animation:none}
   .note.mine{outline:2px solid var(--gold);outline-offset:2px;z-index:20}
   .note.is-hidden{opacity:.55;outline:2px dashed var(--shu);outline-offset:2px}
   .note img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:2px;background:#fff}
+  .note.land{width:160px}
+  .note.land img{aspect-ratio:3/2}
   .note .imgwrap{position:relative}
   /* 読み込み前の空半紙（うっすら和紙色）。読めたらふわっと表示 */
   .note .note-img{
@@ -448,6 +429,8 @@
   }
   .ghost.show{display:block}
   .ghost img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:2px;background:var(--paper);padding:5px}
+  .ghost.land{width:160px}
+  .ghost.land img{aspect-ratio:3/2}
   /* 置けない位置（下の半紙が3割超隠れる）では半紙全体が赤っぽくなる */
   .ghost.blocked::after{content:"";position:absolute;inset:0;border-radius:3px;background:rgba(190,30,20,.5);pointer-events:none}
   .ghost.blocked{filter:drop-shadow(0 8px 10px rgba(0,0,0,.4)) drop-shadow(0 0 3px rgba(190,30,20,.9))}
@@ -541,6 +524,13 @@
     50%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 7px rgba(181,52,31,.38)}
   }
   .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:0 2px;white-space:nowrap}
+  .fresh-badge{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:9px;
+    background:#fff;color:#b5341f;font-size:10px;font-weight:800;line-height:1;vertical-align:middle;
+    box-shadow:0 0 6px rgba(255,255,255,.85);
+  }
+  .nav-cluster.has-fresh .meguri{box-shadow:0 0 0 2px rgba(255,255,255,.85),0 6px 16px rgba(0,0,0,.35)}
   .minimap{
     width:184px;background:linear-gradient(155deg,#f3ecdc,#e7ddc6);
     border:1px solid rgba(90,70,40,.4);border-radius:8px;overflow:hidden;
@@ -635,18 +625,22 @@
     <div class="desk-bar">
       <button class="desk-toggle" id="deskToggle" title="しまう／ひらく">−</button>
       <span class="desk-bar-title">半紙</span>
-      <button class="desk-layout" id="deskLayout" title="道具の出し方を切替">右</button>
+      <button class="desk-orient" id="deskOrient" title="半紙を横向きに">横</button>
     </div>
     <div class="desk-body" id="deskBody">
       <div class="canvas-frame">
         <canvas id="pad"></canvas>
         <div class="seal-stamp" aria-hidden="true"><img id="sealStampImg" alt=""></div>
-        <div class="tool-tabs">
-          <button class="tool-tab" data-pop="color" type="button">色 ›</button>
-          <button class="tool-tab" data-pop="size" type="button">太さ ›</button>
-          <button class="tool-tab" data-pop="brush" type="button">筆 ›</button>
+      </div>
+
+      <div class="tools">
+        <div class="btns btns-act">
+          <button class="btn-ghost" id="undo">戻</button>
+          <button class="btn-ghost" id="fillBtn">塗</button>
+          <button class="btn-ghost" id="clear">消</button>
+          <button class="btn-ghost" id="bigBtn" title="表示だけ1.5倍にして描きやすくする（画質・保存サイズは変わりません）">拡</button>
+          <button class="btn-ghost" id="photoBtn">写</button>
         </div>
-        <div class="tool-pop" data-pop="color">
         <div class="row" id="colors">
           <span class="tool-label">墨</span>
           <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
@@ -656,8 +650,6 @@
           <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
           <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
         </div>
-        </div>
-        <div class="tool-pop" data-pop="size">
         <div class="row">
           <span class="tool-label">太さ</span>
           <div class="size-wrap">
@@ -668,8 +660,6 @@
 
           </div>
         </div>
-        </div>
-        <div class="tool-pop" data-pop="brush">
         <div class="row">
           <span class="tool-label">筆</span>
           <div class="brush-seg" id="brushSeg">
@@ -677,19 +667,6 @@
             <button class="brush-opt" data-brush="round">丸筆</button>
             <button class="brush-opt" data-brush="flat">平筆</button>
           </div>
-        </div>
-
-        </div>
-      </div>
-
-      <div class="tools">
-        <div class="tools-inline" id="toolsInline"></div>
-        <div class="btns" style="margin-bottom:8px">
-          <button class="btn-ghost" id="undo">戻</button>
-          <button class="btn-ghost" id="fillBtn">塗</button>
-          <button class="btn-ghost" id="photoBtn">写真</button>
-          <button class="btn-ghost" id="clear">消</button>
-          <button class="btn-ghost" id="bigBtn" title="表示だけ1.5倍にして描きやすくする（画質・保存サイズは変わりません）">拡大</button>
         </div>
         <input type="file" id="photoInput" accept="image/*" style="display:none">
         <div class="hint">お習字撮影は自分のもの限定。要撮影登録</div>
@@ -711,7 +688,7 @@
   <div class="nav-cluster">
     <div class="meguri">
       <button id="prevNote" title="前の半紙へ" aria-label="前の半紙へ">◀</button>
-      <span class="lab">半紙めぐり</span>
+      <span class="lab">半紙めぐり<span id="freshBadge" class="fresh-badge" style="display:none">0</span></span>
       <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
     </div>
     <div class="minimap" id="minimap" title="タップで移動">
@@ -867,11 +844,13 @@ let fillMode = false; // 塗りつぶし（バケツ）モード
 let undoStack = [];
 
 let canvasScale = 1;   // 表示倍率（1 or 1.5）。内部解像度はこれに依らず一定に保つ
+let landscape = false; // 半紙の向き（false=縦2:3 / true=横3:2）
 function setupCanvas(){
   const rect = pad.getBoundingClientRect();
   const baseW = rect.width / canvasScale;          // 表示が1.5倍でも内部は等倍基準
+  const ratio = landscape ? (2/3) : 1.5;           // 縦:高さ=幅*1.5 / 横:高さ=幅*2/3
   const w = Math.round(baseW * DPR);
-  const h = Math.round(baseW * 1.5 * DPR);
+  const h = Math.round(baseW * ratio * DPR);
   // preserve current drawing on resize
   let prev = null;
   if (pad.width) { prev = document.createElement("canvas"); prev.width = pad.width; prev.height = pad.height; prev.getContext("2d").drawImage(pad,0,0); }
@@ -1081,7 +1060,6 @@ document.getElementById("colors").addEventListener("click",e=>{
   sw.classList.add("active");
   const c = sw.dataset.color;
   if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
-  closeToolPop();   // 色を選んだら閉じる
 });
 /* パレット：墨(左端固定)＋中間色(最大4)＋消しゴム(右端固定)。中間色は meta/palette で全員共有 */
 const PAL_BLACK = "#1a1714";
@@ -1124,7 +1102,6 @@ document.getElementById("brushSeg").addEventListener("click",e=>{
   brushType = b.dataset.brush;
   LS.set("fg_brush", brushType);   // 次回に引き継ぐ
   setFillMode(false);   // 筆を選んだら塗りつぶしは解除
-  closeToolPop();       // 筆を選んだら閉じる
 });
 
 /* 塗りつぶし（バケツ）モードの切り替え */
@@ -1196,14 +1173,16 @@ sealImg.src = SEAL_SRC;   // ふたば朱印（透過PNG）。起動時に先読
 function drawSeal(o, cx, cy, side){
   if(sealImg.complete && sealImg.naturalWidth){ o.drawImage(sealImg, cx, cy, side, side); }
 }
+function expoW(){ return landscape ? 330 : 220; }
+function expoH(){ return landscape ? 220 : 330; }
 function exportImage(){
   const out = document.createElement("canvas");
-  out.width = 220; out.height = 330;
+  const _W=expoW(), _H=expoH(); out.width=_W; out.height=_H;
   const o = out.getContext("2d");
-  o.fillStyle = PAPER; o.fillRect(0,0,220,330);
-  o.drawImage(pad,0,0,220,330);
+  o.fillStyle = PAPER; o.fillRect(0,0,_W,_H);
+  o.drawImage(pad,0,0,_W,_H);
   const side = 62, margin = 14;
-  drawSeal(o, 220-margin-side, 330-margin-side, side);
+  drawSeal(o, _W-margin-side, _H-margin-side, side);
   // WebP対応ブラウザはWebPで書き出し（JPEGより2〜3割小さい）。非対応(古いSafari等)は自動でJPEG
   let data = out.toDataURL("image/webp", 0.72);
   if(!data.startsWith("data:image/webp")) data = out.toDataURL("image/jpeg", 0.7);
@@ -1211,12 +1190,12 @@ function exportImage(){
 }
 function exportImageBlob(){   // アップロード用：同じ絵をBlobで（WebP優先・非対応はJPEG）
   const out = document.createElement("canvas");
-  out.width = 220; out.height = 330;
+  const _W=expoW(), _H=expoH(); out.width=_W; out.height=_H;
   const o = out.getContext("2d");
-  o.fillStyle = PAPER; o.fillRect(0,0,220,330);
-  o.drawImage(pad,0,0,220,330);
+  o.fillStyle = PAPER; o.fillRect(0,0,_W,_H);
+  o.drawImage(pad,0,0,_W,_H);
   const side = 62, margin = 14;
-  drawSeal(o, 220-margin-side, 330-margin-side, side);
+  drawSeal(o, _W-margin-side, _H-margin-side, side);
   return new Promise(res=>{
     out.toBlob(b=>{
       if(b && b.type==="image/webp") res({ blob:b, ext:"webp", type:"image/webp" });
@@ -1269,7 +1248,7 @@ let pendingImg = null;      // 貼る予定の画像
 let lastDrawing = null;     // 貼る直前のキャンバス（キャンセル時に描き戻す）
 let editingId = null;       // 角度微調整中の自分の投稿
 let graceNoteId = null;     // 貼った直後、位置を直せる自分の半紙（次に貼るまで有効）
-const flashNotes = new Map();   // 新規投稿の白点滅: id -> 消える時刻(ms)
+const freshNotes = new Map();   // 新規(白)の半紙: id -> 追加時刻ms（見るまで保持）
 const seenNoteIds = new Set();  // 既知の投稿（初期ロード分は点滅させない）
 let flashArmed = false;         // 初期ロード後だけ点滅を有効化
 let flashRaf = 0;
@@ -1392,6 +1371,12 @@ function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
 function setMsg(html){ msgEl.innerHTML = html || ""; }
 
+let _renderScheduled = false;
+function requestRender(){            // 連続呼び出しを次フレームに1回へ集約（初期ロードの O(N²) を解消）
+  if(_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(()=>{ _renderScheduled = false; render(); });
+}
 function render(){
   const list = [...posts.entries()].map(([id,p])=>({id,...p}));
   // 運営は全部表示。一般表示は「運営が非表示」または「delがしきい値以上」を隠す（恒久削除は運営のみ）
@@ -1445,7 +1430,7 @@ function render(){
       </div>` : '';
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     return `
-    <div class="note${mine}${rotoring}${fresh}${flippedCls} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
+    <div class="note${mine}${rotoring}${fresh}${flippedCls}${p.land?' land':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
@@ -1537,7 +1522,8 @@ function switchToBoard(id){
   posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
   zOverride.clear(); activeNoteId = null; editingId = null;
   graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
-  flashNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 点滅もリセット。初期ロード分は光らせない
+  freshNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 白もリセット。初期ロード分は光らせない
+  updateFreshUI();
   setTimeout(()=>{ flashArmed = true; }, 1800);                  // 既存分の流し込みが落ち着いてから有効化
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
   setActiveCount();
@@ -1555,16 +1541,16 @@ function switchToBoard(id){
     boardSubs.push(onChildAdded(postsRef, snap=>{
       const id3 = snap.key;
       posts.set(id3, snap.val()||{});
-      if(flashArmed && !seenNoteIds.has(id3)) flashNote(id3);   // 新規投稿をマップで白点滅
+      if(flashArmed && !seenNoteIds.has(id3) && (posts.get(id3)||{}).uid !== myUid) flashNote(id3);   // 他人の新規投稿を白に（自分のは除く）
       seenNoteIds.add(id3);
-      render();
+      requestRender();
       if(!didInitialFocus){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 500); }
     }));
-    boardSubs.push(onChildChanged(postsRef, snap=>{ posts.set(snap.key, snap.val()||{}); render(); }));
+    boardSubs.push(onChildChanged(postsRef, snap=>{ posts.set(snap.key, snap.val()||{}); requestRender(); }));
     boardSubs.push(onChildRemoved(postsRef, snap=>{
       const id2 = snap.key;
       posts.delete(id2); imgCache.delete(id2); imgState.delete(id2); idbDel(id2);
-      render();
+      requestRender();
     }));
     // 枚数（満杯判定・残数表示・通知のトリガ）
     boardSubs.push(onValue(ref(db, bpath("count")), s=>{
@@ -1615,6 +1601,7 @@ function enterPlacing(){
   placing = true;
   placeDragging = false;
   ghostImg.src = pendingImg;
+  ghostEl.classList.toggle("land", landscape);   // ゴーストも向きに合わせる
   ghostEl.classList.add("show");
   ghostEl.classList.remove("blocked");
   wallEl.classList.add("placing");
@@ -1794,7 +1781,7 @@ async function createPost(nx, ny){
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
   const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
   const img = pendingImg;
-  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid };  // 画像は含めない・作成者UID付き
+  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, land: landscape };  // 画像は含めない・作成者UID付き・向き
   postBtn.disabled = true;
   let reserved = false;
   try{
@@ -2415,15 +2402,28 @@ function randomStartScroll(){
 /* ---------- minimap ---------- */
 const miniCanvas = document.getElementById("miniCanvas");
 function flashNote(id){
-  flashNotes.set(id, Date.now() + 6000);   // 6秒間 白点滅
+  freshNotes.set(id, Date.now());   // 追加。見るまで白を保持（最初の約6秒だけ点滅）
   if(!flashRaf) flashRaf = requestAnimationFrame(flashTick);
+  updateFreshUI();
 }
 function flashTick(){
   flashRaf = 0;
-  const now = Date.now();
-  for(const [id,exp] of flashNotes){ if(exp <= now) flashNotes.delete(id); }
   drawMinimap();
-  if(flashNotes.size) flashRaf = requestAnimationFrame(flashTick);
+  const now = Date.now();
+  let blinking = false;
+  for(const [,t] of freshNotes){ if(now - t < 6000){ blinking = true; break; } }  // 点滅中だけループ継続
+  if(blinking) flashRaf = requestAnimationFrame(flashTick);
+}
+function freshList(){   // 白い半紙を追加順（古い→新しい）で。表示可能なものだけ
+  return [...freshNotes.keys()].filter(id=> posts.has(id) && (admin || !posts.get(id).hidden));
+}
+function markFreshViewed(id){ if(freshNotes.delete(id)){ updateFreshUI(); drawMinimap(); } }
+function updateFreshUI(){
+  const n = freshList().length;
+  const cluster = document.querySelector(".nav-cluster");
+  if(cluster) cluster.classList.toggle("has-fresh", n>0);
+  const badge = document.getElementById("freshBadge");
+  if(badge){ badge.textContent = n>99 ? "99+" : String(n); badge.style.display = n>0 ? "" : "none"; }
 }
 function drawMinimap(){
   if(!miniCanvas) return;
@@ -2435,19 +2435,23 @@ function drawMinimap(){
   g.clearRect(0,0,mmW,mmH);
   const sx = mmW/WALL_W, sy = mmH/WALL_H;
   const now = Date.now();
-  const blinkOn = Math.floor(now/260)%2===0;   // 約2回/秒の点滅
   for(const [id,p] of posts){
     if(p.hidden && !admin) continue;
     const x = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W)*sx;
     const y = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H)*sy;
-    const w = Math.max(2, NOTE_W*sx), h = Math.max(2, NOTE_H*sy*0.85);
-    const fexp = flashNotes.get(id);
-    if(fexp && fexp > now && blinkOn){
-      g.save();
-      g.fillStyle = "#ffffff"; g.shadowColor = "rgba(255,255,255,.95)"; g.shadowBlur = 6;
-      g.fillRect(x-1, y-1, w+2, h+2);   // 新規投稿：白く光る
-      g.restore();
-      continue;
+    const lw = p.land ? NOTE_H*0.82 : NOTE_W;   // 横長は幅広・縦短
+    const lh = p.land ? NOTE_W : NOTE_H*0.85;
+    const w = Math.max(2, lw*sx), h = Math.max(2, lh*sy);
+    const ft = freshNotes.get(id);
+    if(ft != null){
+      const blink = (now - ft < 6000) ? (Math.floor(now/260)%2===0) : true;  // 6秒は点滅、その後は白実体
+      if(blink){
+        g.save();
+        g.fillStyle = "#ffffff"; g.shadowColor = "rgba(255,255,255,.95)"; g.shadowBlur = 6;
+        g.fillRect(x-1, y-1, w+2, h+2);   // 新規（白）
+        g.restore();
+        continue;
+      }
     }
     g.fillStyle = p.hidden ? "rgba(181,52,31,.55)" : "#3a332b";
     g.fillRect(x, y, w, h);
@@ -2519,6 +2523,14 @@ function centerOnNote(id, p, targetZoom){
 }
 function gotoNote(step){
   stopNavHint();   // 見る動線を選択（点滅を止める）
+  const q = freshList();
+  if(q.length){                                   // 白い半紙があれば、それを順に巡って消化
+    const id = (step >= 0) ? q[0] : q[q.length-1];
+    const p = posts.get(id);
+    markFreshViewed(id);                          // 見たら白を解除
+    centerOnNote(id, p);
+    return;
+  }
   const list = visibleByRecency();
   if(!list.length){ toast("まだ半紙がないよ"); return; }
   meguriIdx = ((meguriIdx + step) % list.length + list.length) % list.length;
@@ -2578,86 +2590,40 @@ const isMobileView = ()=> window.innerWidth <= 560;
 function setDeskCollapsed(c){
   floatDesk.classList.toggle("collapsed", c);
   if(stageEl) stageEl.classList.toggle("desk-open", !c);   // 開いてる間はナビを隠す（モバイル・CSS側で判定）
-  if(c) closeToolPop();                                     // 畳んだら道具popも閉じる
   deskToggleBtn.textContent = c ? "＋" : "−";
   deskBarTitle.textContent = c ? "半紙を広げる" : "半紙";
-  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); syncFloatingTools(); });
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); });
 }
 deskToggleBtn.addEventListener("click", e=>{ e.stopPropagation(); setDeskCollapsed(!floatDesk.classList.contains("collapsed")); });
 
-// 右タブを押すと、その道具がパネルの外（半紙の右）にスライドして出る。1つだけ開く
-let openPop = null;
-const toolTabsEl = canvasFrame.querySelector(".tool-tabs");
-function positionTabs(){
-  if(!toolTabsEl) return;
-  if(!floatDesk.classList.contains("tabsmode") || floatDesk.classList.contains("collapsed")) return;
-  const cf = canvasFrame.getBoundingClientRect();
-  if(!cf.width) return;
-  toolTabsEl.style.left = (cf.right - 4) + "px";          // パネルの外側へ少し出す（半紙にはかからない）
-  toolTabsEl.style.top  = (cf.top + cf.height*0.42) + "px";
-}
-function positionPop(pop, tab){
-  const cf = canvasFrame.getBoundingClientRect();
-  const tabsR = toolTabsEl ? toolTabsEl.getBoundingClientRect().right : cf.right;
-  const tr = tab.getBoundingClientRect();
-  const gap = 6, margin = 6, maxW = 260;
-  const left = Math.max(tabsR, cf.right) + gap;                   // タブの右・半紙の右より左には絶対に出さない
-  const width = Math.max(96, Math.min(maxW, window.innerWidth - left - margin));  // 入らなければ左へ寄せず幅を縮める
-  pop.style.left = left + "px";
-  pop.style.width = width + "px";                                 // 幅をJSで確定（半紙に被らない範囲）
-  const popH = pop.offsetHeight || 120;                           // 幅確定後に高さを測る
-  let top = tr.top + tr.height/2 - popH/2;                        // タブの高さに合わせる
-  top = Math.max(6, Math.min(window.innerHeight - popH - 6, top));
-  pop.style.top = top + "px";
-}
-function repositionOpenPop(){
-  if(!openPop) return;
-  const tab = canvasFrame.querySelector('.tool-tab[data-pop="'+openPop+'"]');
-  const pop = canvasFrame.querySelector('.tool-pop[data-pop="'+openPop+'"]');
-  if(tab && pop) positionPop(pop, tab);
-}
-function syncFloatingTools(){ positionTabs(); repositionOpenPop(); }   // タブ＆popをパネルに追従
-function setToolPop(name){
-  canvasFrame.querySelectorAll(".tool-pop").forEach(p=>{
-    const on = p.dataset.pop===name;
-    if(on){ const tab = canvasFrame.querySelector('.tool-tab[data-pop="'+name+'"]'); if(tab) positionPop(p, tab); }
-    p.classList.toggle("open", on);
-  });
-  canvasFrame.querySelectorAll(".tool-tab").forEach(t=> t.classList.toggle("active", t.dataset.pop===name));
-  openPop = name;
-}
-function closeToolPop(){ try{ if(openPop) setToolPop(null); }catch(e){} }
-canvasFrame.querySelectorAll(".tool-tab").forEach(t=>{
-  t.addEventListener("click", e=>{
-    e.stopPropagation();
-    const name = t.dataset.pop;
-    setToolPop(openPop===name ? null : name);   // 同じタブで開閉トグル
-  });
-});
 // 初期状態（半紙オープン）をナビ表示に反映
 if(stageEl) stageEl.classList.toggle("desk-open", !floatDesk.classList.contains("collapsed"));
 
-// 道具の出し方：右タブ（pop）⇄ 下インライン を切替。要素を実際に移動するので操作はどちらでも効く
-const deskLayoutBtn = document.getElementById("deskLayout");
-const toolsInline = document.getElementById("toolsInline");
-const popColor = canvasFrame.querySelector('.tool-pop[data-pop="color"]');
-const popSize  = canvasFrame.querySelector('.tool-pop[data-pop="size"]');
-const popBrush = canvasFrame.querySelector('.tool-pop[data-pop="brush"]');
-const rowColor = document.getElementById("colors");
-const rowSize  = popSize.querySelector(".row");
-const rowBrush = popBrush.querySelector(".row");
-function setToolLayout(tabs){
-  if(tabs){ popColor.appendChild(rowColor); popSize.appendChild(rowSize); popBrush.appendChild(rowBrush); }
-  else    { toolsInline.append(rowColor, rowSize, rowBrush); }   // 下に縦並び（旧仕様）
-  floatDesk.classList.toggle("tabsmode", tabs);
-  deskLayoutBtn.textContent = tabs ? "下" : "右";                // 押すと反対側へ
-  deskLayoutBtn.title = tabs ? "道具を下に並べる" : "道具を半紙の右タブにする";
-  closeToolPop();
-  LS.set("fg_toollayout", tabs ? "tabs" : "inline");
-  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); syncFloatingTools(); });
+/* ---------- 半紙の向き（試験的）：PCはボタン、タッチ端末は画面の向きで自動 ---------- */
+const deskOrientBtn = document.getElementById("deskOrient");
+function setLandscape(on, persist){
+  landscape = !!on;
+  floatDesk.classList.toggle("land", landscape);
+  if(deskOrientBtn){
+    deskOrientBtn.classList.toggle("active", landscape);
+    deskOrientBtn.textContent = landscape ? "縦" : "横";
+    deskOrientBtn.title = landscape ? "半紙を縦向きに" : "半紙を横向きに";
+  }
+  requestAnimationFrame(()=>{ setupCanvas(); reclampDesk(); });   // 絵を保ったまま向きに合わせ内部解像度を取り直す
+  if(persist) LS.set("fg_orient", landscape ? "land" : "portrait");
 }
-deskLayoutBtn.addEventListener("click", e=>{ e.stopPropagation(); setToolLayout(!floatDesk.classList.contains("tabsmode")); });
-setToolLayout(LS.get("fg_toollayout")==="tabs");   // デフォルトは下（旧仕様）。前回の選択を引き継ぐ
+const isTouchDev = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+if(isTouchDev){
+  document.body.classList.add("touch");                       // 手動ボタンは隠す
+  const omq = matchMedia("(orientation: landscape)");
+  setLandscape(omq.matches, false);                           // 画面が横なら横向き
+  const onOri = e=> setLandscape(e.matches, false);
+  if(omq.addEventListener) omq.addEventListener("change", onOri); else omq.addListener(onOri);
+} else {
+  setLandscape(LS.get("fg_orient")==="land", false);          // PCは前回の選択を復元
+}
+if(deskOrientBtn) deskOrientBtn.addEventListener("click", e=>{ e.stopPropagation(); setLandscape(!landscape, true); });
+
 
 // ---- 半紙パネルをドラッグで好きな位置へ（バーの＋/−以外を掴む） ----
 let deskDragging=false, deskMoved=false, deskOffX=0, deskOffY=0;
@@ -2687,7 +2653,6 @@ deskBar.addEventListener("pointermove", e=>{
   if(!deskDragging) return;
   deskMoved = true;
   setDeskPos(e.clientX - deskOffX, e.clientY - deskOffY, false);
-  syncFloatingTools();   // タブ＆popをパネルに追従
   e.preventDefault();
 });
 function endDeskDrag(e){
@@ -2701,7 +2666,7 @@ deskBar.addEventListener("pointerup", endDeskDrag);
 deskBar.addEventListener("pointercancel", endDeskDrag);
 // 起動時に保存位置を復元（クランプ）。リサイズで画面外に出ないよう再クランプ
 (function(){ try{ const s = LS.get("fg_deskpos"); if(s){ const p = JSON.parse(s); setDeskPos(p.left, p.top, false); } }catch(_){} })();
-window.addEventListener("resize", ()=>{ reclampDesk(); syncFloatingTools(); });
+window.addEventListener("resize", ()=>{ reclampDesk(); });
 
 /* もっと下に道具がある時だけ ▼ を出す（モバイル・スクロール可能・最下部でない） */
 const deskBodyEl = document.getElementById("deskBody");
@@ -2729,7 +2694,7 @@ function setBig(on){
   floatDesk.classList.toggle("big", on);
   bigBtn.classList.toggle("active", on);
   LS.set("fg_big", on ? "1" : "0");
-  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); syncFloatingTools(); });   // 高さ・幅が変わるので合図更新＆はみ出し補正
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); });   // 高さ・幅が変わるので合図更新＆はみ出し補正
 }
 bigBtn.addEventListener("click", ()=> setBig(!floatDesk.classList.contains("big")));
 if(LS.get("fg_big")==="1") setBig(true);    // 前回の設定を引き継ぐ
