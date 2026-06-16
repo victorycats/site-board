@@ -2359,8 +2359,9 @@ function notifyZoomedOut(prev){
   }
 }
 document.getElementById("zoomRange").addEventListener("input", e=> zoomTo(+e.target.value));
-document.getElementById("zoomIn").addEventListener("click", ()=> zoomTo(zoom+0.1));
-document.getElementById("zoomOut").addEventListener("click", ()=> zoomTo(zoom-0.1));
+const zoomStep = ()=> isMobileView() ? 0.2 : 0.1;   // モバイルはピンチが重いので、ボタン1回で20%（PCは従来の10%）
+document.getElementById("zoomIn").addEventListener("click", ()=> zoomTo(zoom+zoomStep()));
+document.getElementById("zoomOut").addEventListener("click", ()=> zoomTo(zoom-zoomStep()));
 window.addEventListener("resize", ()=>{ computeZoomMin(); drawMinimap(); });
 
 // ホイールで拡大率調整（カーソル位置を中心に。全体が見えるところまで縮小可）
