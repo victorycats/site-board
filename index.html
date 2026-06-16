@@ -66,7 +66,15 @@
     background:rgba(26,23,20,.5);backdrop-filter:blur(3px);
     padding:10px 12px;border-radius:12px;
     box-shadow:0 4px 14px rgba(0,0,0,.35);
+    touch-action:none;
   }
+  .float-tools.dragging,.nav-cluster.dragging{opacity:.92}
+  .drag-grip{
+    align-self:flex-end;cursor:move;touch-action:none;user-select:none;
+    color:#e9dcc0;opacity:.65;font-size:12px;line-height:1;letter-spacing:2px;
+    padding:1px 7px;border-radius:6px;background:rgba(26,23,20,.4);
+  }
+  .drag-grip:hover{opacity:1}
   .float-tools .status{font-size:12px;color:#e9dcc0;display:flex;align-items:center;gap:8px}
   .remain{font-size:11px;font-weight:700}
   .remain.warn{color:#ffd27a}
@@ -529,6 +537,7 @@
   .nav-cluster{
     position:fixed;right:14px;bottom:14px;z-index:24;
     display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+    touch-action:none;
   }
   .meguri{
     display:flex;align-items:center;gap:6px;
@@ -633,6 +642,7 @@
   </header>
 
   <div class="float-tools">
+    <div class="drag-grip" title="ドラッグで移動">⠿</div>
     <div class="zoom-ctl">
       <div class="zbtn" id="zoomOut" title="縮小">－</div>
       <input type="range" id="zoomRange" min="0.5" max="2" step="0.1" value="0.5">
@@ -717,6 +727,7 @@
   <div class="guide" id="guide2"><span>半紙めぐり</span><span class="g-plus">見</span></div>
 
   <div class="nav-cluster">
+    <div class="drag-grip" title="ドラッグで移動">⠿</div>
     <div class="meguri">
       <button id="prevNote" title="前の半紙へ" aria-label="前の半紙へ">◀</button>
       <span class="lab">半紙めぐり<span id="freshBadge" class="fresh-badge" style="display:none">0</span></span>
@@ -2751,6 +2762,46 @@ deskBar.addEventListener("pointercancel", endDeskDrag);
 // 起動時に保存位置を復元（クランプ）。リサイズで画面外に出ないよう再クランプ
 (function(){ try{ const s = LS.get("fg_deskpos"); if(s){ const p = JSON.parse(s); setDeskPos(p.left, p.top, false); } }catch(_){} })();
 window.addEventListener("resize", ()=>{ reclampDesk(); });
+
+/* ---------- 汎用：浮遊ウィジェットをドラッグで移動（位置はLS保存・画面外に出ない） ---------- */
+function makeDraggable(el, lsKey, ignoreSel){
+  if(!el) return;
+  let dragging=false, moved=false, offX=0, offY=0;
+  function setPos(left, top, save){
+    const w=el.offsetWidth, h=el.offsetHeight;
+    const maxLeft=Math.max(6, window.innerWidth  - w - 6);
+    const maxTop =Math.max(6, window.innerHeight - h - 6);
+    const L=clamp(left,6,maxLeft), T=clamp(top,6,maxTop);
+    el.style.left=L+"px"; el.style.top=T+"px"; el.style.right="auto"; el.style.bottom="auto";
+    if(save) LS.set(lsKey, JSON.stringify({left:L, top:T}));
+  }
+  function reclamp(){ if(el.style.left){ const r=el.getBoundingClientRect(); setPos(r.left, r.top, false); } }
+  el.addEventListener("pointerdown", e=>{
+    if(ignoreSel && e.target.closest(ignoreSel)) return;   // 操作部品の上では掴まない
+    dragging=true; moved=false;
+    const r=el.getBoundingClientRect();
+    offX=e.clientX-r.left; offY=e.clientY-r.top;
+    el.classList.add("dragging");
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  el.addEventListener("pointermove", e=>{
+    if(!dragging) return;
+    moved=true; setPos(e.clientX-offX, e.clientY-offY, false); e.preventDefault();
+  });
+  function endDrag(e){
+    if(!dragging) return; dragging=false; el.classList.remove("dragging");
+    try{ el.releasePointerCapture(e.pointerId); }catch(_){}
+    if(moved){ const r=el.getBoundingClientRect(); setPos(r.left, r.top, true); }   // 確定位置を保存
+  }
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
+  try{ const s=LS.get(lsKey); if(s){ const p=JSON.parse(s); setPos(p.left, p.top, false); } }catch(_){}   // 前回位置を復元
+  window.addEventListener("resize", reclamp);
+}
+// ズームツール：ボタン(.zbtn)とスライダー(input)以外で掴んで移動
+makeDraggable(document.querySelector(".float-tools"), "fg_toolspos", ".zbtn, input");
+// マップ＋半紙めぐり：ボタンとミニマップ以外で掴んで、クラスタ一体で移動
+makeDraggable(document.querySelector(".nav-cluster"), "fg_navpos", "button, .minimap");
 
 /* もっと下に道具がある時だけ ▼ を出す（モバイル・スクロール可能・最下部でない） */
 const deskBodyEl = document.getElementById("deskBody");
