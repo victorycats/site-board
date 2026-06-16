@@ -186,11 +186,31 @@
   }
   .swatch.active{border-color:var(--sumi);box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--sumi)}
   .swatch.active::after{content:"";position:absolute;inset:0;border-radius:50%}
+  /* 色パレット：折り返さず横1列。入りきらない分は横スクロール、右端に矢印ヒント */
+  #colors{position:relative;flex-wrap:nowrap;gap:8px}
+  .swatch-scroll{
+    display:flex;align-items:center;gap:8px;
+    flex:1 1 auto;min-width:0;
+    overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;
+    padding:2px 2px;     /* activeリングが切れないよう少し余白 */
+  }
+  .swatch-scroll::-webkit-scrollbar{display:none}
+  .swatch-scroll .swatch{flex:0 0 auto}
+  .swatch-more{
+    position:absolute;right:-2px;top:50%;transform:translateY(-50%);
+    width:26px;height:34px;display:none;align-items:center;justify-content:center;
+    color:var(--ink-faint);font-size:13px;font-weight:700;cursor:pointer;
+    border-radius:0 10px 10px 0;
+    background:linear-gradient(to right, rgba(233,221,194,0), #e9ddc2 55%);  /* 右端フェードで「続きあり」を示す */
+  }
+  .swatch-more.show{display:flex}
   @media(max-width:560px){
-    /* モバイルで色パレットが1行に収まるよう一回り小さく */
+    /* モバイルで色パレットを一回り小さく（横スクロール前提でも見やすく） */
     #colors{gap:6px}
     #colors .tool-label{min-width:24px}
-    #colors .swatch{width:26px;height:26px;border-width:1px}
+    #colors .swatch{width:24px;height:24px;border-width:1px}
+    .swatch-scroll{gap:6px}
   }
   .tool-label{font-size:12px;color:var(--ink-faint);font-weight:500;min-width:40px}
   .brush-seg{display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid rgba(140,110,60,.35);flex:1}
@@ -645,13 +665,16 @@
         </div>
         <div class="row" id="colors">
           <span class="tool-label">墨</span>
-          <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
-          <div class="swatch" data-color="#b5341f" style="background:#b5341f"></div>
-          <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c"></div>
-          <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
-          <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
-          <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
-          <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
+          <div class="swatch-scroll" id="swatchScroll">
+            <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
+            <div class="swatch" data-color="#b5341f" style="background:#b5341f"></div>
+            <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c"></div>
+            <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
+            <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
+            <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
+            <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
+          </div>
+          <div class="swatch-more" id="swatchMore" aria-hidden="true">▶</div>
         </div>
         <div class="row">
           <span class="tool-label">太さ</span>
@@ -1068,17 +1091,30 @@ document.getElementById("colors").addEventListener("click",e=>{
   const c = sw.dataset.color;
   if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
 });
+/* 色パレットが入りきらない時、右端に▶（続きあり）を出し、タップで横スクロール */
+const swatchScrollEl = document.getElementById("swatchScroll");
+const swatchMoreEl = document.getElementById("swatchMore");
+function updateSwatchMore(){
+  if(!swatchScrollEl || !swatchMoreEl) return;
+  const more = (swatchScrollEl.scrollWidth - swatchScrollEl.scrollLeft - swatchScrollEl.clientWidth) > 4;
+  swatchMoreEl.classList.toggle("show", more);   // 末尾まで来たら隠す＝右端の色が完全に押せる
+}
+if(swatchScrollEl){
+  swatchScrollEl.addEventListener("scroll", updateSwatchMore, {passive:true});
+  swatchMoreEl.addEventListener("click", ()=> swatchScrollEl.scrollBy({left: swatchScrollEl.clientWidth*0.6, behavior:"smooth"}));
+}
+window.addEventListener("resize", updateSwatchMore);
 /* パレット：墨(左端固定)＋中間色(最大5)＋消しゴム(右端固定)。中間色は meta/palette で全員共有 */
 const PAL_BLACK = "#1a1714";
 const PAL_DEFAULT_MID = ["#b5341f","#1d5a8c","#2f7d3b","#e6b800","#f0e0d6"];
 let paletteMid = PAL_DEFAULT_MID.slice();
 function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
 function renderPalette(){
-  const wrap = document.getElementById("colors");
+  const wrap = document.getElementById("swatchScroll");
   if(!wrap) return;
   const cur = erasing ? "ERASER" : color;        // 今の選択を覚える
   const mids = (paletteMid||[]).filter(isHex6).slice(0,5);
-  let html = '<span class="tool-label">墨</span>';
+  let html = '';
   html += '<div class="swatch" data-color="'+PAL_BLACK+'" style="background:'+PAL_BLACK+'"></div>';
   mids.forEach(c=>{ html += '<div class="swatch" data-color="'+c+'" style="background:'+c+'"></div>'; });
   html += '<div class="swatch" data-color="ERASER" style="background:'+PAPER+'" title="消しゴム"></div>';
@@ -1086,6 +1122,7 @@ function renderPalette(){
   // 選択を復元（無くなっていたら墨）。描画状態も合わせる
   let sel = wrap.querySelector('.swatch[data-color="'+cur+'"]') || wrap.querySelector('.swatch[data-color="'+PAL_BLACK+'"]');
   if(sel){ sel.classList.add("active"); const c=sel.dataset.color; if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; } }
+  if(typeof updateSwatchMore==="function") updateSwatchMore();   // 色数が変わったら矢印の表示を更新
 }
 // 太さは全段クリッキーな12段。位置(0〜11)→筆の太さ。最細は2px、最太は描画幅の約40%
 const SIZE_STEPS = 12;
@@ -2599,7 +2636,7 @@ function setDeskCollapsed(c){
   if(stageEl) stageEl.classList.toggle("desk-open", !c);   // 開いてる間はナビを隠す（モバイル・CSS側で判定）
   deskToggleBtn.textContent = c ? "＋" : "−";
   deskBarTitle.textContent = c ? "半紙を広げる" : "半紙";
-  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); if(!c) setupCanvas(); });   // 開いた瞬間に半紙の内部解像度を取り直す（畳み中は幅0で取れないため）
+  requestAnimationFrame(()=>{ updateDeskMore(); reclampDesk(); if(!c){ setupCanvas(); updateSwatchMore(); } });   // 開いた瞬間に半紙の内部解像度を取り直す（畳み中は幅0で取れないため）＋色矢印も更新
 }
 deskToggleBtn.addEventListener("click", e=>{ e.stopPropagation(); setDeskCollapsed(!floatDesk.classList.contains("collapsed")); });
 
