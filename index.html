@@ -2347,6 +2347,41 @@ async function adminDelete(id){
 window.adminDelete = adminDelete;
 
 // 運営：現在のボードを1枚の大画像に合成して自動ダウンロード→新しい空ボードへ切替
+let _h2cPromise = null;
+function ensureHtml2Canvas(){
+  if(window.html2canvas) return Promise.resolve(window.html2canvas);
+  if(_h2cPromise) return _h2cPromise;
+  _h2cPromise = new Promise((res,rej)=>{
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    s.onload = ()=> res(window.html2canvas);
+    s.onerror = ()=>{ _h2cPromise=null; rej(new Error("html2canvas load failed")); };
+    document.head.appendChild(s);
+  });
+  return _h2cPromise;
+}
+// 「見たまま版」：背景・各半紙の枠/テープ/名前/ボタン・左下ロゴ込みで画像化（実CSSをそのまま描画）
+async function buildFullLookCanvas(){
+  const h2c = await ensureHtml2Canvas();
+  try{ await document.fonts.ready; }catch(_){}
+  const cap = document.createElement("div");
+  cap.style.cssText = `position:fixed;left:-99999px;top:0;width:${WALL_W}px;height:${WALL_H}px;overflow:hidden`;
+  const wallClone = wallEl.cloneNode(true);              // 背景＋半紙一式を複製
+  wallClone.removeAttribute("id");
+  wallClone.style.transform = "none";                   // ズーム解除＝等倍
+  wallClone.style.left = "0"; wallClone.style.top = "0";
+  cap.appendChild(wallClone);
+  const header = document.querySelector(".float-header"); // 左下ロゴ
+  if(header){
+    const logo = header.cloneNode(true);
+    logo.style.cssText += ";position:absolute;left:24px;bottom:24px;right:auto;top:auto;opacity:1";
+    cap.appendChild(logo);
+  }
+  document.body.appendChild(cap);
+  try{
+    return await h2c(cap, { useCORS:true, backgroundColor:null, width:WALL_W, height:WALL_H, scale:1, logging:false, imageTimeout:20000 });
+  } finally { cap.remove(); }
+}
 async function archiveAndAdvance(auto){
   if(!db || !admin){ if(!auto) toast("運営のみ"); return false; }
   if(!auto && !confirm("このボードを画像に保存し、新しい空のボードへ切り替えます。\n現在の半紙は新ボードには表示されなくなります。\nよろしいですか？")) return false;
@@ -2359,6 +2394,7 @@ async function archiveAndAdvance(auto){
       if(isImgData(imgCache.get(p.id)) || isSafePath(p.imgPath)) return;
       try{ const s = await get(ref(db, bpath("imgs/"+p.id))); const d = s && s.val(); if(isImgData(d)) imgCache.set(p.id, d); }catch(e){}
     }));
+    render();   // プリフェッチした画像をDOMに反映（見たまま版の複製で欠けないように）
     // 大きなキャンバスへ合成
     const cv = document.createElement("canvas"); cv.width = WALL_W; cv.height = WALL_H;
     const g = cv.getContext("2d");
@@ -2394,6 +2430,22 @@ async function archiveAndAdvance(auto){
       a.href = url; a.download = "oshuji-board-"+(boardId||1)+"-"+stamp+".jpg";
       document.body.appendChild(a); a.click(); a.remove();
     }
+    // 見たまま版（背景・ロゴ・半紙の枠/ボタン込み）も保存。失敗してもクリーン版と切替は続行
+    try{
+      const full = await buildFullLookCanvas();
+      if(full){
+        if(supa && !SUPA_ANON.startsWith("（")){
+          const fblob = await new Promise(res=> full.toBlob(res, "image/jpeg", 0.85));
+          if(fblob){ await supa.storage.from(SUPA_BUCKET).upload("archives/board-"+(boardId||1)+"-"+stamp+"-full.jpg", fblob, { contentType:"image/jpeg", upsert:false }); }
+        }
+        if(!auto){
+          const furl = full.toDataURL("image/jpeg", 0.85);
+          const a2 = document.createElement("a");
+          a2.href = furl; a2.download = "oshuji-board-"+(boardId||1)+"-"+stamp+"-full.jpg";
+          document.body.appendChild(a2); a2.click(); a2.remove();
+        }
+      }
+    }catch(e){ console.error("見たまま版の保存に失敗（クリーン版は保存済み）", e); }
     // 新しいボードへ（運営のみ書ける）。全クライアントが meta/board 監視で自動移行
     await set(ref(db, "meta/board"), (boardId||1) + 1);
     toast(auto ? "満員のため新ボードへ自動切替しました" : "保存しました。新しいボードに切り替えました", 4000);
