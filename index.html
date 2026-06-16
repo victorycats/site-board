@@ -710,7 +710,7 @@
           </div>
         </div>
         <input type="file" id="photoInput" accept="image/*" style="display:none">
-        <div class="hint">お習字撮影は自分のもの限定。要撮影登録</div>
+        <div class="hint" id="photoHint">お習字撮影は自分のもの限定。要撮影登録</div>
       </div>
       <div class="desk-foot">
         <input class="name-field" id="who" type="text" maxlength="16" placeholder="名前（空欄ならランダム）">
@@ -1198,6 +1198,8 @@ document.getElementById("photoBtn").addEventListener("click", ()=>{
 function applyImgPostState(){
   const b = document.getElementById("photoBtn");
   if(b){ b.style.opacity = imgPostOn ? "" : ".4"; b.title = imgPostOn ? "" : "運営が画像投稿を停止中"; }
+  const hint = document.getElementById("photoHint");
+  if(hint){ hint.style.display = imgPostOn ? "" : "none"; }   // 撮影投稿ONの時だけ注意文を出す
   if(admin) render();   // 運営バナーのON/OFF表記を更新
 }
 function loadImgEl(file){
@@ -1322,10 +1324,12 @@ let pendingImg = null;      // 貼る予定の画像
 let lastDrawing = null;     // 貼る直前のキャンバス（キャンセル時に描き戻す）
 let editingId = null;       // 角度微調整中の自分の投稿
 let graceNoteId = null;     // 貼った直後、位置を直せる自分の半紙（次に貼るまで有効）
-const freshNotes = new Map();   // 新規(白)の半紙: id -> 追加時刻ms（見るまで保持）
+const freshNotes = new Map();   // 直近で点滅させる半紙: id -> 追加時刻ms（点滅は約6秒のみ・掃除あり）
 const seenNoteIds = new Set();  // 既知の投稿（初期ロード分は点滅させない）
 let flashArmed = false;         // 初期ロード後だけ点滅を有効化
 let flashRaf = 0;
+let seenT = 0;                  // 前回までに見た半紙の「しおり時刻」(ms)。これより新しい投稿＝未読（ボード毎にLS保存）
+let tour = null, tourIdx = -1;  // 未読ツアー（スナップショット式：◀古い/▶新しいで前後）
 let repositioningId = null; // 位置直し中の半紙ID（ドロップでnx/nyだけ更新）
 const renderedIds = new Set(); // 既に表示済みの半紙（登場アニメの再生抑制用）
 let zCounter = 100;
@@ -1596,7 +1600,8 @@ function switchToBoard(id){
   posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
   zOverride.clear(); activeNoteId = null; editingId = null;
   graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
-  freshNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 白もリセット。初期ロード分は光らせない
+  freshNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 点滅もリセット。初期ロード分は光らせない
+  tour = null; tourIdx = -1; loadSeenT();                         // 未読ツアーをリセット＆このボードのしおりを読み込み
   updateFreshUI();
   setTimeout(()=>{ flashArmed = true; }, 1800);                  // 既存分の流し込みが落ち着いてから有効化
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
@@ -1609,6 +1614,9 @@ function switchToBoard(id){
       const v = snap && snap.val();
       if(v){ Object.keys(v).forEach(k=>{ posts.set(k, v[k]||{}); seenNoteIds.add(k); }); }
       postsLoaded = true; render();
+      updateFreshUI(); drawMinimap();
+      const u = unreadCount();
+      if(u > 0) toast("前回から" + (u>99?"99+":u) + "枚 新しい半紙があるよ", 3200);   // 12時間ぶり等：差分があることだけ気づかせる
       if(!didInitialFocus && posts.size){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 300); }
     }).catch(()=>{ postsLoaded = true; render(); });
 
@@ -2480,24 +2488,37 @@ function randomStartScroll(){
 /* ---------- minimap ---------- */
 const miniCanvas = document.getElementById("miniCanvas");
 function flashNote(id){
-  freshNotes.set(id, Date.now());   // 追加。見るまで白を保持（最初の約6秒だけ点滅）
+  freshNotes.set(id, Date.now());   // 約6秒だけ点滅（未読そのものは seenT で判定）
   if(!flashRaf) flashRaf = requestAnimationFrame(flashTick);
   updateFreshUI();
 }
 function flashTick(){
   flashRaf = 0;
-  drawMinimap();
   const now = Date.now();
-  let blinking = false;
-  for(const [,t] of freshNotes){ if(now - t < 6000){ blinking = true; break; } }  // 点滅中だけループ継続
-  if(blinking) flashRaf = requestAnimationFrame(flashTick);
+  for(const [id,t] of freshNotes){ if(now - t >= 6000) freshNotes.delete(id); }   // 点滅し終わったものは掃除
+  drawMinimap();
+  if(freshNotes.size > 0) flashRaf = requestAnimationFrame(flashTick);
 }
-function freshList(){   // 白い半紙を追加順（古い→新しい）で。表示可能なものだけ
-  return [...freshNotes.keys()].filter(id=> posts.has(id) && (admin || !posts.get(id).hidden));
+/* ---- 未読しおり（前回からの差分）。ボード毎に時刻1個をLS保存 ---- */
+function seenKey(){ return "fg_seen_b" + (boardId==null?0:boardId); }
+function saveSeenT(){ try{ LS.set(seenKey(), String(seenT)); }catch(_){} }
+function loadSeenT(){
+  let v=null; try{ v = LS.get(seenKey()); }catch(_){}
+  if(v==null){ seenT = Date.now(); saveSeenT(); }   // 初回訪問：既存は全部「既読」扱い（大量に降ってこないように）
+  else { seenT = Number(v) || 0; }
 }
-function markFreshViewed(id){ if(freshNotes.delete(id)){ updateFreshUI(); drawMinimap(); } }
+function isUnread(id,p){ return !!p && (p.t||0) > seenT && p.uid !== myUid && (admin || !p.hidden); }
+function unreadList(){   // 前回からの未読を古い→新しい（[[id,p],...]）
+  return [...posts.entries()].filter(([id,p])=> isUnread(id,p)).sort((a,b)=> (a[1].t||0)-(b[1].t||0));
+}
+function unreadCount(){ return unreadList().length; }
+function markSeen(id,p){   // 見た＝しおりを進める（前進のみ）。点滅も止める
+  if(p && (p.t||0) > seenT){ seenT = p.t; saveSeenT(); }
+  freshNotes.delete(id);
+  updateFreshUI(); drawMinimap();
+}
 function updateFreshUI(){
-  const n = freshList().length;
+  const n = unreadCount();
   const cluster = document.querySelector(".nav-cluster");
   if(cluster) cluster.classList.toggle("has-fresh", n>0);
   const badge = document.getElementById("freshBadge");
@@ -2521,12 +2542,12 @@ function drawMinimap(){
     const lh = p.land ? NOTE_W : NOTE_H*0.85;
     const w = Math.max(2, lw*sx), h = Math.max(2, lh*sy);
     const ft = freshNotes.get(id);
-    if(ft != null){
-      const blink = (now - ft < 6000) ? (Math.floor(now/260)%2===0) : true;  // 6秒は点滅、その後は白実体
+    if(isUnread(id,p)){                                   // 前回からの未読＝白
+      const blink = (ft != null && now - ft < 6000) ? (Math.floor(now/260)%2===0) : true;  // 直近の追加は点滅、それ以外は白実体
       if(blink){
         g.save();
         g.fillStyle = "#ffffff"; g.shadowColor = "rgba(255,255,255,.95)"; g.shadowBlur = 6;
-        g.fillRect(x-1, y-1, w+2, h+2);   // 新規（白）
+        g.fillRect(x-1, y-1, w+2, h+2);   // 未読（白）
         g.restore();
         continue;
       }
@@ -2602,21 +2623,29 @@ function centerOnNote(id, p, targetZoom){
 function gotoNote(step){
   stopNavHint();   // 見る動線を選択（点滅を止める）
   const meguriCollapse = ()=>{ if(!floatDesk.classList.contains("collapsed")) setDeskCollapsed(true); };  // めぐり開始＝半紙は畳んで見やすく
-  const q = freshList();
-  if(q.length){                                   // 白い半紙があれば、それを順に巡って消化
-    const id = (step >= 0) ? q[0] : q[q.length-1];
-    const p = posts.get(id);
-    markFreshViewed(id);                          // 見たら白を解除
-    meguriCollapse();
-    centerOnNote(id, p);
+  // --- 未読ツアー：前回からの未読を ◀=古い / ▶=新しい で前後（スナップショット式：行き来できる） ---
+  if(tour){
+    const ni = tourIdx + step;
+    if(ni >= 0 && ni < tour.length){
+      tourIdx = ni;
+      const [id,p] = tour[tourIdx];
+      meguriCollapse(); markSeen(id, p); centerOnNote(id, p);
+      return;
+    }
+    tour = null;   // 端を越えた→ツアー終了。自由閲覧へ地続きで移行
+  } else if(unreadCount() > 0){
+    tour = unreadList();                                   // 開始時にスナップショット（途中の割り込みで乱れない）
+    tourIdx = (step >= 0) ? 0 : tour.length - 1;           // ▶は古い方から、◀は新しい方から
+    const [id,p] = tour[tourIdx];
+    meguriCollapse(); markSeen(id, p); centerOnNote(id, p);
     return;
   }
+  // --- 自由閲覧（未読なし or ツアー終了後）：全体を最近順で巡回 ---
   const list = visibleByRecency();
   if(!list.length){ toast("まだ半紙がないよ"); return; }
   meguriIdx = ((meguriIdx + step) % list.length + list.length) % list.length;
   const [id,p] = list[meguriIdx];
-  meguriCollapse();
-  centerOnNote(id, p);
+  meguriCollapse(); centerOnNote(id, p);
 }
 document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
 document.getElementById("nextNote").addEventListener("click", ()=> gotoNote(1));
