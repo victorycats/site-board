@@ -53,10 +53,13 @@
   }
   .seal{
     display:inline-flex;align-items:center;justify-content:center;margin-left:6px;
-    width:22px;height:22px;
+    width:22px;height:22px;cursor:pointer;pointer-events:auto;
     background:#2f7d3b;border-radius:4px;
     vertical-align:middle;transform:rotate(-4deg);box-shadow:0 1px 0 rgba(0,0,0,.3);
+    transition:transform .12s, filter .12s;
   }
+  .seal:hover{filter:brightness(1.08);transform:rotate(-4deg) scale(1.08)}
+  .seal:active{transform:rotate(-4deg) scale(.94)}
   .seal svg{width:14px;height:14px;display:block}
 
   /* floating tools (zoom + status) top-right */
@@ -494,6 +497,15 @@
   .login-cancel{background:#e3d8c0;color:var(--ink-faint)}
   .login-ok{background:var(--shu);color:#fff}
   .login-ok:hover{background:var(--shu-deep)}
+  /* 差し入れ・応援モーダル */
+  .donate-card{width:min(400px,calc(100vw - 28px));max-height:calc(100dvh - 36px);overflow-y:auto}
+  .kofi-frame{width:100%;height:600px;border:0;border-radius:10px;background:#fff;display:block}
+  .donate-lead{font-size:13px;color:var(--ink-faint);text-align:center;line-height:1.65;margin:0 2px 2px}
+  .donate-link{display:flex;align-items:center;gap:10px;text-decoration:none;padding:12px 14px;border-radius:10px;font-weight:700;font-size:14px;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+  .donate-link .donate-ic{font-size:18px;line-height:1}
+  .donate-link.amazon{background:#ff9900;color:#3a2c12}
+  .donate-link:hover{filter:brightness(1.05)}
+  .donate-link:active{transform:scale(.98)}
   /* 色パレット編集 */
   #palSlots{display:flex;flex-direction:column;gap:8px}
   .pal-fixed{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-faint)}
@@ -637,7 +649,7 @@
   </div>
 
   <header class="float-header">
-    <div class="title">ふたば(<span class="shu">偽</span>)お習字<span class="seal" title="ふたば"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 C12 17, 12 14, 12 10.5" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M12 12.5 C7.5 12.5, 4.5 9.5, 4.5 5.2 C9 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/><path d="M12 12.5 C16.5 12.5, 19.5 9.5, 19.5 5.2 C15 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/></svg></span></div>
+    <div class="title">ふたば(<span class="shu">偽</span>)お習字<span class="seal" id="donateSeal" title="差し入れ・応援" role="button" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 C12 17, 12 14, 12 10.5" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M12 12.5 C7.5 12.5, 4.5 9.5, 4.5 5.2 C9 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/><path d="M12 12.5 C16.5 12.5, 19.5 9.5, 19.5 5.2 C15 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/></svg></span></div>
     <div class="subtitle">本家が実装されたら即閉鎖</div>
   </header>
 
@@ -767,6 +779,21 @@
     <div class="login-btns">
       <button class="login-cancel" id="palCancel">キャンセル</button>
       <button class="login-ok" id="palSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="login-mask" id="donateMask">
+  <div class="login-card donate-card">
+    <div class="login-title">差し入れ・応援</div>
+    <p class="donate-lead">このお習字、楽しんでもらえたら<br>よかったら応援してください。</p>
+    <a class="donate-link amazon" id="amazonLink" href="https://www.amazon.co.jp/hz/wishlist/ls/1988207W29TUN" target="_blank" rel="noopener noreferrer">
+      <span class="donate-ic">🎁</span><span>Amazon ほしいものリスト</span>
+    </a>
+    <iframe class="kofi-frame" id="kofiFrame" title="Ko-fi で支援"
+      data-src="https://ko-fi.com/victorycats/?hidefeed=true&amp;widget=true&amp;embed=true&amp;preview=true"></iframe>
+    <div class="login-btns">
+      <button class="login-cancel" id="donateClose">閉じる</button>
     </div>
   </div>
 </div>
@@ -1708,9 +1735,14 @@ function cancelPlacing(){
 window.cancelPlacing = cancelPlacing;
 
 // ---- 貼った直後の位置直し（猶予中は自分の最新半紙を動かせる。次に貼るまで有効） ----
+let committing = false;   // 書き込み中フラグ（同期的に立てて二重確定＝二重投稿を防ぐ）
 async function commitPlace(nx, ny){
-  if(repositioningId){ await repositionPost(nx, ny); }   // 位置直しなら移動だけ
-  else { await createPost(nx, ny); }                     // 通常は新規投稿
+  if(committing) return;                                    // 既に確定処理中なら無視（ドロップ連打・タッチ重複対策）
+  committing = true;
+  try{
+    if(repositioningId){ await repositionPost(nx, ny); }   // 位置直しなら移動だけ
+    else { await createPost(nx, ny); }                     // 通常は新規投稿
+  } finally { committing = false; }
 }
 function startReposition(e, id){
   if(e){ e.stopPropagation(); e.preventDefault(); }   // このタップが壁の確定ハンドラに伝播して即置きされるのを防ぐ
@@ -2156,6 +2188,23 @@ document.getElementById("loginCancel").addEventListener("click", closeLogin);
 loginEmail.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); loginPw.focus(); } });
 loginPw.addEventListener("keydown",    e=>{ if(e.key==="Enter"){ e.preventDefault(); submitLogin(); } });
 loginMask.addEventListener("click", e=>{ if(e.target === loginMask) closeLogin(); });   // 枠外タップで閉じる
+
+/* タイトル後のふたばマーク → 差し入れ・応援モーダル */
+const donateMask = document.getElementById("donateMask");
+const donateSeal = document.getElementById("donateSeal");
+function openDonate(){
+  if(donateMask) donateMask.classList.add("show");
+  const f = document.getElementById("kofiFrame");
+  if(f && !f.src && f.dataset.src) f.src = f.dataset.src;   // 初回オープン時だけ読み込む（普段はKo-fiを読み込まない）
+}
+function closeDonate(){ if(donateMask) donateMask.classList.remove("show"); }
+if(donateSeal){
+  donateSeal.addEventListener("click", openDonate);
+  donateSeal.addEventListener("keydown", e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); openDonate(); } });
+}
+const donateCloseBtn = document.getElementById("donateClose");
+if(donateCloseBtn) donateCloseBtn.addEventListener("click", closeDonate);
+if(donateMask) donateMask.addEventListener("click", e=>{ if(e.target === donateMask) closeDonate(); });   // 枠外タップで閉じる
 async function exitAdmin(){
   admin = false; render(); updateGearLabel();
   try{ if(auth){ await signOut(auth); } }catch(e){}   // 匿名に戻す（onAuthStateChangedで再サインイン）
