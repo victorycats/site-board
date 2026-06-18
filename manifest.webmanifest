@@ -1,0 +1,17 @@
+{
+  "name": "ふたば(偽)お習字",
+  "short_name": "お習字",
+  "description": "みんなでリアルタイムに書いて貼れる、半紙の落書き掲示板。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#efe6cf",
+  "theme_color": "#b5341f",
+  "icons": [
+    { "src": "icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}
