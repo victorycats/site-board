@@ -167,7 +167,7 @@
   }
   .desk-orient:hover{filter:brightness(1.04)}
   .desk-orient.active{background:var(--shu);color:#fff}
-  body.touch .desk-orient{display:none}   /* タッチ端末は画面の向きで自動。手動ボタンは出さない */
+  /* body.touch でも向きボタンは出す（試験的：端末の向きに加えて手動でも切替可） */
   .desk-body{padding:0 10px 0;overflow-x:hidden;overflow-y:auto;min-height:0;flex:1 1 auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .desk-body::-webkit-scrollbar{display:none}   /* スクロールバーで右側に段差(へこみ)が出ないように隠す（合図は▼で表示） */
   .float-desk.collapsed .desk-body{display:none}
@@ -184,32 +184,30 @@
     .float-tools .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
     .float-tools{padding:7px 11px}
   }
-  /* 横向き（タッチ端末）：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。縦積みは入らないので横で使う。入らない小画面は切り捨て前提 */
-  @media (orientation: landscape){
-    body.touch .float-desk:not(.collapsed){
-      position:fixed; inset:6px; left:6px; top:6px; width:auto; max-width:none; max-height:none; border-radius:10px;
-    }
-    body.touch .float-desk:not(.collapsed) .desk-bar{ padding:4px 8px 3px; }
-    body.touch .float-desk:not(.collapsed) .desk-body{
-      display:grid; grid-template-columns:1fr minmax(150px,190px); grid-template-rows:1fr auto;
-      column-gap:10px; padding:0 8px 6px; overflow:hidden; min-height:0;
-    }
-    body.touch .float-desk:not(.collapsed) .canvas-frame{
-      grid-row:1 / span 2; grid-column:1; margin:0; padding:4px;
-      display:flex; align-items:center; justify-content:center; min-height:0; min-width:0;
-    }
-    body.touch .float-desk:not(.collapsed) .canvas-frame::before{ inset:4px; }
-    body.touch .float-desk:not(.collapsed) .canvas-frame #pad{
-      height:100%; width:auto; max-width:100%;   /* 高さいっぱい・幅はアスペクト（向きは.landで3:2） */
-    }
-    body.touch .float-desk:not(.collapsed) .tools{
-      grid-column:2; grid-row:1; margin:0; padding:0; overflow-y:auto; min-height:0; -webkit-overflow-scrolling:touch;
-    }
-    body.touch .float-desk:not(.collapsed) .desk-foot{
-      grid-column:2; grid-row:2; margin:0; padding:6px 0 0; background:transparent; border-top:1px solid rgba(140,110,60,.25);
-    }
-    body.touch .float-desk:not(.collapsed) .desk-more{ display:none !important; }  /* 2カラムは縦スクロール合図不要 */
+  /* 横半紙（手動の「横」ボタン）×タッチ端末：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。端末の回転には依存しない */
+  body.touch .float-desk.land:not(.collapsed){
+    position:fixed; inset:6px; left:6px; top:6px; width:auto; max-width:none; max-height:none; border-radius:10px;
   }
+  body.touch .float-desk.land:not(.collapsed) .desk-bar{ padding:4px 8px 3px; }
+  body.touch .float-desk.land:not(.collapsed) .desk-body{
+    display:grid; grid-template-columns:1fr minmax(150px,190px); grid-template-rows:1fr auto;
+    column-gap:10px; padding:0 8px 6px; overflow:hidden; min-height:0;
+  }
+  body.touch .float-desk.land:not(.collapsed) .canvas-frame{
+    grid-row:1 / span 2; grid-column:1; margin:0; padding:4px;
+    display:flex; align-items:center; justify-content:center; min-height:0; min-width:0;
+  }
+  body.touch .float-desk.land:not(.collapsed) .canvas-frame::before{ inset:4px; }
+  body.touch .float-desk.land:not(.collapsed) .canvas-frame #pad{
+    height:100%; width:auto; max-width:100%;   /* 高さいっぱい・幅はアスペクト（.landで3:2） */
+  }
+  body.touch .float-desk.land:not(.collapsed) .tools{
+    grid-column:2; grid-row:1; margin:0; padding:0; overflow-y:auto; min-height:0; -webkit-overflow-scrolling:touch;
+  }
+  body.touch .float-desk.land:not(.collapsed) .desk-foot{
+    grid-column:2; grid-row:2; margin:0; padding:6px 0 0; background:transparent; border-top:1px solid rgba(140,110,60,.25);
+  }
+  body.touch .float-desk.land:not(.collapsed) .desk-more{ display:none !important; }  /* 2カラムは縦スクロール合図不要 */
   .canvas-frame{
     background:var(--paper);
     padding:5px;
@@ -2919,26 +2917,8 @@ function setLandscape(on, persist, clear){
   if(persist) LS.set("fg_orient", landscape ? "land" : "portrait");
 }
 const isTouchDev = window.matchMedia && matchMedia("(pointer: coarse)").matches;
-const mqLandscape = window.matchMedia ? matchMedia("(orientation: landscape)") : null;
-function applyPhoneOrient(initial){
-  if(!isTouchDev) return;
-  const land = !!(mqLandscape && mqLandscape.matches);   // 端末が横向きか（タッチ端末のみ。サイズ不問）
-  document.body.classList.toggle("phone-land", land);
-  if((initial || !canvasHasInk()) && landscape !== land){
-    setLandscape(land, false, true);     // 端末の向きに半紙を合わせる（空のときだけ・中身はクリア）
-  } else {
-    requestAnimationFrame(()=>{ setupCanvas(); reclampDesk(); });   // 描きかけは向きを保持し、レイアウト/解像度だけ追従（中身は保つ）
-  }
-}
-if(isTouchDev){
-  document.body.classList.add("touch");        // 手動の向きボタンは隠す（端末の向きで自動）
-  applyPhoneOrient(true);                       // 起動時：端末が横なら半紙も横で開始
-  const onOri = ()=> applyPhoneOrient(false);
-  if(mqLandscape){ mqLandscape.addEventListener ? mqLandscape.addEventListener("change", onOri) : mqLandscape.addListener(onOri); }
-  window.addEventListener("orientationchange", ()=> setTimeout(onOri, 280));   // レイアウト確定後に追従
-} else {
-  setLandscape(LS.get("fg_orient")==="land", false);          // PCは前回の選択を復元
-}
+if(isTouchDev) document.body.classList.add("touch");        // タッチ端末（向きは手動「横」ボタンで切替）
+setLandscape(LS.get("fg_orient")==="land", false);          // 前回選んだ向きを復元（PC・タッチ共通／端末の回転には依存しない）
 // 半紙に色が乗っているか（PAPER以外の画素があるか）をざっくり判定。間引きスキャンで軽量
 function canvasHasInk(){
   try{
