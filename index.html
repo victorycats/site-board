@@ -265,7 +265,9 @@
   }
   .desk-more::before{content:"";position:absolute;inset:-10px;border-radius:50%}  /* タップ判定を上下左右+10px広げる（見た目は変えない） */
   .desk-more.show{display:flex}
+  .desk-more.up{animation:deskMoreBobUp 1.4s ease-in-out infinite}   /* ▲は上向きにふわふわ */
   @keyframes deskMoreBob{0%,100%{margin-top:0}50%{margin-top:3px}}
+  @keyframes deskMoreBobUp{0%,100%{margin-top:0}50%{margin-top:-3px}}
   .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
   .swatch{
     width:30px;height:30px;border-radius:50%;
@@ -801,6 +803,7 @@
         </div>
       </div>
     </div>
+    <div class="desk-more up" id="deskMoreUp" aria-hidden="true">▲</div>
     <div class="desk-more" id="deskMore" aria-hidden="true">▼</div>
   </section>
 
@@ -2838,8 +2841,8 @@ function gotoNote(step){
   const meguriCollapse = ()=>{ if(!floatDesk.classList.contains("collapsed")) setDeskCollapsed(true); };  // めぐり開始＝半紙は畳んで見やすく
   const u = unreadList();   // 未読を古い→新しい
   if(u.length){
-    // 未読があれば常に未読優先。▶＝最新の未読 / ◀＝最古の未読を、押すたびに端から1枚ずつ消化（新規が来たら即それが▶で出る）
-    const [id,p] = (step >= 0) ? u[u.length-1] : u[0];
+    // 未読があれば常に未読優先。▶＝最古の未読から順に / ◀＝最新の未読を、押すたびに端から1枚ずつ消化（古い順に読み進められる）
+    const [id,p] = (step >= 0) ? u[0] : u[u.length-1];
     meguriCollapse(); markSeen(id, p); centerOnNote(id, p);
     return;
   }
@@ -3046,17 +3049,26 @@ if(deskResetBtn) deskResetBtn.addEventListener("click", e=>{ e.stopPropagation()
 /* もっと下に道具がある時だけ ▼ を出す（モバイル・スクロール可能・最下部でない） */
 const deskBodyEl = document.getElementById("deskBody");
 const deskMoreEl = document.getElementById("deskMore");
+const deskMoreUpEl = document.getElementById("deskMoreUp");
 function updateDeskMore(){
   if(!deskMoreEl || !deskBodyEl) return;
   const collapsed = floatDesk.classList.contains("collapsed");
-  const more = (deskBodyEl.scrollHeight - deskBodyEl.scrollTop - deskBodyEl.clientHeight) > 8;
-  const show = !collapsed && isMobileView() && more;
-  if(show) deskMoreEl.style.bottom = "10px";   // フッターは固定でなくなったので、パネル下端の少し上に出す
-  deskMoreEl.classList.toggle("show", show);
+  const mobile = isMobileView();
+  const canDown = (deskBodyEl.scrollHeight - deskBodyEl.scrollTop - deskBodyEl.clientHeight) > 8;
+  const canUp   = deskBodyEl.scrollTop > 8;
+  const showDown = !collapsed && mobile && canDown;
+  const showUp   = !collapsed && mobile && canUp;
+  if(showDown) deskMoreEl.style.bottom = "10px";       // パネル下端の少し上
+  deskMoreEl.classList.toggle("show", showDown);
+  if(deskMoreUpEl){
+    if(showUp) deskMoreUpEl.style.top = ((deskBar ? deskBar.offsetHeight : 30) + 4) + "px";   // バーのすぐ下＝本文の上端
+    deskMoreUpEl.classList.toggle("show", showUp);
+  }
 }
 if(deskBodyEl){
   deskBodyEl.addEventListener("scroll", updateDeskMore, {passive:true});
   deskMoreEl.addEventListener("click", ()=> deskBodyEl.scrollBy({top:deskBodyEl.clientHeight*0.6, behavior:"smooth"}));
+  if(deskMoreUpEl) deskMoreUpEl.addEventListener("click", ()=> deskBodyEl.scrollBy({top:-deskBodyEl.clientHeight*0.6, behavior:"smooth"}));
 }
 window.addEventListener("resize", updateDeskMore);
 if(window.visualViewport) window.visualViewport.addEventListener("resize", updateDeskMore);
