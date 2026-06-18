@@ -2846,10 +2846,12 @@ function gotoNote(step){
     meguriCollapse(); markSeen(id, p); centerOnNote(id, p);
     return;
   }
-  // 未読が無くなったら自由閲覧（全体を最近順で巡回）
+  // 未読が無くなったら自由閲覧：ランダムに巡回（暇つぶし向け。ただし直前と同じ半紙は避ける）
   const list = visibleByRecency();
   if(!list.length){ toast("まだ半紙がないよ"); return; }
-  meguriIdx = ((meguriIdx + step) % list.length + list.length) % list.length;
+  let ni = Math.floor(Math.random()*list.length);
+  if(list.length > 1 && ni === meguriIdx) ni = (ni + 1 + Math.floor(Math.random()*(list.length-1))) % list.length;  // 直前と被ったらずらす
+  meguriIdx = ni;
   const [id,p] = list[meguriIdx];
   meguriCollapse(); centerOnNote(id, p);
 }
