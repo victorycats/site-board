@@ -387,7 +387,7 @@
     letter-spacing:.05em;display:flex;align-items:center;justify-content:space-between;gap:10px;
     box-shadow:0 6px 16px rgba(0,0,0,.3);animation:pulse2 1.6s infinite;
   }
-  .placing-hint .cancel{cursor:pointer;text-decoration:underline}
+  .placing-hint .cancel{cursor:pointer;text-decoration:underline;white-space:nowrap;flex:0 0 auto}
   @keyframes pulse2{50%{background:rgba(181,52,31,.94)}}
 
   .wall-scroll{
@@ -482,7 +482,7 @@
   }
   .note .acts{display:flex;align-items:center;gap:3px;margin-top:auto;flex-wrap:wrap}
   .sou-btn{
-    flex:1;display:flex;align-items:center;justify-content:center;gap:2px;
+    flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:2px;white-space:nowrap;
     background:#efe3c4;color:var(--ink-faint);
     border-radius:5px;padding:4px 3px;font-size:10px;font-weight:700;
     box-shadow:inset 0 0 0 1px rgba(140,110,60,.2);
@@ -2875,6 +2875,14 @@ function initialFocus(){
   const full = visibleByRecency();
   if(!full.length) return;       // まだ無ければ何もしない（次の追加で再トライ）
   didInitialFocus = true;
+  // 2回目以降の訪問で未読があれば、最新の未読にフォーカス。初回訪問（seenT=今で未読0）や未読なしはランダムのまま
+  const u = unreadList();        // 未読を古い→新しい
+  if(u.length){
+    const [id,p] = u[u.length-1];                 // 最新の未読
+    meguriIdx = full.findIndex(e=> e[0]===id);    // めぐりの番号も合わせる
+    centerOnNote(id, p, Math.min(ZOOM_MAX, 1.8)); // 読みやすい倍率で（既読化はしない＝未読は保持）
+    return;
+  }
   const focusZoom = clamp(1.0 + Math.random()*(ZOOM_MAX-1.0), 1.0, ZOOM_MAX);  // 100%以上でランダム
   let list = full;
   if(window.innerWidth <= 560){  // モバイル: 下部UIに隠れる位置にしか置けない半紙は候補から外す
