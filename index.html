@@ -760,7 +760,7 @@
               <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
               <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
               <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
-              <div class="swatch" data-color="ERASER" style="background:#f7f4ec" title="消しゴム"></div>
+              <div class="swatch" data-color="#ffffff" style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="白"></div>
             </div>
             <div class="swatch-more left" id="swatchMoreL" aria-hidden="true">◀</div>
             <div class="swatch-more right" id="swatchMore" aria-hidden="true">▶</div>
@@ -835,7 +835,7 @@
     <div class="pal-fixed">
       <span class="pal-chip" style="background:#1a1714"></span>墨（左端・固定）
       <span style="opacity:.5">…</span>
-      <span class="pal-chip" style="background:#f7f4ec"></span>消しゴム（右端・固定）
+      <span class="pal-chip" style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)"></span>白（右端・固定）
     </div>
     <div id="palSlots"></div>
     <button class="pal-add" id="palAdd">＋ 色を追加（最大4）</button>
@@ -961,7 +961,6 @@ const DPR = Math.min(window.devicePixelRatio || 1, 2);
 const PAPER = "#f7f4ec";
 let color = "#1a1714";
 let size = 14;
-let erasing = false;
 let brushType = "taper";              // "taper"=先細, "flat"=平筆
 const NIB = -35 * Math.PI/180;        // 平筆のニブ角度
 let drawing = false;
@@ -1021,9 +1020,9 @@ function start(e){
   if(fillMode){ pushUndo(); const fp = pos(e); floodFill(fp.x, fp.y); return; } // バケツ：タップ位置を塗る
   pushUndo();
   drawing = true; last = pos(e); lastMid = last; lastTime = performance.now(); lastDir = null; penOff = false; strokeLen = 0;
-  if(!erasing && brushType==="flat"){ flatDab(last); return; }
-  if(!erasing && brushType==="round"){ dot(last, size*DPR); return; } // 丸筆：一定の太さ
-  lastWidth = erasing ? size*2*DPR : Math.max(1, size*0.12)*DPR; // 入り：ごく細い種点から
+  if(brushType==="flat"){ flatDab(last); return; }
+  if(brushType==="round"){ dot(last, size*DPR); return; } // 丸筆：一定の太さ
+  lastWidth = Math.max(1, size*0.12)*DPR; // 入り：ごく細い種点から
   dot(last, lastWidth);
 }
 function flatNib(){ const h=size/2*DPR; return { nx:Math.cos(NIB)*h, ny:Math.sin(NIB)*h }; }
@@ -1055,8 +1054,8 @@ function move(e){
   if(!inside){ penOff = true; return; }     // 外：描かない・ストロークも終わらせない
   if(penOff || !last){ resumeAt(p); return; } // 戻ってきた→同じストロークとして再開
 
-  if(!erasing && brushType==="flat"){ flatStroke(last, p); last = p; return; }
-  if(!erasing && brushType==="round"){          // 丸筆：太さ一定・丸い筆。前回点→現在点を必ず一本の線でつなぐ
+  if(brushType==="flat"){ flatStroke(last, p); last = p; return; }
+  if(brushType==="round"){          // 丸筆：太さ一定・丸い筆。前回点→現在点を必ず一本の線でつなぐ
     ctx.strokeStyle=color; ctx.lineWidth=size*DPR; ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
     last = p; return;
@@ -1066,20 +1065,15 @@ function move(e){
   const dx = p.x-last.x, dy = p.y-last.y;
   const dist = Math.hypot(dx,dy);
 
-  let targetW;
-  if(erasing){
-    targetW = size*2*DPR;
-  } else {
-    // 先細：入りは細い点から、開始距離に応じて本体の太さまで立ち上げる（速度には依存しない）
-    const base = size*DPR;
-    strokeLen += dist;
-    const head = Math.min(1, strokeLen/(base*2.0));   // base*2pxかけて 0.08→1.0
-    targetW = base * (0.08 + 0.92*head);
-  }
+  // 先細：入りは細い点から、開始距離に応じて本体の太さまで立ち上げる（速度には依存しない）
+  const base = size*DPR;
+  strokeLen += dist;
+  const head = Math.min(1, strokeLen/(base*2.0));   // base*2pxかけて 0.08→1.0
+  const targetW = base * (0.08 + 0.92*head);
   // なめらかに太さを変化させる
-  const w = erasing ? targetW : lastWidth + (targetW-lastWidth)*0.5;
+  const w = lastWidth + (targetW-lastWidth)*0.5;
 
-  ctx.strokeStyle = erasing ? PAPER : color;
+  ctx.strokeStyle = color;
   ctx.lineWidth = w;
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath();
@@ -1108,14 +1102,14 @@ function taperTail(){
   }
 }
 function dot(p,w){
-  ctx.fillStyle = erasing ? PAPER : color;
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(p.x,p.y,(w||(erasing?size*2:size)*DPR)/2,0,Math.PI*2);
+  ctx.arc(p.x,p.y,(w||size*DPR)/2,0,Math.PI*2);
   ctx.fill();
 }
 function end(){
   const wasDrawing = drawing;
-  if(drawing && !erasing && brushType==="taper") taperTail();
+  if(drawing && brushType==="taper") taperTail();
   drawing=false; last=null; lastDir=null;
   if(wasDrawing) scheduleDraftSave();   // 描き終わりごとに下書き退避
 }
@@ -1147,7 +1141,7 @@ function floodFill(sx, sy){
   const data = img.data;
   const i0 = (sy*W+sx)*4;
   const tr=data[i0], tg=data[i0+1], tb=data[i0+2], ta=data[i0+3];
-  const [fr,fg,fb] = hexToRgb(erasing ? PAPER : color);
+  const [fr,fg,fb] = hexToRgb(color);
   if(Math.abs(tr-fr)<3 && Math.abs(tg-fg)<3 && Math.abs(tb-fb)<3 && ta===255) return; // 既に同色
   const tol = 48;
   const match = (i)=> Math.abs(data[i]-tr)<=tol && Math.abs(data[i+1]-tg)<=tol &&
@@ -1205,7 +1199,7 @@ document.getElementById("colors").addEventListener("click",e=>{
   document.querySelectorAll(".swatch").forEach(s=>s.classList.remove("active"));
   sw.classList.add("active");
   const c = sw.dataset.color;
-  if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; }
+  color = c;
 });
 /* 色パレットが入りきらない時、左右に◀▶を出してスクロール（両方向） */
 const swatchScrollEl = document.getElementById("swatchScroll");
@@ -1232,16 +1226,16 @@ function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
 function renderPalette(){
   const wrap = document.getElementById("swatchScroll");
   if(!wrap) return;
-  const cur = erasing ? "ERASER" : color;        // 今の選択を覚える
+  const cur = color;        // 今の選択を覚える
   const mids = (paletteMid||[]).filter(isHex6).slice(0,5);
   let html = '';
   html += '<div class="swatch" data-color="'+PAL_BLACK+'" style="background:'+PAL_BLACK+'"></div>';
   mids.forEach(c=>{ html += '<div class="swatch" data-color="'+c+'" style="background:'+c+'"></div>'; });
-  html += '<div class="swatch" data-color="ERASER" style="background:'+PAPER+'" title="消しゴム"></div>';
+  html += '<div class="swatch" data-color="#ffffff" style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="白"></div>';
   wrap.innerHTML = html;
   // 選択を復元（無くなっていたら墨）。描画状態も合わせる
   let sel = wrap.querySelector('.swatch[data-color="'+cur+'"]') || wrap.querySelector('.swatch[data-color="'+PAL_BLACK+'"]');
-  if(sel){ sel.classList.add("active"); const c=sel.dataset.color; if(c==="ERASER"){ erasing=true; } else { erasing=false; color=c; } }
+  if(sel){ sel.classList.add("active"); color = sel.dataset.color; }
   if(typeof updateSwatchMore==="function") updateSwatchMore();   // 色数が変わったら矢印の表示を更新
 }
 // 太さは全段クリッキーな12段。位置(0〜11)→筆の太さ。最細は2px、最太は描画幅の約40%
