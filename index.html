@@ -184,7 +184,8 @@
     .float-tools .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
     .float-tools{padding:7px 11px}
   }
-  /* 横半紙（手動の「横」ボタン）×タッチ端末：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。端末の回転には依存しない */
+  /* 横半紙（手動の「横」ボタン）×タッチ端末×画面が横長：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。縦持ちでは発動させない（縦レイアウトのまま横半紙を収める） */
+  @media (orientation: landscape){
   body.touch .float-desk.land:not(.collapsed){
     position:fixed; inset:6px; left:6px; top:6px; width:auto; max-width:none; max-height:none; border-radius:10px;
   }
@@ -208,6 +209,7 @@
     grid-column:2; grid-row:2; margin:0; padding:6px 0 0; background:transparent; border-top:1px solid rgba(140,110,60,.25);
   }
   body.touch .float-desk.land:not(.collapsed) .desk-more{ display:none !important; }  /* 2カラムは縦スクロール合図不要 */
+  }
   .canvas-frame{
     background:var(--paper);
     padding:5px;
