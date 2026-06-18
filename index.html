@@ -209,6 +209,11 @@
     grid-column:2; grid-row:2; margin:0; padding:6px 0 0; background:transparent; border-top:1px solid rgba(140,110,60,.25);
   }
   body.touch .float-desk.land:not(.collapsed) .desk-more{ display:none !important; }  /* 2カラムは縦スクロール合図不要 */
+  body.touch .float-desk.land:not(.collapsed) #bigBtn{ display:none; }                /* 2カラムは幅拡大が効かないので「拡」を隠す */
+  }
+  /* 横半紙＋狭い画面（縦持ちスマホ等）：横幅が既に上限で「拡」は効かないので隠す */
+  @media (max-width: 544px){
+    .float-desk.land #bigBtn{ display:none; }
   }
   .canvas-frame{
     background:var(--paper);
