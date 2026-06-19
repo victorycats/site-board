@@ -583,6 +583,14 @@
   .pal-slot .pal-del{width:30px;height:30px;border:none;border-radius:7px;background:#e3d8c0;color:var(--ink-faint);cursor:pointer;font-weight:700;font-size:16px;line-height:1}
   .pal-add{background:#e7d9bb;color:var(--ink-faint);border:none;border-radius:9px;padding:9px;cursor:pointer;font-weight:700;font-size:13px}
   .pal-add:disabled{opacity:.4;cursor:default}
+  .name-add-row{display:flex;gap:8px;margin:10px 0}
+  .name-add-row input{flex:1;min-width:0}
+  .name-add-btn{flex:0 0 auto;margin:0;width:auto;padding:0 14px;white-space:nowrap}
+  #nameSlots{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+  .name-slot{display:flex;align-items:center;gap:8px;background:#fffdf7;border:1px solid var(--paper-edge);border-radius:8px;padding:7px 10px}
+  .name-slot .nm{flex:1;color:var(--sumi);font-size:14px;word-break:break-all}
+  .name-slot .pal-del{flex:0 0 auto}
+  #nameSlots:empty::after{content:"まだ追加された名前はありません";color:var(--ink-faint);font-size:12px;opacity:.7}
   .rotor-hint{
     position:absolute;left:50%;transform:translateX(-50%);
     white-space:nowrap;font-size:11px;font-family:"Zen Kaku Gothic New",sans-serif;
@@ -630,7 +638,12 @@
     0%,100%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 0 rgba(181,52,31,0)}
     50%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 7px rgba(181,52,31,.38)}
   }
-  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:0 2px;white-space:nowrap}
+  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:0 2px;min-width:34px;text-align:center}
+  .meguri .lab-pc{white-space:nowrap}
+  .meguri .lab-mb{display:none}
+  .meguri .lab-mb .l2{font-size:11px}
+  .meguri .lab-mb.unread .l1{color:#fff;font-weight:700}
+  .meguri .lab-mb.unread .l2{color:#fff;font-weight:800;font-size:14px;line-height:1}
   .fresh-badge{
     display:inline-flex;align-items:center;justify-content:center;
     min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:9px;
@@ -647,6 +660,8 @@
   @media(max-width:560px){
     .corner-cluster{right:10px;bottom:10px;gap:6px;width:148px}   /* モバイルは幅も間隔も詰めてコンパクトに */
     .meguri{padding:5px 7px;gap:5px}
+    .meguri .lab-pc{display:none}
+    .meguri .lab-mb{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
     .meguri button{width:40px;height:34px;font-size:16px}
     .zoom-block{padding:6px 9px;gap:4px}
     .zoom-ctl{justify-content:space-between}   /* スライダー非表示なので −／＋／％を均等に */
@@ -829,7 +844,7 @@
     </div>
     <div class="meguri">
       <button id="prevNote" title="前の半紙へ" aria-label="前の半紙へ">◀</button>
-      <span class="lab">半紙めぐり<span id="freshBadge" class="fresh-badge" style="display:none">0</span></span>
+      <span class="lab"><span class="lab-pc">半紙めぐり<span class="fresh-badge" id="freshBadge" style="display:none">0</span></span><span class="lab-mb"><span class="l1">半紙</span><span class="l2">めぐり</span></span></span>
       <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
     </div>
     <div class="zoom-block">
@@ -872,6 +887,22 @@
     <div class="login-btns">
       <button class="login-cancel" id="palCancel">キャンセル</button>
       <button class="login-ok" id="palSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="login-mask" id="nameMask">
+  <div class="login-card">
+    <div class="login-title">ランダムネーム追加</div>
+    <div class="pal-fixed" style="line-height:1.6">空欄で投稿された時に使う名前の候補。ここで追加した分は全員の投稿に反映されます（初期リストは固定で、ここには出ません）。</div>
+    <div class="name-add-row">
+      <input id="nameInput" type="text" maxlength="16" placeholder="追加する名前">
+      <button class="pal-add name-add-btn" id="nameAdd">＋追加</button>
+    </div>
+    <div id="nameSlots"></div>
+    <div class="login-btns">
+      <button class="login-cancel" id="nameCancel">キャンセル</button>
+      <button class="login-ok" id="nameSave">保存</button>
     </div>
   </div>
 </div>
@@ -1252,6 +1283,7 @@ window.addEventListener("resize", updateSwatchMore);
 const PAL_BLACK = "#1a1714";
 const PAL_DEFAULT_MID = ["#b5341f","#1d5a8c","#2f7d3b","#e6b800","#f0e0d6"];
 let paletteMid = PAL_DEFAULT_MID.slice();
+let extraNames = [];   // 運営が meta/randomNames で追加したランダムネーム（全員共有）
 function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
 function renderPalette(){
   const wrap = document.getElementById("swatchScroll");
@@ -1567,7 +1599,7 @@ function render(){
   // メッセージ帯（運営/空）。placing中の案内は別途出すので上書きしない
   if(!placing){
     if(admin){
-      setMsg('<div class="admin-banner"><span>運営モード（ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'枚）</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="toggleImgPost()">画像投稿：'+(imgPostOn?'ON':'OFF')+'</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="openPaletteEditor()">色設定</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="archiveAndAdvance()">保存して新ボードへ</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="exitAdmin()">終了</span></div>');
+      setMsg('<div class="admin-banner"><span>運営モード（ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'枚）</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="toggleImgPost()">画像投稿：'+(imgPostOn?'ON':'OFF')+'</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="openPaletteEditor()">色設定</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="openNamesEditor()">名前</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="archiveAndAdvance()">保存して新ボードへ</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="exitAdmin()">終了</span></div>');
     } else if(!visible.length){
       if(postsLoaded){
         setMsg('<div class="empty"><span class="big">習</span>まだ誰も貼っていません。<br>左で書いて「貼る」を押そう。</div>');
@@ -1693,6 +1725,10 @@ function listen(){
     paletteMid = (s == null) ? PAL_DEFAULT_MID.slice()
                : String(s).split(",").map(x=>x.trim()).filter(isHex6).slice(0,5);
     renderPalette();
+  });
+  onValue(ref(db, "meta/randomNames"), snap=>{   // 運営が追加したランダムネーム（全員共有）。初期リストにマージして使う
+    const s = snap ? snap.val() : null;
+    extraNames = (s == null) ? [] : String(s).split("\n").map(x=>x.trim()).filter(Boolean).slice(0,300);
   });
 }
 function unsubBoard(){ boardSubs.forEach(fn=>{ try{ fn(); }catch(e){} }); boardSubs = []; }
@@ -1995,9 +2031,9 @@ postBtn.addEventListener("click", ()=>{
 async function createPost(nx, ny){
   if(!db || !myUid){ toast("接続中です。少し待ってね"); return; }
   if(boardId == null){ toast("接続中です。少し待ってね"); return; }   // ボード未取得
-  const RANDOM_NAMES = ["としあき","ﾄﾁｬｷ","としくん","「」","kakko","空白","jun","ぴるす","鍵最高","アージュ","雪の降る町","心理","ハデス","雨坊主","心太","ネギさま","こまち","jun君","自転車で来た","音ゲーの常連","DDRの常連"];
+  const RANDOM_NAMES = ["としあき","ﾄﾁｬｷ","としくん","「」","kakko","空白","jun","ぴるす","鍵最高","アージュ","雪の降る町","心理","ハデス","雨坊主","心太","ネギさま","こまち","jun君","自転車で来た","音ゲーの常連","DDRの常連","ボケナス","うすのろ","ゴキブリ","バカチン","ノロマ","ハナクソ","ぬけさく"];
   let name = document.getElementById("who").value.trim().slice(0,16);
-  if(!name) name = RANDOM_NAMES[Math.floor(Math.random()*RANDOM_NAMES.length)]; // 空欄ならランダム
+  if(!name){ const pool = RANDOM_NAMES.concat(extraNames); name = pool[Math.floor(Math.random()*pool.length)]; } // 空欄なら初期リスト＋運営追加分からランダム
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
   const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
   const img = pendingImg;
@@ -2398,6 +2434,50 @@ document.getElementById("palSave").addEventListener("click", async ()=>{
 });
 window.openPaletteEditor = openPaletteEditor;
 
+/* 運営：ランダムネーム追加（meta/randomNames に保存し全員へ反映） */
+let nameEdit = [];
+const nameMask  = document.getElementById("nameMask");
+const nameSlots = document.getElementById("nameSlots");
+const nameInput = document.getElementById("nameInput");
+function renderNameSlots(){
+  nameSlots.innerHTML = "";
+  nameEdit.forEach((nm,idx)=>{
+    const row = document.createElement("div"); row.className = "name-slot";
+    const span = document.createElement("span"); span.className = "nm"; span.textContent = nm;
+    const del = document.createElement("button"); del.className = "pal-del"; del.textContent = "×"; del.title = "削除";
+    del.addEventListener("click", ()=>{ nameEdit.splice(idx,1); renderNameSlots(); });
+    row.append(span, del);
+    nameSlots.appendChild(row);
+  });
+}
+function addNameFromInput(){
+  const v = (nameInput.value||"").trim().slice(0,16);
+  if(!v) return;
+  if(!nameEdit.includes(v) && !RANDOM_NAMES.includes(v)) nameEdit.push(v);   // 重複は無視
+  nameInput.value = ""; nameInput.focus(); renderNameSlots();
+}
+function openNamesEditor(){
+  if(!admin) return;
+  nameEdit = extraNames.slice();
+  nameInput.value = "";
+  renderNameSlots();
+  nameMask.classList.add("show");
+}
+function closeNames(){ nameMask.classList.remove("show"); }
+document.getElementById("nameAdd").addEventListener("click", addNameFromInput);
+nameInput.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); addNameFromInput(); } });
+document.getElementById("nameCancel").addEventListener("click", closeNames);
+nameMask.addEventListener("click", e=>{ if(e.target === nameMask) closeNames(); });
+document.getElementById("nameSave").addEventListener("click", async ()=>{
+  if(!db || !admin) return;
+  try{
+    await set(ref(db, "meta/randomNames"), nameEdit.join("\n"));   // 改行区切りで保存（空=追加なし）
+    toast("ランダムネームを保存しました");
+    closeNames();
+  }catch(e){ console.error(e); toast("権限がないか失敗しました"); }
+});
+window.openNamesEditor = openNamesEditor;
+
 async function adminRestore(id){
   if(!db || !admin) return;
   try{ await update(ref(db, bpath("posts/"+id)), { hidden:false, del:0 }); toast("復活しました"); }
@@ -2762,8 +2842,14 @@ function updateFreshUI(){
   const n = unreadCount();
   const cluster = document.querySelector(".corner-cluster");
   if(cluster) cluster.classList.toggle("has-fresh", n>0);
-  const badge = document.getElementById("freshBadge");
-  if(badge){ badge.textContent = n>99 ? "99+" : String(n); badge.style.display = n>0 ? "" : "none"; }
+  const fb = document.getElementById("freshBadge");   // PC：1行＋バッジ
+  if(fb){ fb.textContent = n>99 ? "99+" : String(n); fb.style.display = n>0 ? "" : "none"; }
+  const mb = document.querySelector(".meguri .lab-mb");   // モバイル：2行（未読時は 未読／数字）
+  if(mb){
+    const l1 = mb.querySelector(".l1"), l2 = mb.querySelector(".l2");
+    if(n>0){ l1.textContent = "未読"; l2.textContent = n>99 ? "99+" : String(n); mb.classList.add("unread"); }
+    else { l1.textContent = "半紙"; l2.textContent = "めぐり"; mb.classList.remove("unread"); }
+  }
 }
 function drawMinimap(){
   if(!miniCanvas) return;
