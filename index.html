@@ -706,6 +706,17 @@
     box-shadow:0 6px 20px rgba(0,0,0,.4);
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* 自分の半紙へのそうだね通知（右上・控えめ・タップでその半紙へ） */
+  #souNotifs{position:fixed;top:calc(env(safe-area-inset-top, 0px) + 10px);right:10px;z-index:61;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+  .sou-notif{
+    pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:8px;max-width:74vw;
+    background:rgba(255,250,243,.97);color:var(--ink);border-radius:10px;padding:8px 12px;
+    font-family:"Shippori Mincho",serif;font-size:13px;font-weight:600;letter-spacing:.03em;
+    box-shadow:0 6px 18px rgba(0,0,0,.28), inset 0 0 0 1px var(--shu);
+    transform:translateX(12px);opacity:0;transition:transform .25s ease,opacity .25s ease;
+  }
+  .sou-notif.show{transform:none;opacity:1}
+  .sou-notif .sn-seal{flex:0 0 auto;background:var(--shu);color:#fff5ef;font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px}
 </style>
 </head>
 <body>
@@ -1706,12 +1717,13 @@ function switchToBoard(id){
     boardSubs.push(onChildAdded(postsRef, snap=>{
       const id3 = snap.key;
       posts.set(id3, snap.val()||{});
+      seedMySou(id3, snap.val()||{});   // 自分の半紙はそうだね数の基準を記録（通知はしない）
       if(flashArmed && !seenNoteIds.has(id3) && (posts.get(id3)||{}).uid !== myUid) flashNote(id3);   // 他人の新規投稿を白に（自分のは除く）
       seenNoteIds.add(id3);
       requestRender();
       if(!didInitialFocus){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 500); }
     }));
-    boardSubs.push(onChildChanged(postsRef, snap=>{ posts.set(snap.key, snap.val()||{}); requestRender(); }));
+    boardSubs.push(onChildChanged(postsRef, snap=>{ const v = snap.val()||{}; posts.set(snap.key, v); noteMySou(snap.key, v); requestRender(); }));
     boardSubs.push(onChildRemoved(postsRef, snap=>{
       const id2 = snap.key;
       posts.delete(id2); imgCache.delete(id2); imgState.delete(id2); idbDel(id2);
@@ -2250,7 +2262,7 @@ async function vote(type, id){
   if(type==="sou"){
     if(souDone.has(id)){ toast("もう押したよ"); return; }
     souDone.add(id); saveVotes();
-    try{ await runTransaction(ref(db, bpath("posts/"+id+"/sou")), v => (v||0)+1); justVoted = id; render(); toast("そうだね！"); }
+    try{ await runTransaction(ref(db, bpath("posts/"+id+"/sou")), v => (v||0)+1); justVoted = id; if((posts.get(id)||{}).uid===myUid) mySouSeen.set(id, (mySouSeen.get(id)||0)+1); render(); toast("そうだね！"); }
     catch(e){ souDone.delete(id); saveVotes(); toast("失敗しました"); }
   } else {
     if(delDone.has(id)){ toast("通報済み"); return; }
@@ -2904,6 +2916,55 @@ function toast(msg, ms){
   clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("show"), ms || 1800);
 }
 
+/* ---------- 自分の半紙への「そうだね」通知（まとめて・控えめ・作業中は黙る） ---------- */
+const mySouSeen = new Map();    // 自分の半紙の既知そうだね数（通知の基準）
+const souPending = new Map();   // 未通知の増分： id -> {delta, name}
+let souFlushT = null;
+function seedMySou(id, p){ if(p && p.uid===myUid) mySouSeen.set(id, p.sou||0); }   // 基準を記録（通知はしない）
+function noteMySou(id, p){      // 自分の半紙のsou変化（onChildChangedから）
+  if(!p || p.uid !== myUid) return;
+  const now = p.sou||0;
+  const seen = mySouSeen.has(id) ? mySouSeen.get(id) : now;   // 未記録なら今を基準に（最初の変化は飲み込む）
+  if(now > seen){
+    const cur = souPending.get(id) || { delta:0, name:(p.name||"あなたの半紙") };
+    cur.delta += (now - seen); cur.name = p.name || cur.name;
+    souPending.set(id, cur);
+    scheduleSouFlush();
+  }
+  mySouSeen.set(id, now);
+}
+function scheduleSouFlush(){ if(!souFlushT) souFlushT = setTimeout(()=>{ souFlushT=null; flushSouNotify(); }, 20000); }   // 20秒ぶんまとめる
+function flushSouNotify(){
+  if(!souPending.size) return;
+  if(!floatDesk.classList.contains("collapsed")){ scheduleSouFlush(); return; }   // 作業中（半紙を開いている）は黙る＝閉じたら出す
+  const entries = [...souPending.entries()];
+  souPending.clear();
+  let total = 0; for(const [,inf] of entries) total += inf.delta;
+  entries.sort((a,b)=> b[1].delta - a[1].delta);   // 一番増えた半紙へ飛べるように
+  const [topId, topInfo] = entries[0];
+  const msg = (entries.length===1)
+    ? `「${topInfo.name}」にそうだね +${topInfo.delta}`
+    : `${entries.length}枚にそうだね 合計+${total}`;
+  showSouNotify(msg, topId);
+}
+function showSouNotify(msg, id){
+  let wrap = document.getElementById("souNotifs");
+  if(!wrap){ wrap = document.createElement("div"); wrap.id="souNotifs"; document.body.appendChild(wrap); }
+  const el = document.createElement("div");
+  el.className = "sou-notif";
+  const seal = document.createElement("span"); seal.className="sn-seal"; seal.textContent="そうだね";
+  const m = document.createElement("span"); m.className="sn-msg"; m.textContent = msg;
+  el.appendChild(seal); el.appendChild(m);
+  el.addEventListener("click", ()=>{
+    const p = posts.get(id);
+    if(p){ setDeskCollapsed(true); centerOnNote(id, p, Math.min(ZOOM_MAX, 1.8)); }   // タップでその半紙へ
+    el.classList.remove("show"); setTimeout(()=> el.remove(), 250);
+  });
+  wrap.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add("show"));
+  setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=> el.remove(), 300); }, 6000);
+}
+
 /* ---------- floating desk collapse ---------- */
 const floatDesk = document.getElementById("floatDesk");
 const deskToggleBtn = document.getElementById("deskToggle");
@@ -2914,6 +2975,7 @@ let deskPrevCollapsed = false;
 const isMobileView = ()=> window.innerWidth <= 560 || (window.matchMedia && matchMedia("(pointer: coarse)").matches && window.innerHeight <= 560);   // スマホは縦(幅≤560)も横(高さ≤560)も「モバイル扱い」＝投稿はドロップ確定のまま
 function setDeskCollapsed(c){
   floatDesk.classList.toggle("collapsed", c);
+  if(c) flushSouNotify();   // 作業を終えて閉じた＝溜めていたそうだね通知を出す
   if(stageEl) stageEl.classList.toggle("desk-open", !c);   // 開いてる間はナビを隠す（モバイル・CSS側で判定）
   deskToggleBtn.textContent = c ? "＋" : "−";
   deskBarTitle.textContent = c ? "半紙を広げる" : "半紙";
