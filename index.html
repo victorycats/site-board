@@ -1742,7 +1742,7 @@ function switchToBoard(id){
   graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
   freshNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 点滅もリセット。初期ロード分は光らせない
   loadSeenT();                                                   // このボードのしおりを読み込み（セッションの未読基準を固定）
-  shuffleOrder = []; shuffleIdx = -1;                            // 未読なし巡回のシャッフルも作り直す
+  shuffleOrder = []; shuffleIdx = -1; meguriStarted = false;     // 未読なし巡回のシャッフルとめぐり開始フラグも作り直す
   updateFreshUI();
   setTimeout(()=>{ flashArmed = true; }, 1800);                  // 既存分の流し込みが落ち着いてから有効化
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
@@ -2910,6 +2910,7 @@ scrollEl.addEventListener("scroll", ()=>{ if(!mmRaf) mmRaf=requestAnimationFrame
 let meguriIdx = -1;
 let shuffleOrder = [];   // 未読なし巡回用：シャッフル済みの並び（id配列）。←→で往復
 let shuffleIdx = -1;
+let meguriStarted = false;   // めぐりを開始したか（初回だけ読みやすい下限を当て、以降は今の率を維持）
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function rebuildShuffleIfNeeded(){
   const ids = visibleByRecency().map(e=> e[0]);
@@ -2966,11 +2967,14 @@ function centerOnNote(id, p, targetZoom){
 function gotoNote(step){
   stopNavHint();   // 見る動線を選択（点滅を止める）
   const meguriCollapse = ()=>{ if(!floatDesk.classList.contains("collapsed")) setDeskCollapsed(true); };  // めぐり開始＝半紙は畳んで見やすく
+  const dz = (window.innerWidth <= 560) ? 1.0 : 1.3;
+  const useZoom = meguriStarted ? zoom : Math.max(zoom, dz);   // 初回だけ読みやすい下限を保証。2回目以降は今の率をそのまま維持（拡大も縮小も）
+  meguriStarted = true;
   const u = unreadList();   // 未読を古い→新しい
   if(u.length){
     // 未読があれば常に未読優先。▶＝最古の未読から順に / ◀＝最新の未読を、押すたびに端から1枚ずつ消化（古い順に読み進められる）
     const [id,p] = (step >= 0) ? u[0] : u[u.length-1];
-    meguriCollapse(); markSeen(id, p); centerOnNote(id, p);
+    meguriCollapse(); markSeen(id, p); centerOnNote(id, p, useZoom);
     return;
   }
   // 未読が無くなったら自由閲覧：開いた時にシャッフルした並びを作り、←→でその順を往復（末尾でループ）
@@ -2980,7 +2984,7 @@ function gotoNote(step){
   let sid = shuffleOrder[shuffleIdx];
   let sp = posts.get(sid);
   if(!sp){ shuffleOrder = shuffleOrder.filter(x=> posts.get(x)); if(!shuffleOrder.length){ return; } shuffleIdx = ((shuffleIdx) % shuffleOrder.length + shuffleOrder.length) % shuffleOrder.length; sid = shuffleOrder[shuffleIdx]; sp = posts.get(sid); }
-  meguriCollapse(); centerOnNote(sid, sp);
+  meguriCollapse(); centerOnNote(sid, sp, useZoom);   // 今の拡縮率を維持（初回のみ読みやすい下限）
 }
 document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
 document.getElementById("nextNote").addEventListener("click", ()=> gotoNote(1));
