@@ -432,7 +432,7 @@
   }
   .zoom-ctl .zbtn:hover{filter:brightness(1.05)}
   .zoom-ctl .zbtn:active{transform:scale(.96)}
-  .zoom-ctl .zval{flex:0 0 auto;text-align:right;font-weight:700;color:#e9dcc0;white-space:nowrap}
+  .zoom-block .zval{align-self:center;font-size:10px;font-weight:700;color:#e9dcc0;opacity:.92;line-height:1;letter-spacing:.04em;margin-bottom:-6px}
 
   .note{
     position:absolute;width:104px;
@@ -833,11 +833,11 @@
       <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
     </div>
     <div class="zoom-block">
+      <span class="zval" id="zoomVal">50%</span>
       <div class="zoom-ctl">
         <div class="zbtn" id="zoomOut" title="縮小">－</div>
         <input type="range" id="zoomRange" min="0.5" max="2" step="0.1" value="0.5">
         <div class="zbtn" id="zoomIn" title="拡大">＋</div>
-        <span class="zval" id="zoomVal">50%</span>
       </div>
       <div class="status"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></div>
     </div>
