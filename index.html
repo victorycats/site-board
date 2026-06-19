@@ -145,6 +145,7 @@
     cursor:move;touch-action:none;user-select:none;-webkit-user-select:none;
   }
   .desk-bar.dragging{cursor:grabbing}
+  .float-desk.collapsed .desk-bar-title{cursor:pointer}
   .desk-bar-title{
     font-family:"Shippori Mincho",serif;font-weight:700;font-size:14px;
     letter-spacing:.1em;color:var(--ink-faint);
@@ -3061,9 +3062,26 @@ function flushSouNotify(){
     : `${entries.length}枚にそうだね 合計+${total}`;
   showSouNotify(msg, topId);
 }
+// 通知を出す前に、クラスタの画面位置から伸びる向きを決める：
+// 下半分にある→下辺を固定して通知をツールの上に積む（上へ伸びる）／上半分→上辺を固定して通知をツールの下に（下へ伸びる）。どちらもツール本体は動かない
+function anchorClusterForNotif(){
+  const cl = document.querySelector(".corner-cluster");
+  if(!cl) return;
+  const wrap = document.getElementById("souNotifs");
+  const r = cl.getBoundingClientRect();
+  const lowerHalf = (r.top + r.height/2) > window.innerHeight/2;
+  if(lowerHalf){
+    cl.style.top = "auto"; cl.style.bottom = Math.max(6, window.innerHeight - r.bottom) + "px";
+    if(wrap) wrap.style.order = "0";   // ツールの上（既定の並び）＝上へ伸びる
+  } else {
+    cl.style.bottom = "auto"; cl.style.top = Math.max(6, r.top) + "px";
+    if(wrap) wrap.style.order = "1";   // ツールの下＝下へ伸びる
+  }
+}
 function showSouNotify(msg, id){
   let wrap = document.getElementById("souNotifs");
   if(!wrap){ wrap = document.createElement("div"); wrap.id="souNotifs"; document.body.appendChild(wrap); }
+  anchorClusterForNotif();   // 位置に応じて伸びる向きを決めてから積む
   const el = document.createElement("div");
   el.className = "sou-notif";
   const seal = document.createElement("span"); seal.className="sn-seal"; seal.textContent="そうだね";
@@ -3146,10 +3164,12 @@ function confirmClear(msg, onYes){
 }
 if(deskOrientBtn) deskOrientBtn.addEventListener("click", e=>{
   e.stopPropagation();
-  const doSwitch = ()=> setLandscape(!landscape, true, true);   // clear＝切替時は中身を引き継がない
+  const collapsed = floatDesk.classList.contains("collapsed");
+  // 展開時＝向きトグル。畳み時＝向きを変えて開く（横ボタンは「別の向きで広げる」）
+  const apply = ()=>{ setLandscape(!landscape, true, true); if(collapsed) setDeskCollapsed(false); };
   // 何か描いてある時だけ「消えるよ」と確認（構わない＝消して切替／もどる＝そのまま）
-  if(canvasHasInk()) confirmClear("半紙の向きを変えると、いま描いたものは消えます。", doSwitch);
-  else doSwitch();
+  if(canvasHasInk()) confirmClear("半紙の向きを変えると、いま描いたものは消えます。", apply);
+  else apply();
 });
 
 
@@ -3169,17 +3189,22 @@ function setDeskPos(left, top, save){
   if(save) LS.set("fg_deskpos", JSON.stringify(p));
 }
 function reclampDesk(){ if(floatDesk.style.left){ const r = floatDesk.getBoundingClientRect(); setDeskPos(r.left, r.top, false); } }
+let deskDownX=0, deskDownY=0, deskDownOnTitle=false;
 deskBar.addEventListener("pointerdown", e=>{
-  if(e.target.closest("button")) return;   // バー上のボタン（開閉・切替）の上では掴まない。残りで移動
+  if(e.target.closest("button")) return;   // バー上のボタン（開閉・切替）の上では掴まない
   deskDragging = true; deskMoved = false;
+  deskDownX = e.clientX; deskDownY = e.clientY;
+  deskDownOnTitle = !!e.target.closest(".desk-bar-title");   // タイトル文字から始まったか（タップ判定用）
   const r = floatDesk.getBoundingClientRect();
   deskOffX = e.clientX - r.left; deskOffY = e.clientY - r.top;
-  deskBar.classList.add("dragging");
   try{ deskBar.setPointerCapture(e.pointerId); }catch(_){}
 });
 deskBar.addEventListener("pointermove", e=>{
   if(!deskDragging) return;
-  deskMoved = true;
+  if(!deskMoved){
+    if(Math.abs(e.clientX-deskDownX) < 6 && Math.abs(e.clientY-deskDownY) < 6) return;   // しきい値未満は移動扱いしない（＝タップを保つ）
+    deskMoved = true; deskBar.classList.add("dragging");
+  }
   setDeskPos(e.clientX - deskOffX, e.clientY - deskOffY, false);
   e.preventDefault();
 });
@@ -3188,7 +3213,11 @@ function endDeskDrag(e){
   deskDragging = false;
   deskBar.classList.remove("dragging");
   try{ deskBar.releasePointerCapture(e.pointerId); }catch(_){}
-  if(deskMoved){ const r = floatDesk.getBoundingClientRect(); setDeskPos(r.left, r.top, true); }   // 確定位置を保存
+  if(deskMoved){
+    const r = floatDesk.getBoundingClientRect(); setDeskPos(r.left, r.top, true);   // ドラッグ＝確定位置を保存
+  } else if(deskDownOnTitle && floatDesk.classList.contains("collapsed")){
+    setDeskCollapsed(false);   // 動いてない＝タップ。畳み時の「半紙を広げる」文字で開く
+  }
 }
 deskBar.addEventListener("pointerup", endDeskDrag);
 deskBar.addEventListener("pointercancel", endDeskDrag);
