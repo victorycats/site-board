@@ -101,22 +101,19 @@
   .seal svg{width:14px;height:14px;display:block}
 
   /* floating tools (zoom + status) top-right */
-  .float-tools{
-    position:absolute;top:14px;right:14px;z-index:22;
-    display:flex;flex-direction:column;align-items:flex-end;gap:8px;
-    background:rgba(26,23,20,.5);backdrop-filter:blur(3px);
-    padding:10px 12px;border-radius:12px;
-    box-shadow:0 4px 14px rgba(0,0,0,.35);
+  /* 右下クラスタ：通知 / マップ / 半紙めぐり / ズーム を一体化（固定・個別ドラッグなし） */
+  .corner-cluster{
+    position:fixed;right:14px;bottom:14px;z-index:24;width:200px;
+    display:flex;flex-direction:column;align-items:stretch;gap:8px;
     touch-action:none;
   }
-  .float-tools.dragging,.nav-cluster.dragging{opacity:.92}
-  .drag-grip{
-    align-self:flex-end;cursor:move;touch-action:none;user-select:none;
-    color:#e9dcc0;opacity:.65;font-size:12px;line-height:1;letter-spacing:2px;
-    padding:1px 7px;border-radius:6px;background:rgba(26,23,20,.4);
+  .corner-cluster.dragging{opacity:.94}
+  .zoom-block{
+    display:flex;flex-direction:column;align-items:stretch;gap:5px;
+    background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
+    padding:7px 10px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
-  .drag-grip:hover{opacity:1}
-  .float-tools .status{font-size:12px;color:#e9dcc0;display:flex;align-items:center;gap:8px}
+  .zoom-block .status{font-size:11px;color:#e9dcc0;display:flex;align-items:center;gap:7px;justify-content:flex-end}
   .remain{font-size:11px;font-weight:700}
   .remain.warn{color:#ffd27a}
   .remain.full{color:#ff8a72}
@@ -188,8 +185,7 @@
   }
   @media(max-width:560px){
     .float-desk{width:min(300px,calc(100vw - 24px));left:12px;top:14px;max-height:calc(100dvh - 28px)}
-    .float-tools .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
-    .float-tools{padding:7px 11px}
+    .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
   }
   /* 横半紙（手動の「横」ボタン）×タッチ端末×画面が横長：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。縦持ちでは発動させない（縦レイアウトのまま横半紙を収める） */
   @media (orientation: landscape){
@@ -371,9 +367,8 @@
   .float-desk.land .seal-stamp{width:auto;height:27%;right:4%;bottom:6%}   /* 横向きは短辺(高さ)基準でサイズ＝でかすぎ防止 */
   .seal-stamp img{width:100%;height:100%;display:block}
   @media(max-width:560px){
-    /* 半紙を開いている間は、めぐり・ミニマップ・板のズームを隠す（描画に集中） */
-    .stage.desk-open .float-tools,
-    .stage.desk-open .nav-cluster{display:none}
+    /* 半紙を開いている間は、右下クラスタ（めぐり・マップ・ズーム・通知）を隠す（描画に集中） */
+    .stage.desk-open .corner-cluster{display:none}
   }
 
   /* ---- wide wall / board ---- */
@@ -429,14 +424,15 @@
   }
 
   /* zoom control */
-  .zoom-ctl{display:flex;align-items:center;gap:8px;color:#e9dcc0;font-size:12px}
-  .zoom-ctl input[type=range]{width:120px;accent-color:var(--shu)}
+  .zoom-ctl{display:flex;align-items:center;gap:6px;width:100%;color:#e9dcc0;font-size:12px}
+  .zoom-ctl input[type=range]{flex:1;min-width:0;accent-color:var(--shu)}
   .zoom-ctl .zbtn{
-    width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,.28);color:var(--paper);
-    display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:1;
+    width:36px;height:32px;flex:0 0 auto;border-radius:7px;cursor:pointer;background:#e3d7b8;color:var(--ink-faint);
+    display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;line-height:1;
   }
-  .zoom-ctl .zbtn:hover{background:rgba(0,0,0,.45)}
-  .zoom-ctl .zval{min-width:42px;text-align:right;font-weight:700}
+  .zoom-ctl .zbtn:hover{filter:brightness(1.05)}
+  .zoom-ctl .zbtn:active{transform:scale(.96)}
+  .zoom-ctl .zval{flex:0 0 auto;text-align:right;font-weight:700;color:#e9dcc0;white-space:nowrap}
 
   .note{
     position:absolute;width:104px;
@@ -616,14 +612,9 @@
     50%{box-shadow:0 12px 32px rgba(0,0,0,.45), 0 0 0 7px rgba(181,52,31,.30)}
   }
 
-  /* nav cluster: 半紙めぐり + ミニマップ */
-  .nav-cluster{
-    position:fixed;right:14px;bottom:14px;z-index:24;
-    display:flex;flex-direction:column;align-items:flex-end;gap:8px;
-    touch-action:none;
-  }
+  /* 半紙めぐり + ミニマップ（右下クラスタの一員） */
   .meguri{
-    display:flex;align-items:center;gap:6px;
+    display:flex;align-items:center;justify-content:space-between;gap:6px;
     background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
     padding:6px 8px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
@@ -646,22 +637,32 @@
     background:#fff;color:#b5341f;font-size:10px;font-weight:800;line-height:1;vertical-align:middle;
     box-shadow:0 0 6px rgba(255,255,255,.85);
   }
-  .nav-cluster.has-fresh .meguri{box-shadow:0 0 0 2px rgba(255,255,255,.85),0 6px 16px rgba(0,0,0,.35)}
+  .corner-cluster.has-fresh .meguri{box-shadow:0 0 0 2px rgba(255,255,255,.85),0 6px 16px rgba(0,0,0,.35)}
   .minimap{
-    width:184px;background:linear-gradient(155deg,#f3ecdc,#e7ddc6);
+    width:100%;background:linear-gradient(155deg,#f3ecdc,#e7ddc6);
     border:1px solid rgba(90,70,40,.4);border-radius:8px;overflow:hidden;
     box-shadow:0 6px 16px rgba(0,0,0,.35);cursor:pointer;touch-action:none;
   }
-  .minimap canvas{display:block;width:184px;height:67px}
+  .minimap canvas{display:block;width:100%;height:auto;aspect-ratio:6000/2200}
   @media(max-width:560px){
-    .nav-cluster{right:10px;bottom:10px}
-    .minimap{width:140px}
-    .minimap canvas{width:140px;height:51px}
-    .meguri button{width:42px;height:38px;font-size:16px}
+    .corner-cluster{right:10px;bottom:10px;gap:6px;width:148px}   /* モバイルは幅も間隔も詰めてコンパクトに */
+    .meguri{padding:5px 7px;gap:5px}
+    .meguri button{width:40px;height:34px;font-size:16px}
+    .zoom-block{padding:6px 9px;gap:4px}
+    .zoom-ctl{justify-content:space-between}   /* スライダー非表示なので −／＋／％を均等に */
+    .zoom-ctl .zbtn{width:40px;height:34px}
   }
 
-  .note.found{outline:3px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 1.5s ease-out forwards}
-  @keyframes foundpulse{0%{outline-color:var(--shu)}70%{outline-color:var(--shu)}100%{outline-color:rgba(181,52,31,0)}}
+  .note.found{outline:3px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 4s ease-out forwards}
+  @keyframes foundpulse{
+    0%{outline-color:var(--shu)}
+    8%{outline-color:rgba(181,52,31,.2)}
+    16%{outline-color:var(--shu)}
+    24%{outline-color:rgba(181,52,31,.2)}
+    32%{outline-color:var(--shu)}
+    85%{outline-color:var(--shu)}
+    100%{outline-color:rgba(181,52,31,0)}
+  }
 
   @keyframes drop{from{opacity:0;transform:translateY(-22px)}to{opacity:1}}
 
@@ -707,7 +708,8 @@
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   /* 自分の半紙へのそうだね通知（右上・控えめ・タップでその半紙へ） */
-  #souNotifs{position:fixed;top:calc(env(safe-area-inset-top, 0px) + 10px);right:10px;z-index:61;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+  #souNotifs{display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+  #souNotifs:empty{display:none}
   .sou-notif{
     pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:8px;max-width:74vw;
     background:rgba(255,250,243,.97);color:var(--ink);border-radius:10px;padding:8px 12px;
@@ -717,6 +719,15 @@
   }
   .sou-notif.show{transform:none;opacity:1}
   .sou-notif .sn-seal{flex:0 0 auto;background:var(--shu);color:#fff5ef;font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px}
+  /* 確認モーダル（構わない／もどる） */
+  .cc-mask{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(40,30,20,.5)}
+  .cc-mask.show{display:flex}
+  .cc-card{background:linear-gradient(150deg,#efe6cf,#e5d7b4);border-radius:14px;padding:20px 18px 16px;width:min(340px,86vw);box-shadow:0 14px 40px rgba(0,0,0,.45);text-align:center}
+  .cc-msg{font-family:"Shippori Mincho",serif;font-size:14px;color:var(--ink);line-height:1.7;letter-spacing:.03em;margin-bottom:16px}
+  .cc-acts{display:flex;gap:10px;justify-content:center}
+  .cc-btn{flex:1;cursor:pointer;border:none;border-radius:8px;padding:11px 10px;font-size:14px;font-weight:700;font-family:"Shippori Mincho",serif}
+  .cc-cancel{background:#d8c8a2;color:var(--ink-faint)}
+  .cc-ok{background:var(--shu);color:#fff5ef}
 </style>
 </head>
 <body>
@@ -734,17 +745,6 @@
     <div class="title">ふたば(<span class="shu">偽</span>)お習字<span class="seal" id="donateSeal" title="差し入れ・応援" role="button" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 C12 17, 12 14, 12 10.5" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M12 12.5 C7.5 12.5, 4.5 9.5, 4.5 5.2 C9 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/><path d="M12 12.5 C16.5 12.5, 19.5 9.5, 19.5 5.2 C15 5.2, 12 8.2, 12 12.5 Z" fill="#fff"/></svg></span></div>
     <div class="subtitle">本家が実装されたら即閉鎖</div>
   </header>
-
-  <div class="float-tools">
-    <div class="drag-grip" title="ドラッグで移動">⠿</div>
-    <div class="zoom-ctl">
-      <div class="zbtn" id="zoomOut" title="縮小">－</div>
-      <input type="range" id="zoomRange" min="0.5" max="2" step="0.1" value="0.5">
-      <div class="zbtn" id="zoomIn" title="拡大">＋</div>
-      <span class="zval" id="zoomVal">50%</span>
-    </div>
-    <div class="status"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></div>
-  </div>
 
   <div id="msg" class="float-msg"></div>
 
@@ -780,7 +780,7 @@
               <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
               <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
               <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
-              <div class="swatch" data-color="#ffffff" style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="白"></div>
+              <div class="swatch" data-color="#f7f4ec" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="半紙色"></div>
             </div>
             <div class="swatch-more left" id="swatchMoreL" aria-hidden="true">◀</div>
             <div class="swatch-more right" id="swatchMore" aria-hidden="true">▶</div>
@@ -822,15 +822,24 @@
   <div class="guide" id="guide"><span>半紙を広げる</span><span class="g-plus">＋</span></div>
   <div class="guide" id="guide2"><span>半紙めぐり</span><span class="g-plus">見</span></div>
 
-  <div class="nav-cluster">
-    <div class="drag-grip" title="ドラッグで移動">⠿</div>
+  <div class="corner-cluster" id="cornerCluster">
+    <div id="souNotifs"></div>
+    <div class="minimap" id="minimap" title="タップで移動">
+      <canvas id="miniCanvas"></canvas>
+    </div>
     <div class="meguri">
       <button id="prevNote" title="前の半紙へ" aria-label="前の半紙へ">◀</button>
       <span class="lab">半紙めぐり<span id="freshBadge" class="fresh-badge" style="display:none">0</span></span>
       <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
     </div>
-    <div class="minimap" id="minimap" title="タップで移動">
-      <canvas id="miniCanvas"></canvas>
+    <div class="zoom-block">
+      <div class="zoom-ctl">
+        <div class="zbtn" id="zoomOut" title="縮小">－</div>
+        <input type="range" id="zoomRange" min="0.5" max="2" step="0.1" value="0.5">
+        <div class="zbtn" id="zoomIn" title="拡大">＋</div>
+        <span class="zval" id="zoomVal">50%</span>
+      </div>
+      <div class="status"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></div>
     </div>
   </div>
 </div>
@@ -856,7 +865,7 @@
     <div class="pal-fixed">
       <span class="pal-chip" style="background:#1a1714"></span>墨（左端・固定）
       <span style="opacity:.5">…</span>
-      <span class="pal-chip" style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)"></span>白（右端・固定）
+      <span class="pal-chip" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)"></span>半紙色（右端・固定）
     </div>
     <div id="palSlots"></div>
     <button class="pal-add" id="palAdd">＋ 色を追加（最大4）</button>
@@ -1252,7 +1261,7 @@ function renderPalette(){
   let html = '';
   html += '<div class="swatch" data-color="'+PAL_BLACK+'" style="background:'+PAL_BLACK+'"></div>';
   mids.forEach(c=>{ html += '<div class="swatch" data-color="'+c+'" style="background:'+c+'"></div>'; });
-  html += '<div class="swatch" data-color="#ffffff" style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="白"></div>';
+  html += '<div class="swatch" data-color="#f7f4ec" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="半紙色"></div>';
   wrap.innerHTML = html;
   // 選択を復元（無くなっていたら墨）。描画状態も合わせる
   let sel = wrap.querySelector('.swatch[data-color="'+cur+'"]') || wrap.querySelector('.swatch[data-color="'+PAL_BLACK+'"]');
@@ -1696,6 +1705,7 @@ function switchToBoard(id){
   graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
   freshNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 点滅もリセット。初期ロード分は光らせない
   loadSeenT();                                                   // このボードのしおりを読み込み（セッションの未読基準を固定）
+  shuffleOrder = []; shuffleIdx = -1;                            // 未読なし巡回のシャッフルも作り直す
   updateFreshUI();
   setTimeout(()=>{ flashArmed = true; }, 1800);                  // 既存分の流し込みが落ち着いてから有効化
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
@@ -2433,6 +2443,9 @@ async function buildFullLookCanvas(){
   wallClone.removeAttribute("id");
   wallClone.style.transform = "none";                   // ズーム解除＝等倍
   wallClone.style.left = "0"; wallClone.style.top = "0";
+  // 来場者が見たまま＝管理者向けを除去：隠し半紙を外し、ボタン類(.acts)と管理行(.admin-line＝そうだね/del数・復活/削除)を消す（絵・名前・枠・テープ・判子は残す）
+  wallClone.querySelectorAll(".note.is-hidden").forEach(n=> n.remove());
+  wallClone.querySelectorAll(".acts, .admin-line").forEach(n=> n.remove());
   cap.appendChild(wallClone);
   const header = document.querySelector(".float-header"); // 左下ロゴ
   if(header){
@@ -2747,7 +2760,7 @@ function markSeen(id,p){   // 見た＝そのidを既読に。永続しおりは
 }
 function updateFreshUI(){
   const n = unreadCount();
-  const cluster = document.querySelector(".nav-cluster");
+  const cluster = document.querySelector(".corner-cluster");
   if(cluster) cluster.classList.toggle("has-fresh", n>0);
   const badge = document.getElementById("freshBadge");
   if(badge){ badge.textContent = n>99 ? "99+" : String(n); badge.style.display = n>0 ? "" : "none"; }
@@ -2808,6 +2821,21 @@ scrollEl.addEventListener("scroll", ()=>{ if(!mmRaf) mmRaf=requestAnimationFrame
 
 /* ---------- 半紙めぐり ---------- */
 let meguriIdx = -1;
+let shuffleOrder = [];   // 未読なし巡回用：シャッフル済みの並び（id配列）。←→で往復
+let shuffleIdx = -1;
+function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function rebuildShuffleIfNeeded(){
+  const ids = visibleByRecency().map(e=> e[0]);
+  const idset = new Set(ids);
+  shuffleOrder = shuffleOrder.filter(id=> idset.has(id));   // 消えたものを除去（位置は保つ）
+  if(!shuffleOrder.length){
+    shuffleOrder = shuffleArr(ids.slice());                 // 初回：全体をシャッフル
+    shuffleIdx = -1;
+  } else {
+    const known = new Set(shuffleOrder);                    // 新規(まだ並びに無い)は末尾にシャッフルして追加＝既存の順と位置を壊さない
+    shuffleOrder = shuffleOrder.concat(shuffleArr(ids.filter(id=> !known.has(id))));
+  }
+}
 function visibleByRecency(){
   return [...posts.entries()].filter(([id,p])=> admin || !p.hidden)
     .sort((a,b)=> (b[1].t||0)-(a[1].t||0));
@@ -2858,14 +2886,14 @@ function gotoNote(step){
     meguriCollapse(); markSeen(id, p); centerOnNote(id, p);
     return;
   }
-  // 未読が無くなったら自由閲覧：ランダムに巡回（暇つぶし向け。ただし直前と同じ半紙は避ける）
-  const list = visibleByRecency();
-  if(!list.length){ toast("まだ半紙がないよ"); return; }
-  let ni = Math.floor(Math.random()*list.length);
-  if(list.length > 1 && ni === meguriIdx) ni = (ni + 1 + Math.floor(Math.random()*(list.length-1))) % list.length;  // 直前と被ったらずらす
-  meguriIdx = ni;
-  const [id,p] = list[meguriIdx];
-  meguriCollapse(); centerOnNote(id, p);
+  // 未読が無くなったら自由閲覧：開いた時にシャッフルした並びを作り、←→でその順を往復（末尾でループ）
+  rebuildShuffleIfNeeded();
+  if(!shuffleOrder.length){ toast("まだ半紙がないよ"); return; }
+  shuffleIdx = ((shuffleIdx + step) % shuffleOrder.length + shuffleOrder.length) % shuffleOrder.length;
+  let sid = shuffleOrder[shuffleIdx];
+  let sp = posts.get(sid);
+  if(!sp){ shuffleOrder = shuffleOrder.filter(x=> posts.get(x)); if(!shuffleOrder.length){ return; } shuffleIdx = ((shuffleIdx) % shuffleOrder.length + shuffleOrder.length) % shuffleOrder.length; sid = shuffleOrder[shuffleIdx]; sp = posts.get(sid); }
+  meguriCollapse(); centerOnNote(sid, sp);
 }
 document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
 document.getElementById("nextNote").addEventListener("click", ()=> gotoNote(1));
@@ -2881,7 +2909,7 @@ function focusReachable(id, p, z){
   const st = clamp(py - ay, 0, Math.max(0, WALL_H*z - vh));
   const sy = py - st;                       // 画面上のY
   const topSafe = 60;                        // ヘッダーぶん
-  const bottomSafe = vh - 150;               // 半紙めぐり／マップぶん
+  const bottomSafe = vh - 200;               // 右下クラスタ（ズーム＋めぐり＋マップ＋通知）ぶん
   return sy >= topSafe && sy <= bottomSafe;
 }
 function initialFocus(){
@@ -3009,16 +3037,33 @@ function canvasHasInk(){
     const rgb = hexToRgb(PAPER); if(!rgb) return false;
     const d = ctx.getImageData(0,0,w,h).data;
     for(let i=0;i<d.length;i+=4*8){   // 8画素ごとに確認（クリック時のみなので十分速い）
-      if(Math.abs(d[i]-rgb.r)>6 || Math.abs(d[i+1]-rgb.g)>6 || Math.abs(d[i+2]-rgb.b)>6) return true;
+      if(Math.abs(d[i]-rgb[0])>6 || Math.abs(d[i+1]-rgb[1])>6 || Math.abs(d[i+2]-rgb[2])>6) return true;
     }
     return false;
   }catch(e){ return false; }
 }
+// 確認モーダル：構わない＝onYes実行／もどる＝そのまま
+function confirmClear(msg, onYes){
+  let mask = document.getElementById("clearMask");
+  if(!mask){
+    mask = document.createElement("div");
+    mask.id = "clearMask"; mask.className = "cc-mask";
+    mask.innerHTML = '<div class="cc-card"><div class="cc-msg"></div><div class="cc-acts"><button class="cc-btn cc-cancel">もどる</button><button class="cc-btn cc-ok">構わない</button></div></div>';
+    document.body.appendChild(mask);
+  }
+  mask.querySelector(".cc-msg").textContent = msg;
+  const close = ()=>{ mask.classList.remove("show"); };
+  mask.querySelector(".cc-ok").onclick = ()=>{ close(); onYes && onYes(); };
+  mask.querySelector(".cc-cancel").onclick = close;
+  mask.onclick = e=>{ if(e.target===mask) close(); };   // 背景タップ＝もどる
+  mask.classList.add("show");
+}
 if(deskOrientBtn) deskOrientBtn.addEventListener("click", e=>{
   e.stopPropagation();
-  // 普通は最初に向きを決めるので、描いた後の切替はまれ。何か描いてある時だけ「消えるよ」と確認
-  if(canvasHasInk() && !confirm("半紙の向きを変えると、いま描いたものは消えます。よろしいですか？")) return;
-  setLandscape(!landscape, true, true);   // 第3引数=clear：切替時は中身を引き継がない
+  const doSwitch = ()=> setLandscape(!landscape, true, true);   // clear＝切替時は中身を引き継がない
+  // 何か描いてある時だけ「消えるよ」と確認（構わない＝消して切替／もどる＝そのまま）
+  if(canvasHasInk()) confirmClear("半紙の向きを変えると、いま描いたものは消えます。", doSwitch);
+  else doSwitch();
 });
 
 
@@ -3100,19 +3145,15 @@ function makeDraggable(el, lsKey, ignoreSel){
   try{ const s=LS.get(lsKey); if(s){ const p=JSON.parse(s); setPos(p.left, p.top, false); } }catch(_){}   // 前回位置を復元
   window.addEventListener("resize", reclamp);
 }
-// ズームツール：ボタン(.zbtn)とスライダー(input)以外で掴んで移動
-makeDraggable(document.querySelector(".float-tools"), "fg_toolspos", ".zbtn, input");
-// マップ＋半紙めぐり：ボタンとミニマップ以外で掴んで、クラスタ一体で移動
-makeDraggable(document.querySelector(".nav-cluster"), "fg_navpos", "button, .minimap");
+// 右下クラスタ（ズーム/めぐり/マップ/通知）を一体で可動に。ボタン・スライダー・マップ・通知の上では掴まず、ピルの余白やラベル・枚数行で掴んで移動
+makeDraggable(document.querySelector(".corner-cluster"), "fg_clusterpos", "button, input, .zbtn, .minimap, .sou-notif");
 
-// 配置リセット：半紙・マップ・ズームをドラッグ前の既定位置に戻す（インライン位置を消す＝CSS既定へ）
+// 配置リセット：半紙パネルと右下クラスタの位置を既定に戻す
 function resetWidgetPositions(){
-  floatDesk.style.left = floatDesk.style.top = floatDesk.style.right = floatDesk.style.bottom = "";   // 半紙
-  [".float-tools", ".nav-cluster"].forEach(sel=>{
-    const el = document.querySelector(sel);
-    if(el){ el.style.left = el.style.top = el.style.right = el.style.bottom = ""; }                    // ズーム・ナビ
-  });
-  try{ LS.del("fg_deskpos"); LS.del("fg_toolspos"); LS.del("fg_navpos"); }catch(_){}                   // 保存位置も破棄
+  floatDesk.style.left = floatDesk.style.top = floatDesk.style.right = floatDesk.style.bottom = "";   // 半紙パネル
+  const cl = document.querySelector(".corner-cluster");
+  if(cl){ cl.style.left = cl.style.top = cl.style.right = cl.style.bottom = ""; }                      // 右下クラスタ
+  try{ LS.del("fg_deskpos"); LS.del("fg_clusterpos"); LS.del("fg_toolspos"); LS.del("fg_navpos"); }catch(_){}
   toast("配置を元に戻したよ");
 }
 const deskResetBtn = document.getElementById("deskReset");
