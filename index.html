@@ -2947,15 +2947,36 @@ function focusAnchor(){
   }
   return {ax, ay};
 }
-function centerOnNote(id, p, targetZoom){
+let panRAF = null;
+function panTo(left, top){
+  if(panRAF){ cancelAnimationFrame(panRAF); panRAF = null; }
+  const sx0 = scrollEl.scrollLeft, sy0 = scrollEl.scrollTop;
+  const dx = left - sx0, dy = top - sy0;
+  if(Math.hypot(dx, dy) < 4){ scrollEl.scrollLeft = left; scrollEl.scrollTop = top; return; }
+  const dur = Math.min(520, Math.max(240, Math.hypot(dx, dy) * 0.5));   // 距離に応じて240〜520ms
+  const t0 = performance.now();
+  const ease = t => 1 - Math.pow(1 - t, 3);   // easeOutCubic（最後ふわっと止まる）
+  scrollEl.style.scrollBehavior = "auto";     // CSSのsmoothと二重にならないように
+  function stepPan(now){
+    const t = Math.min(1, (now - t0) / dur), k = ease(t);
+    scrollEl.scrollLeft = sx0 + dx * k;
+    scrollEl.scrollTop  = sy0 + dy * k;
+    if(t < 1){ panRAF = requestAnimationFrame(stepPan); }
+    else { panRAF = null; scrollEl.style.scrollBehavior = ""; }
+  }
+  panRAF = requestAnimationFrame(stepPan);
+}
+function centerOnNote(id, p, targetZoom, smooth){
   const target = (targetZoom != null) ? targetZoom : ((window.innerWidth <= 560) ? 1.0 : 1.3);  // 既定: PC130%/モバイル100%
   const z = clamp(target, zoomMin, ZOOM_MAX);
   if(z !== zoom){ zoom = z; applyZoom(); }
   const px = (clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
   const py = (clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
   const {ax, ay} = focusAnchor();
-  scrollEl.scrollLeft = clamp(px - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
-  scrollEl.scrollTop  = clamp(py - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  const tLeft = clamp(px - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
+  const tTop  = clamp(py - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  if(smooth === false){ if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; } scrollEl.scrollLeft = tLeft; scrollEl.scrollTop = tTop; }
+  else panTo(tLeft, tTop);   // スーッと滑らせて視線で追えるように
   drawMinimap();
   raiseNote(id);   // フォーカス対象を最前面に（下になっていても見えるように）
   requestAnimationFrame(()=>{
@@ -3013,7 +3034,7 @@ function initialFocus(){
   if(u.length){
     const [id,p] = u[u.length-1];                 // 最新の未読
     meguriIdx = full.findIndex(e=> e[0]===id);    // めぐりの番号も合わせる
-    centerOnNote(id, p, Math.min(ZOOM_MAX, 1.8)); // 読みやすい倍率で（既読化はしない＝未読は保持）
+    centerOnNote(id, p, Math.min(ZOOM_MAX, 1.8), false); // 読みやすい倍率で即時（既読化はしない＝未読は保持）
     return;
   }
   const focusZoom = clamp(1.0 + Math.random()*(ZOOM_MAX-1.0), 1.0, ZOOM_MAX);  // 100%以上でランダム
@@ -3024,7 +3045,7 @@ function initialFocus(){
   }
   const [id,p] = list[Math.floor(Math.random()*list.length)];
   meguriIdx = full.findIndex(e=> e[0]===id);   // めぐりの番号は全体基準で合わせる
-  centerOnNote(id, p, focusZoom);   // 開いたときは100%以上のランダム倍率でフォーカス
+  centerOnNote(id, p, focusZoom, false);   // 開いたときは100%以上のランダム倍率で即時フォーカス
 }
 
 /* ---------- toast ---------- */
