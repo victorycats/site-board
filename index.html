@@ -716,13 +716,29 @@
   }
   .gear:hover{background:rgba(26,23,20,.8)}
   .admin-banner{
-    background:rgba(140,36,20,.94);
+    position:fixed;z-index:40;top:12px;left:12px;
+    display:flex;align-items:center;flex-wrap:nowrap;gap:11px;
+    width:max-content;max-width:calc(100vw - 16px);white-space:nowrap;overflow-x:auto;
+    background:rgba(140,36,20,.95);
     border:1px solid var(--shu-deep);color:#fff5ef;
-    padding:9px 14px;border-radius:8px;font-size:12px;
-    font-family:"Shippori Mincho",serif;letter-spacing:.06em;
-    box-shadow:0 6px 16px rgba(0,0,0,.3);
-    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:7px 9px 7px 14px;border-radius:9px;font-size:12px;
+    font-family:"Shippori Mincho",serif;letter-spacing:.04em;
+    box-shadow:0 6px 18px rgba(0,0,0,.34);
+    cursor:grab;touch-action:none;user-select:none;
   }
+  .admin-banner[hidden]{display:none}
+  .admin-banner.dragging{cursor:grabbing;opacity:.96}
+  .admin-banner .ab-title{font-weight:700;white-space:nowrap}
+  .admin-banner .ab-meta{opacity:.92;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .admin-banner .ab-sep{width:1px;height:15px;background:rgba(255,255,255,.28);flex:0 0 auto}
+  .admin-banner .ab-act{
+    flex:0 0 auto;white-space:nowrap;cursor:pointer;font:inherit;font-size:11px;letter-spacing:.03em;
+    background:rgba(255,255,255,.10);color:#fff5ef;
+    border:1px solid rgba(255,255,255,.20);border-radius:6px;padding:4px 9px;
+  }
+  .admin-banner .ab-act:hover{background:rgba(255,255,255,.18)}
+  .admin-banner .ab-act:active{transform:scale(.97)}
+  .admin-banner .ab-exit{background:rgba(0,0,0,.20)}
 
   .empty,.loading{
     text-align:center;padding:48px 20px;
@@ -786,6 +802,7 @@
   </header>
 
   <div id="msg" class="float-msg"></div>
+  <div class="admin-banner" id="adminBar" hidden></div>
 
   <!-- 浮いている半紙パネル -->
   <section class="float-desk" id="floatDesk">
@@ -1475,6 +1492,8 @@ const PAL_BLACK = "#1a1714";
 const PAL_DEFAULT_MID = ["#b5341f","#1d5a8c","#2f7d3b","#e6b800","#f0e0d6"];
 let paletteMid = PAL_DEFAULT_MID.slice();
 let extraNames = [];   // 運営が meta/randomNames で追加したランダムネーム（全員共有）
+// 初期ランダムネーム（空欄投稿時の名前候補）。createPost と 名前エディタの両方から参照するためモジュール直下に置く
+const RANDOM_NAMES = ["としあき","ﾄﾁｬｷ","としくん","「」","kakko","空白","jun","ぴるす","鍵最高","アージュ","雪の降る町","心理","ハデス","雨坊主","心太","ネギさま","こまち","jun君","自転車で来た","音ゲーの常連","DDRの常連","ボケナス","うすのろ","ゴキブリ","バカチン","ノロマ","ハナクソ","ぬけさく"];
 function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
 const PAL_NAMES = {"#1a1714":"黒","#b5341f":"赤","#1d5a8c":"青","#2f7d3b":"緑","#e6b800":"黄","#f0e0d6":"肌","#f7f4ec":"白"};
 function palLabel(hex){ return PAL_NAMES[(hex||"").toLowerCase()] || ""; }                 // 既知色は色名、未知（カスタム）色は空
@@ -1782,6 +1801,26 @@ function angOf(p,id){ return (typeof p.angle==="number") ? p.angle : Math.round(
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
 function setMsg(html){ msgEl.innerHTML = html || ""; }
+// 運営バー（#msgから独立した固定・ドラッグ可能要素）。adminの時だけ表示し、動的部分（枚数・画像投稿ON/OFF）を更新
+function renderAdminBar(){
+  const bar = document.getElementById("adminBar");
+  if(!bar) return;
+  if(!admin){ bar.hidden = true; return; }
+  bar.innerHTML =
+    '<span class="ab-title">運営モード</span>'+
+    '<span class="ab-meta">ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
+    '<span class="ab-sep"></span>'+
+    '<button class="ab-act" type="button" onclick="toggleImgPost()">画像投稿 '+(imgPostOn?'ON':'OFF')+'</button>'+
+    '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
+    '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
+    '<button class="ab-act" type="button" onclick="archiveAndAdvance()">保存して新ボード</button>'+
+    '<button class="ab-act ab-exit" type="button" onclick="exitAdmin()">終了</button>';
+  bar.hidden = false;
+  if(!bar.style.left && !LS.get("fg_adminbarpos")){   // 初回だけ上中央へ（以後はドラッグ位置を保存・復元）
+    bar.style.left = Math.max(6, (window.innerWidth - bar.offsetWidth)/2) + "px";
+    bar.style.top  = "12px";
+  }
+}
 
 let _renderScheduled = false;
 function requestRender(){            // 連続呼び出しを次フレームに1回へ集約（初期ロードの O(N²) を解消）
@@ -1800,9 +1839,10 @@ function render(){
   if(typeof fitStatusTicker==="function") fitStatusTicker();
 
   // メッセージ帯（運営/空）。placing中の案内は別途出すので上書きしない
+  renderAdminBar();   // 運営バー（独立要素・ドラッグ可）。admin状態で表示を出し入れ
   if(!placing){
     if(admin){
-      setMsg('<div class="admin-banner"><span>運営モード（ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'枚）</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="toggleImgPost()">画像投稿：'+(imgPostOn?'ON':'OFF')+'</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="openPaletteEditor()">色設定</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="openNamesEditor()">名前</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="archiveAndAdvance()">保存して新ボードへ</span><span class="cancel" style="cursor:pointer;text-decoration:underline" onclick="exitAdmin()">終了</span></div>');
+      setMsg("");                 // バーは別要素にしたので #msg は空に
     } else if(!visible.length){
       if(postsLoaded){
         setMsg('<div class="empty"><span class="big">習</span>まだ誰も貼っていません。<br>左で書いて「貼る」を押そう。</div>');
@@ -2250,7 +2290,6 @@ postBtn.addEventListener("click", ()=>{
 async function createPost(nx, ny){
   if(!db || !myUid){ toast("接続中です。少し待ってね"); return; }
   if(boardId == null){ toast("接続中です。少し待ってね"); return; }   // ボード未取得
-  const RANDOM_NAMES = ["としあき","ﾄﾁｬｷ","としくん","「」","kakko","空白","jun","ぴるす","鍵最高","アージュ","雪の降る町","心理","ハデス","雨坊主","心太","ネギさま","こまち","jun君","自転車で来た","音ゲーの常連","DDRの常連","ボケナス","うすのろ","ゴキブリ","バカチン","ノロマ","ハナクソ","ぬけさく"];
   let name = document.getElementById("who").value.trim().slice(0,16);
   if(!name){ const pool = RANDOM_NAMES.concat(extraNames); name = pool[Math.floor(Math.random()*pool.length)]; } // 空欄なら初期リスト＋運営追加分からランダム
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
@@ -3585,6 +3624,7 @@ function makeDraggable(el, lsKey, ignoreSel){
 }
 // 右下クラスタ（ズーム/めぐり/マップ/通知）を一体で可動に。ボタン・スライダー・マップ・通知の上では掴まず、ピルの余白やラベル・枚数行で掴んで移動
 makeDraggable(document.querySelector(".corner-cluster"), "fg_clusterpos", "button, input, .zbtn, .minimap, .sou-notif");
+makeDraggable(document.getElementById("adminBar"), "fg_adminbarpos", ".ab-act");   // 運営バーも可動（操作チップの上では掴まない）
 window.addEventListener("resize", ()=>{ if(typeof fitStatusTicker==="function") fitStatusTicker(); });
 
 // 配置リセット：半紙パネルと右下クラスタの位置を既定に戻す
