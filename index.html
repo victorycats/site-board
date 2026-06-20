@@ -113,7 +113,11 @@
     background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
     padding:7px 10px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
-  .zoom-block .status{font-size:11px;color:#e9dcc0;display:flex;align-items:center;gap:7px;justify-content:flex-end}
+  .zoom-block .status{font-size:11px;color:#e9dcc0;display:flex;align-items:center;justify-content:flex-end;overflow:hidden}
+  .zoom-block .status .status-inner{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;will-change:transform}
+  .zoom-block .status.is-scroll{justify-content:flex-start}   /* 長文時は左から流す（電光掲示板風） */
+  .zoom-block .status.is-scroll .status-inner{animation:statusTick var(--sdur,7s) ease-in-out infinite alternate}
+  @keyframes statusTick{from{transform:translateX(0)}to{transform:translateX(var(--sshift,0))}}
   .remain{font-size:11px;font-weight:700}
   .remain.warn{color:#ffd27a}
   .remain.full{color:#ff8a72}
@@ -186,8 +190,7 @@
   }
   @media(max-width:560px){
     .float-desk{width:min(300px,calc(100vw - 24px));left:12px;top:14px;max-height:calc(100dvh - 28px)}
-    .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
-    .zoom-ctl .zval{flex:1;font-size:15px;min-width:0}   /* 空いた中央を％で埋める（タップで100%） */
+    .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す。zvalの実寸指定は後段のモバイルブロックで） */
   }
   /* 横半紙（手動の「横」ボタン）×タッチ端末×画面が横長：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。縦持ちでは発動させない（縦レイアウトのまま横半紙を収める） */
   @media (orientation: landscape){
@@ -508,8 +511,9 @@
   .sou-btn.pop .n{animation:souPop .45s ease-out}
   @keyframes souPop{0%{transform:scale(1)}35%{transform:scale(1.55);color:var(--shu)}100%{transform:scale(1)}}
   .del-btn{
-    background:rgba(181,52,31,.06);color:#9c7f5e;font-size:11px;font-weight:700;
-    padding:5px 9px;border-radius:5px;letter-spacing:.06em;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(181,52,31,.06);color:#9c7f5e;font-size:10px;font-weight:700;
+    padding:4px 9px;border-radius:5px;letter-spacing:.06em;
     box-shadow:inset 0 0 0 1px rgba(181,52,31,.22);
   }
   .del-btn:hover{background:rgba(181,52,31,.14);color:var(--shu-deep)}
@@ -683,8 +687,9 @@
     .meguri .lab-mb{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
     .meguri button{width:40px;height:34px;font-size:16px}
     .zoom-block{padding:6px 9px;gap:4px}
-    .zoom-ctl{justify-content:space-between}   /* スライダー非表示なので −／＋／％を均等に */
+    .zoom-ctl{justify-content:center;gap:4px}   /* スライダー非表示。中央％を伸縮させ−／＋を端へ＝左右対称（gap+min-widthのはみ出しで＋が右に寄るのを解消） */
     .zoom-ctl .zbtn{width:40px;height:34px}
+    .zoom-ctl .zval{flex:1;min-width:0;font-size:14px;padding:4px 2px}
   }
 
   .note.found{outline:3px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 4s ease-out forwards}
@@ -875,7 +880,7 @@
         <span class="zval" id="zoomVal" role="button" tabindex="0" title="タップで100%に戻す">50%</span>
         <div class="zbtn" id="zoomIn" title="拡大">＋</div>
       </div>
-      <div class="status"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></div>
+      <div class="status" id="statusBar"><span class="status-inner" id="statusInner"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></span></div>
     </div>
   </div>
 </div>
@@ -1792,6 +1797,7 @@ function render(){
     .filter(p=> typeof p.id==="string" && /^[A-Za-z0-9_-]+$/.test(p.id));
   visible.sort((a,b)=> (a.t||0)-(b.t||0)); // 古い順に重ねる（新しいものが上）
   countEl.textContent = visible.length ? visible.length + " 枚" : (postsLoaded ? "まだ0枚" : "読み込み中…");
+  if(typeof fitStatusTicker==="function") fitStatusTicker();
 
   // メッセージ帯（運営/空）。placing中の案内は別途出すので上書きしない
   if(!placing){
@@ -1990,6 +1996,22 @@ function setActiveCount(){
   if(r <= 0){ el.textContent = "満員"; el.className = "remain full"; }
   else if(r <= 60){ el.textContent = "あと"+r+"枚で新ボード"; el.className = "remain warn"; }
   else { el.textContent = ""; el.className = "remain"; }
+  fitStatusTicker();
+}
+// 残り枚数などの文言がパネル幅を超えたら、電光掲示板のように左へ流す（収まる時は止める）
+function fitStatusTicker(){
+  const bar = document.getElementById("statusBar"), inner = document.getElementById("statusInner");
+  if(!bar || !inner) return;
+  if(bar.clientWidth === 0){ bar.classList.remove("is-scroll"); return; }   // 非表示中は何もしない
+  const over = inner.scrollWidth - bar.clientWidth;
+  if(over > 2){
+    inner.style.setProperty("--sshift", (-over-4)+"px");
+    inner.style.setProperty("--sdur", Math.max(5, (over+bar.clientWidth)/26)+"s");
+    bar.classList.add("is-scroll");
+  } else {
+    bar.classList.remove("is-scroll");
+    inner.style.removeProperty("--sshift");
+  }
 }
 // 残り60・残り10を最初に観測した1人だけが運営へ通知（make.com）。フラグで重複防止
 async function maybeNotifyRemaining(){
@@ -3563,6 +3585,7 @@ function makeDraggable(el, lsKey, ignoreSel){
 }
 // 右下クラスタ（ズーム/めぐり/マップ/通知）を一体で可動に。ボタン・スライダー・マップ・通知の上では掴まず、ピルの余白やラベル・枚数行で掴んで移動
 makeDraggable(document.querySelector(".corner-cluster"), "fg_clusterpos", "button, input, .zbtn, .minimap, .sou-notif");
+window.addEventListener("resize", ()=>{ if(typeof fitStatusTicker==="function") fitStatusTicker(); });
 
 // 配置リセット：半紙パネルと右下クラスタの位置を既定に戻す
 function resetWidgetPositions(){
