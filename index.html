@@ -692,7 +692,9 @@
     .zoom-ctl .zval{flex:1;min-width:0;font-size:14px;padding:4px 2px}
   }
 
-  .note.found{outline:3px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 4s ease-out forwards}
+  .note.found{outline:3px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 4s ease-out forwards;transition:transform .18s ease}
+  .note.peek-straight{transform:rotate(0deg) !important}              /* のぞき見中だけ正立（書いたまま＝読みやすい） */
+  .note.peek-straight .tape{top:-9px;bottom:auto}                     /* 正立に合わせてテープも上へ */
   @keyframes foundpulse{
     0%{outline-color:var(--shu)}
     8%{outline-color:rgba(181,52,31,.2)}
@@ -1877,7 +1879,6 @@ function render(){
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
     const adminLine = admin ? `
       <div class="admin-line">
-        <span class="stat">そうだね ${p.sou||0}</span>
         <span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span>
         <span style="flex:1"></span>
         ${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }
@@ -1885,7 +1886,7 @@ function render(){
       </div>` : '';
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     return `
-    <div class="note${mine}${rotoring}${fresh}${flippedCls}${p.land?' land':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
+    <div class="note${mine}${rotoring}${fresh}${flippedCls}${p.land?' land':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
@@ -3321,10 +3322,15 @@ function enterPeek(){
   peekPrev = { z: zoom, sl: scrollEl.scrollLeft, st: scrollEl.scrollTop };   // 戻し先＝巡回率＋今の位置
   peeking = true;
   zoomToNoteInstant(focusId, p, fitZoomForFocus());   // ぴたっと率へ即ズーム（めぐりの演出は入れない＝目障りな動きを省く）
+  const el = notesEl.querySelector('.note[data-id="'+focusId+'"]');
+  if(el) el.classList.add("peek-straight");            // 見る時だけ正立に
 }
 function exitPeek(){
   if(!peekPrev){ clearPeek(); return; }
+  const elId = focusId;
   const pv = peekPrev; clearPeek();
+  const el = elId && notesEl.querySelector('.note[data-id="'+elId+'"]');
+  if(el) el.classList.remove("peek-straight");        // 元の傾きへ戻す
   if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; }
   if(pv.z !== zoom){ zoom = pv.z; applyZoom(); }
   scrollEl.scrollLeft = pv.sl; scrollEl.scrollTop = pv.st;   // 巡回率＋元の位置へ即時で戻す
