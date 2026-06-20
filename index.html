@@ -227,6 +227,8 @@
     position:relative;
     flex:0 0 auto;
   }
+  /* iOS対策：道具をスクロールしても半紙は上端に固定（画面外へ出さない＝canvasの描画バッファ破棄＝空白化を防ぐ）。横向き2カラム時は除外 */
+  body.touch .float-desk:not(.land):not(.collapsed) .canvas-frame{ position:sticky; top:0; z-index:3; }
   /* 8 x 12 cm => 2 : 3 */
   .canvas-frame::before{
     content:"";position:absolute;inset:5px;
@@ -1065,7 +1067,19 @@ function setupCanvas(clear){
   if (prev) ctx.drawImage(prev,0,0,w,h);
   ctx.lineCap = "round"; ctx.lineJoin = "round";
 }
-window.addEventListener("resize", ()=>{ const d=pad.toDataURL(); const img=new Image(); img.onload=()=>{ setupCanvas(); ctx.drawImage(img,0,0,pad.width,pad.height); }; img.src=d; });
+let _resizeRaf = 0;
+window.addEventListener("resize", ()=>{
+  if(_resizeRaf) cancelAnimationFrame(_resizeRaf);
+  _resizeRaf = requestAnimationFrame(()=>{
+    _resizeRaf = 0;
+    if(floatDesk.classList.contains("collapsed")) return;          // 畳み中はキャンバス非表示＝触らない
+    const r = pad.getBoundingClientRect();
+    if(r.width < 1) return;                                         // 取れない瞬間は触らない（中身温存）
+    const expectW = Math.round((r.width/canvasScale)*DPR);
+    if(pad.width && Math.abs(pad.width - expectW) <= 2) return;     // 表示幅が変わってない（スクロール/URLバーの上下）＝組み直さない＝絵を消さない
+    setupCanvas();                                                  // 幅が実際に変わった時だけ。中身は setupCanvas が保持して再スケール（toDataURL不要＝iOSでの白紙化レースを排除）
+  });
+});
 
 function pos(e){
   const r = pad.getBoundingClientRect();
@@ -1494,6 +1508,8 @@ function isBlank(){
 /* ---------- board (Firebase Realtime DB) ---------- */
 const NOTE_W = 104, NOTE_H = 196;
 const WALL_W = 6000, WALL_H = 2200;
+const GUT_X = 220, GUT_Y = 300;                      // 壁の外側スクロール余白（ガター）。端の半紙も画面中央へ寄せられる
+const FULL_W = WALL_W + GUT_X*2, FULL_H = WALL_H + GUT_Y*2;   // スクロール領域（壁＋ガター）の総寸
 const ZOOM_MAX = 4;
 let zoomMin = 0.5;   // 画面サイズに応じて「全体が収まる倍率」に更新
 let pinching = false;   // ピンチ中は重い処理（ミニマップ再描画・遅延読込）を後回しにして滑らかに
@@ -1629,10 +1645,10 @@ function ensureImagesInView(){
   if(!notesEl) return;
   if(NOTE_W*zoom < 56) return;   // 全体を引きで見ている時（半紙が極小）は取得を保留＝大量DL抑制
   const marginX = scrollEl.clientWidth*0.25, marginY = scrollEl.clientHeight*0.25;  // 先読みを控えめに
-  const x0 = scrollEl.scrollLeft/zoom - marginX/zoom;
-  const x1 = (scrollEl.scrollLeft+scrollEl.clientWidth)/zoom + marginX/zoom;
-  const y0 = scrollEl.scrollTop/zoom - marginY/zoom;
-  const y1 = (scrollEl.scrollTop+scrollEl.clientHeight)/zoom + marginY/zoom;
+  const x0 = scrollEl.scrollLeft/zoom - GUT_X - marginX/zoom;
+  const x1 = (scrollEl.scrollLeft+scrollEl.clientWidth)/zoom - GUT_X + marginX/zoom;
+  const y0 = scrollEl.scrollTop/zoom - GUT_Y - marginY/zoom;
+  const y1 = (scrollEl.scrollTop+scrollEl.clientHeight)/zoom - GUT_Y + marginY/zoom;
   posts.forEach((p,id)=>{
     if(p.hidden && !admin) return;
     if(imgState.get(id)==="loaded" || imgState.get(id)==="loading") return;
@@ -1994,7 +2010,7 @@ async function repositionPost(nx, ny){
 }
 
 function wallCoords(clientX, clientY){
-  const r = wallEl.getBoundingClientRect(); // r is the scaled, scrolled rect
+  const r = notesEl.getBoundingClientRect(); // notes層（ガターぶん内側へずれている）基準＝半紙ローカル座標がそのまま取れる
   const x = clamp((clientX - r.left)/zoom - NOTE_W/2, 0, WALL_W-NOTE_W);
   const y = clamp((clientY - r.top)/zoom - 10,        0, WALL_H-NOTE_H);
   return {x, y};
@@ -2194,7 +2210,7 @@ let rotorMoving = false; const rotorMoveOff = {x:0,y:0};   // 回転状態を保
 const ROTOR_MAX = 20;                        // 静止時の傾き上限（上向き・反転とも±20°）
 function rotorCenter(){
   const p = posts.get(rotorId); if(!p) return null;
-  const r = wallEl.getBoundingClientRect();  // 拡縮・スクロール済みの矩形
+  const r = notesEl.getBoundingClientRect();  // notes層（ガターぶん内側）基準＝半紙ローカルのまま
   return {
     cx: r.left + (clamp(nxOf(p,rotorId),0,1)*(WALL_W-NOTE_W) + NOTE_W/2)*zoom,
     cy: r.top  + (clamp(nyOf(p,rotorId),0,1)*(WALL_H-NOTE_H) + NOTE_H/2)*zoom
@@ -2276,7 +2292,7 @@ function rotorMoveStart(e){
 }
 function rotorMoveDrag(e){
   const p = posts.get(rotorId); if(!p) return;
-  const r = wallEl.getBoundingClientRect();
+  const r = notesEl.getBoundingClientRect();              // notes層（ガターぶん内側）基準＝半紙ローカルへ変換
   const cx = (e.clientX - rotorMoveOff.x - r.left)/zoom;   // 半紙中心の狙い位置（wall内・等倍）
   const cy = (e.clientY - rotorMoveOff.y - r.top)/zoom;
   p.nx = clamp((cx - NOTE_W/2)/(WALL_W-NOTE_W), 0, 1);
@@ -2710,8 +2726,14 @@ function showAuthError(){
 /* ---------- zoom & scroll ---------- */
 function applyZoom(){
   wallEl.style.transform = "scale("+zoom+")";
-  sizerEl.style.width  = (WALL_W*zoom)+"px";
-  sizerEl.style.height = (WALL_H*zoom)+"px";
+  sizerEl.style.width  = (FULL_W*zoom)+"px";
+  sizerEl.style.height = (FULL_H*zoom)+"px";
+  if(wallEl.style.width !== FULL_W+"px"){                 // 一度だけ：壁を全面化（テクスチャを継ぎ目なくガターまで伸ばす）し、中身をガターぶん内側へ
+    wallEl.style.width = FULL_W+"px"; wallEl.style.height = FULL_H+"px";
+    notesEl.style.position="absolute"; notesEl.style.left=GUT_X+"px"; notesEl.style.top=GUT_Y+"px";
+    notesEl.style.width=WALL_W+"px"; notesEl.style.height=WALL_H+"px";
+    ghostEl.style.transform = "translate("+GUT_X+"px,"+GUT_Y+"px)";   // ゴーストも同じだけずらす（半紙と整列）
+  }
   const zr = document.getElementById("zoomRange");
   const zv = document.getElementById("zoomVal");
   if(zr) zr.value = zoom;
@@ -2740,8 +2762,8 @@ function zoomTo(z, anchorClientX, anchorClientY){
   const natY = (scrollEl.scrollTop  + ay) / zoom;
   zoom = z;
   applyZoom();
-  scrollEl.scrollLeft = clamp(natX*zoom - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
-  scrollEl.scrollTop  = clamp(natY*zoom - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  scrollEl.scrollLeft = clamp(natX*zoom - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(natY*zoom - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
   notifyZoomedOut(prev);
 }
 // ピンチ専用：細かい刻みでアンカー固定だけ行う軽量版（丸め1/1000・重い処理なし）
@@ -2756,8 +2778,8 @@ function pinchZoom(z, anchorClientX, anchorClientY){
   const natY = (scrollEl.scrollTop  + ay) / zoom;
   zoom = z;
   applyZoom();
-  scrollEl.scrollLeft = clamp(natX*zoom - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
-  scrollEl.scrollTop  = clamp(natY*zoom - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  scrollEl.scrollLeft = clamp(natX*zoom - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(natY*zoom - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
   notifyZoomedOut(prev);   // モバイルのピンチでも広角案内を出す
 }
 let lastZoomOutNote = 0;
@@ -2872,8 +2894,8 @@ scrollEl.addEventListener("click", e=>{
 
 function randomStartScroll(){
   const vw = scrollEl.clientWidth, vh = scrollEl.clientHeight;
-  const maxX = Math.max(0, WALL_W*zoom - vw);
-  const maxY = Math.max(0, WALL_H*zoom - vh);
+  const maxX = Math.max(0, FULL_W*zoom - vw);
+  const maxY = Math.max(0, FULL_H*zoom - vh);
   scrollEl.scrollLeft = Math.random()*maxX;
   scrollEl.scrollTop  = Math.random()*maxY;
 }
@@ -2957,8 +2979,8 @@ function drawMinimap(){
     g.fillStyle = p.hidden ? "rgba(181,52,31,.55)" : "#3a332b";
     g.fillRect(x, y, w, h);
   }
-  const vx = (scrollEl.scrollLeft/(WALL_W*zoom))*mmW;
-  const vy = (scrollEl.scrollTop /(WALL_H*zoom))*mmH;
+  const vx = ((scrollEl.scrollLeft - GUT_X*zoom)/(WALL_W*zoom))*mmW;
+  const vy = ((scrollEl.scrollTop  - GUT_Y*zoom)/(WALL_H*zoom))*mmH;
   const vw = Math.min(mmW, (scrollEl.clientWidth /(WALL_W*zoom))*mmW);
   const vh = Math.min(mmH, (scrollEl.clientHeight/(WALL_H*zoom))*mmH);
   g.strokeStyle = "#b5341f"; g.lineWidth = 1.5;
@@ -2969,8 +2991,8 @@ function miniJump(clientX, clientY){
   const r = miniCanvas.getBoundingClientRect();
   const fx = clamp((clientX-r.left)/r.width, 0, 1);
   const fy = clamp((clientY-r.top )/r.height,0, 1);
-  scrollEl.scrollLeft = clamp(fx*WALL_W*zoom - scrollEl.clientWidth/2,  0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
-  scrollEl.scrollTop  = clamp(fy*WALL_H*zoom - scrollEl.clientHeight/2, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  scrollEl.scrollLeft = clamp((GUT_X + fx*WALL_W)*zoom - scrollEl.clientWidth/2,  0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp((GUT_Y + fy*WALL_H)*zoom - scrollEl.clientHeight/2, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
 }
 let miniDown=false;
 miniCanvas.addEventListener("pointerdown", e=>{ miniDown=true; miniJump(e.clientX,e.clientY); e.preventDefault(); });
@@ -3048,11 +3070,11 @@ function centerOnNote(id, p, targetZoom, smooth){
   const target = (targetZoom != null) ? targetZoom : ((window.innerWidth <= 560) ? 1.0 : 1.3);  // 既定: PC130%/モバイル100%
   const z = clamp(target, zoomMin, ZOOM_MAX);
   if(z !== zoom){ zoom = z; applyZoom(); }
-  const px = (clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
-  const py = (clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
+  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
+  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
   const {ax, ay} = focusAnchor();
-  const tLeft = clamp(px - ax, 0, Math.max(0, WALL_W*zoom - scrollEl.clientWidth));
-  const tTop  = clamp(py - ay, 0, Math.max(0, WALL_H*zoom - scrollEl.clientHeight));
+  const tLeft = clamp(px - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
+  const tTop  = clamp(py - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
   if(smooth === false){ if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; } scrollEl.scrollLeft = tLeft; scrollEl.scrollTop = tTop; }
   else panTo(tLeft, tTop);   // スーッと滑らせて視線で追えるように
   drawMinimap();
@@ -3149,8 +3171,8 @@ let focusTimer = null;
 function focusReachable(id, p, z){
   const vh = scrollEl.clientHeight;
   const {ay} = focusAnchor();
-  const py = (clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * z;
-  const st = clamp(py - ay, 0, Math.max(0, WALL_H*z - vh));
+  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * z;
+  const st = clamp(py - ay, 0, Math.max(0, FULL_H*z - vh));
   const sy = py - st;                       // 画面上のY
   const topSafe = 60;                        // ヘッダーぶん
   const bottomSafe = vh - 200;               // 右下クラスタ（ズーム＋めぐり＋マップ＋通知）ぶん
