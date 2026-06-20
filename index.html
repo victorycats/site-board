@@ -270,7 +270,12 @@
     width:30px;height:30px;border-radius:50%;
     border:2px solid rgba(0,0,0,.15);
     cursor:pointer;position:relative;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:700;line-height:1;letter-spacing:0;
+    color:rgba(255,255,255,.92);user-select:none;   /* 暗い色用＝白文字 */
   }
+  .swatch.lite{ color:rgba(40,30,20,.72) }            /* 明るい色（黄・肌・白）＝濃い文字 */
+  .swatch > *{ pointer-events:none }
   .swatch.active{border-color:var(--sumi);box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--sumi)}
   .swatch.active::after{content:"";position:absolute;inset:0;border-radius:50%}
   /* 色パレット：折り返さず横1列。入りきらない分は横スクロール、右端に矢印ヒント */
@@ -790,13 +795,13 @@
           <span class="tool-label">墨</span>
           <div class="swatch-wrap">
             <div class="swatch-scroll" id="swatchScroll">
-              <div class="swatch active" data-color="#1a1714" style="background:#1a1714"></div>
-              <div class="swatch" data-color="#b5341f" style="background:#b5341f"></div>
-              <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c"></div>
-              <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b"></div>
-              <div class="swatch" data-color="#e6b800" style="background:#e6b800"></div>
-              <div class="swatch" data-color="#f0e0d6" style="background:#f0e0d6"></div>
-              <div class="swatch" data-color="#f7f4ec" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="半紙色"></div>
+              <div class="swatch active" data-color="#1a1714" style="background:#1a1714" title="黒" aria-label="黒">黒</div>
+              <div class="swatch" data-color="#b5341f" style="background:#b5341f" title="赤" aria-label="赤">赤</div>
+              <div class="swatch" data-color="#1d5a8c" style="background:#1d5a8c" title="青" aria-label="青">青</div>
+              <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b" title="緑" aria-label="緑">緑</div>
+              <div class="swatch lite" data-color="#e6b800" style="background:#e6b800" title="黄" aria-label="黄">黄</div>
+              <div class="swatch lite" data-color="#f0e0d6" style="background:#f0e0d6" title="肌" aria-label="肌">肌</div>
+              <div class="swatch lite" data-color="#f7f4ec" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="白" aria-label="白">白</div>
             </div>
             <div class="swatch-more left" id="swatchMoreL" aria-hidden="true">◀</div>
             <div class="swatch-more right" id="swatchMore" aria-hidden="true">▶</div>
@@ -815,7 +820,8 @@
         <div class="row">
           <span class="tool-label">筆</span>
           <div class="brush-seg" id="brushSeg">
-            <button class="brush-opt active" data-brush="taper">先細</button>
+            <button class="brush-opt active" data-brush="fude">本筆</button>
+            <button class="brush-opt" data-brush="taper">先細</button>
             <button class="brush-opt" data-brush="round">丸筆</button>
             <button class="brush-opt" data-brush="flat">平筆</button>
           </div>
@@ -881,7 +887,7 @@
     <div class="pal-fixed">
       <span class="pal-chip" style="background:#1a1714"></span>墨（左端・固定）
       <span style="opacity:.5">…</span>
-      <span class="pal-chip" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)"></span>半紙色（右端・固定）
+      <span class="pal-chip" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)"></span>白＝半紙色（右端・固定）
     </div>
     <div id="palSlots"></div>
     <button class="pal-add" id="palAdd">＋ 色を追加（最大4）</button>
@@ -1033,6 +1039,8 @@ let lastWidth = 0;
 let lastDir = null;   // 直近の運筆方向（抜きの三角テールに使う）
 let penOff = false;   // 描画中にカーソルが描画エリア外に出ているか
 let strokeLen = 0;    // ストローク開始からの累積距離（入りの筆圧ランプ用）
+let velEMA = null;    // 運筆速度の平滑値（本筆の太さ・かすれ判定）
+let fudeStrands = []; // 本筆の毛束オフセット（ストローク開始時に固定し、線に沿って連続させる）
 let fillMode = false; // 塗りつぶし（バケツ）モード
 let undoStack = [];
 
@@ -1084,6 +1092,13 @@ function start(e){
   drawing = true; last = pos(e); lastMid = last; lastTime = performance.now(); lastDir = null; penOff = false; strokeLen = 0;
   if(brushType==="flat"){ flatDab(last); return; }
   if(brushType==="round"){ dot(last, size*DPR); return; } // 丸筆：一定の太さ
+  if(brushType==="fude"){                                  // 本筆：速度で太さ＝溜めで太く・速いと細くかすれる
+    velEMA = null; fudeStrands = [];
+    const nh = 5;
+    for(let i=0;i<nh;i++) fudeStrands.push({ off:(i/(nh-1)-0.5), w:0.15+Math.random()*0.10 });   // 5本の毛、太さ少しランダム
+    lastWidth = Math.max(1, size*0.10)*DPR;                // 入りはごく細い種点から
+    dot(last, lastWidth); return;
+  }
   lastWidth = Math.max(1, size*0.12)*DPR; // 入り：ごく細い種点から
   dot(last, lastWidth);
 }
@@ -1122,18 +1137,19 @@ function move(e){
     ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
     last = p; return;
   }
+  if(brushType==="fude"){ fudeMove(p); return; }
 
   const now = performance.now();
   const dx = p.x-last.x, dy = p.y-last.y;
   const dist = Math.hypot(dx,dy);
 
-  // 先細：入りは細い点から、開始距離に応じて本体の太さまで立ち上げる（速度には依存しない）
+  // 先細：丸筆と同じ均一な本体に、短い入り（細→満）と先細りの抜きだけ付ける。速度・かすれには依存しない
   const base = size*DPR;
   strokeLen += dist;
-  const head = Math.min(1, strokeLen/(base*2.0));   // base*2pxかけて 0.08→1.0
-  const targetW = base * (0.08 + 0.92*head);
-  // なめらかに太さを変化させる
-  const w = lastWidth + (targetW-lastWidth)*0.5;
+  const lead = Math.min(base*1.3, 14*DPR);          // 入りの距離を短く固定＝太い筆でも素早く満線に（短い線も痩せない）
+  const head = Math.min(1, strokeLen/lead);
+  const targetW = base * (0.2 + 0.8*head);          // 種点だけ細く、すぐ均一な太さへ
+  const w = lastWidth + (targetW-lastWidth)*0.5;    // 太さをなめらかに
 
   ctx.strokeStyle = color;
   ctx.lineWidth = w;
@@ -1149,8 +1165,8 @@ function move(e){
 // 抜き：運筆方向へ延長して0へ細める（先端を点にする）
 function taperTail(){
   if(!last || !lastDir || lastWidth<=0.6) return;
-  const steps = 6;
-  const len = Math.min(lastWidth*1.6, size*DPR*1.4);
+  const steps = 8;
+  const len = Math.min(lastWidth*2.0, size*DPR*1.7);   // やや長めに延ばして先端をきれいな点に
   const startP = last;                       // 線が実際に終わっている点から繋ぐ
   let x = startP.x, y = startP.y, w0 = lastWidth;
   ctx.strokeStyle = color; ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -1163,6 +1179,60 @@ function taperTail(){
     x = nx; y = ny; w0 = w1;
   }
 }
+// 本筆：速度連動の太さ＋速い時のかすれ（毛束を割って隙間＝かすれ。不透明のままなので重なりが濃くならない）
+function fudeMove(p){
+  const now = performance.now();
+  const dx = p.x-last.x, dy = p.y-last.y;
+  const dist = Math.hypot(dx,dy);
+  const dt = Math.max(1, now-lastTime);
+  const v = (dist/DPR)/dt;                              // CSS px/ms
+  velEMA = (velEMA==null) ? v : velEMA*0.6 + v*0.4;     // 速度を平滑（カクつき防止）
+  const fast = clamp((velEMA-0.2)/2.2, 0, 1);           // 0=ゆっくり .. 1=速い
+  const base = size*DPR;
+  strokeLen += dist;
+  const head = Math.min(1, strokeLen/(base*2.0));       // 入り：細→本体まで立ち上げ
+  const targetW = base*(0.10+0.90*head)*(1 - 0.55*fast);// 速いほど細い（溜めると太い）
+  const w = lastWidth + (targetW-lastWidth)*0.45;       // 太さをなめらかに
+  ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
+  if(fast < 0.45 || w < 3){                             // ゆっくり＝満遍なく接地（ベタ一本）
+    ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+  } else {                                              // 速い＝毛が割れて隙間（かすれ）
+    const ux = dist>0?dx/dist:0, uy = dist>0?dy/dist:0;
+    const px = -uy, py = ux;                            // 進行方向に直交
+    const split = (fast-0.45)/0.55;                     // 速いほど広がる
+    const offMul = w*(0.5 + 0.5*split);
+    for(const s of fudeStrands){
+      const ox = px*s.off*offMul, oy = py*s.off*offMul;
+      ctx.lineWidth = Math.max(0.6, w*s.w);
+      ctx.beginPath(); ctx.moveTo(last.x+ox,last.y+oy); ctx.lineTo(p.x+ox,p.y+oy); ctx.stroke();
+    }
+  }
+  if(dist>0.5){ lastDir = { x:dx/dist, y:dy/dist }; }
+  last = p; lastTime = now; lastWidth = w;
+}
+// 本筆の抜き：運筆方向へ延長しつつ毛を割って擦れさせ、先端を紙へ消す
+function fudeTail(){
+  if(!last || !lastDir || lastWidth<=0.6) return;
+  const steps = 7;
+  const len = Math.min(lastWidth*2.2, size*DPR*1.8);
+  const ux=lastDir.x, uy=lastDir.y, px=-uy, py=ux;
+  ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
+  let x=last.x, y=last.y, w0=lastWidth;
+  for(let i=1;i<=steps;i++){
+    const nx = last.x + ux*(len*i/steps);
+    const ny = last.y + uy*(len*i/steps);
+    const w1 = lastWidth*(1 - i/steps);
+    const seg = Math.max(0.4,(w0+w1)/2);
+    const spread = seg*1.1;
+    for(const s of fudeStrands){
+      const ox=px*s.off*spread, oy=py*s.off*spread;
+      ctx.lineWidth = Math.max(0.4, seg*s.w*1.1);
+      ctx.beginPath(); ctx.moveTo(x+ox,y+oy); ctx.lineTo(nx+ox,ny+oy); ctx.stroke();
+    }
+    x=nx; y=ny; w0=w1;
+  }
+}
 function dot(p,w){
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -1172,6 +1242,7 @@ function dot(p,w){
 function end(){
   const wasDrawing = drawing;
   if(drawing && brushType==="taper") taperTail();
+  if(drawing && brushType==="fude") fudeTail();
   drawing=false; last=null; lastDir=null;
   if(wasDrawing) scheduleDraftSave();   // 描き終わりごとに下書き退避
 }
@@ -2658,6 +2729,7 @@ function computeZoomMin(){
 }
 // anchorClientX/Y を指定すると、その画面位置の指す壁の点を固定したままズーム
 function zoomTo(z, anchorClientX, anchorClientY){
+  if(peeking) clearPeek();   // 手動ズーム＝のぞき見を抜けて通常操作（巡回率は今の率に従う）
   const prev = zoom;
   z = clamp(Math.round(z*100)/100, zoomMin, ZOOM_MAX);
   if(z === zoom){ applyZoom(); return; }
@@ -2674,6 +2746,7 @@ function zoomTo(z, anchorClientX, anchorClientY){
 }
 // ピンチ専用：細かい刻みでアンカー固定だけ行う軽量版（丸め1/1000・重い処理なし）
 function pinchZoom(z, anchorClientX, anchorClientY){
+  if(peeking) clearPeek();   // ピンチも手動ズーム扱い＝のぞき見を抜ける
   z = clamp(Math.round(z*1000)/1000, zoomMin, ZOOM_MAX);
   if(z === zoom) return;
   const prev = zoom;
@@ -2751,6 +2824,7 @@ scrollEl.addEventListener("touchcancel", endPinch);
 function doubleActivate(clientX, clientY, noteElm){
   const hit = document.elementFromPoint(clientX, clientY);
   const ne = noteElm || (hit ? hit.closest(".note") : null);
+  if(ne && ne.dataset.id === focusId){ return; }   // フォーカス中の半紙は単タップのぞき見が担当（ダブルは無視）
   if(ne){
     const id = ne.dataset.id, p = posts.get(id);
     if(p){ raiseNote(id); setActive(id); centerOnNote(id, p, Math.min(ZOOM_MAX, Math.max(1.5, zoom))); return; }
@@ -2904,13 +2978,16 @@ miniCanvas.addEventListener("pointermove", e=>{ if(miniDown){ miniJump(e.clientX
 window.addEventListener("pointerup", ()=>{ miniDown=false; });
 
 let mmRaf=0;
-scrollEl.addEventListener("scroll", ()=>{ if(!mmRaf) mmRaf=requestAnimationFrame(()=>{ mmRaf=0; drawMinimap(); }); scheduleLazy(); });
+scrollEl.addEventListener("scroll", ()=>{ if(panRAF) return; if(!mmRaf) mmRaf=requestAnimationFrame(()=>{ mmRaf=0; drawMinimap(); }); scheduleLazy(); });   // 自動パン中(panRAF)は毎フレーム再描画しない＝着地時にまとめて
 
 /* ---------- 半紙めぐり ---------- */
 let meguriIdx = -1;
 let shuffleOrder = [];   // 未読なし巡回用：シャッフル済みの並び（id配列）。←→で往復
 let shuffleIdx = -1;
 let meguriStarted = false;   // めぐりを開始したか（初回だけ読みやすい下限を当て、以降は今の率を維持）
+let focusId = null;          // 今フォーカス中（赤枠）の半紙id
+let peeking = false;         // のぞき見（一時的にぴたっと寄せ）中か
+let peekPrev = null;         // のぞき見前の {z, sl, st}（巡回率＋位置へ戻す用）
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function rebuildShuffleIfNeeded(){
   const ids = visibleByRecency().map(e=> e[0]);
@@ -2953,7 +3030,7 @@ function panTo(left, top){
   const sx0 = scrollEl.scrollLeft, sy0 = scrollEl.scrollTop;
   const dx = left - sx0, dy = top - sy0;
   if(Math.hypot(dx, dy) < 4){ scrollEl.scrollLeft = left; scrollEl.scrollTop = top; return; }
-  const dur = Math.min(520, Math.max(240, Math.hypot(dx, dy) * 0.5));   // 距離に応じて240〜520ms
+  const dur = Math.min(isMobileView()?380:520, Math.max(220, Math.hypot(dx, dy) * 0.5));   // モバイルは短め＝フレーム数を抑える
   const t0 = performance.now();
   const ease = t => 1 - Math.pow(1 - t, 3);   // easeOutCubic（最後ふわっと止まる）
   scrollEl.style.scrollBehavior = "auto";     // CSSのsmoothと二重にならないように
@@ -2962,11 +3039,13 @@ function panTo(left, top){
     scrollEl.scrollLeft = sx0 + dx * k;
     scrollEl.scrollTop  = sy0 + dy * k;
     if(t < 1){ panRAF = requestAnimationFrame(stepPan); }
-    else { panRAF = null; scrollEl.style.scrollBehavior = ""; }
+    else { panRAF = null; scrollEl.style.scrollBehavior = ""; drawMinimap(); scheduleLazy(); }   // 着地時に1回だけ更新
   }
   panRAF = requestAnimationFrame(stepPan);
 }
 function centerOnNote(id, p, targetZoom, smooth){
+  if(id !== focusId){ clearPeek(); }   // 別の半紙へフォーカスが移る＝のぞき見の戻し先は無効化
+  focusId = id;
   const target = (targetZoom != null) ? targetZoom : ((window.innerWidth <= 560) ? 1.0 : 1.3);  // 既定: PC130%/モバイル100%
   const z = clamp(target, zoomMin, ZOOM_MAX);
   if(z !== zoom){ zoom = z; applyZoom(); }
@@ -2986,6 +3065,7 @@ function centerOnNote(id, p, targetZoom, smooth){
   });
 }
 function gotoNote(step){
+  if(peeking && peekPrev){ zoom = peekPrev.z; clearPeek(); applyZoom(); }   // のぞき見中なら巡回率に戻してから次へ（ズーム維持ロジックを汚さない）
   stopNavHint();   // 見る動線を選択（点滅を止める）
   const meguriCollapse = ()=>{ if(!floatDesk.classList.contains("collapsed")) setDeskCollapsed(true); };  // めぐり開始＝半紙は畳んで見やすく
   const dz = (window.innerWidth <= 560) ? 1.0 : 1.3;
@@ -3009,6 +3089,51 @@ function gotoNote(step){
 }
 document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
 document.getElementById("nextNote").addEventListener("click", ()=> gotoNote(1));
+
+/* ---------- のぞき見：赤枠の半紙を単タップ→ぴたっと寄せ／もう一度タップ・めぐり・手動ズームで戻る ---------- */
+function clearPeek(){ peeking = false; peekPrev = null; }
+function fitZoomForFocus(){
+  const el = focusId ? notesEl.querySelector('.note[data-id="'+focusId+'"]') : null;
+  const vw = scrollEl.clientWidth, vh = scrollEl.clientHeight;
+  const bw = (el && el.offsetWidth)  || NOTE_W;   // transform非依存の実寸（縦横・回転に追従）
+  const bh = (el && el.offsetHeight) || NOTE_H;
+  const z = Math.min(vw*0.9/bw, vh*0.82/bh);      // 横9割・縦8割に収める＝ぴたっと
+  return clamp(Math.round(z*100)/100, zoomMin, ZOOM_MAX);
+}
+function enterPeek(){
+  const p = focusId && posts.get(focusId);
+  if(!p) return;
+  peekPrev = { z: zoom, sl: scrollEl.scrollLeft, st: scrollEl.scrollTop };   // 戻し先＝巡回率＋今の位置
+  peeking = true;                                  // 同一idなのでcenterOnNote内のclearPeekは発火しない
+  centerOnNote(focusId, p, fitZoomForFocus());     // ぴたっと率で中央へ（赤枠は維持）
+}
+function exitPeek(){
+  if(!peekPrev){ clearPeek(); return; }
+  const pv = peekPrev; clearPeek();
+  if(pv.z !== zoom){ zoom = pv.z; applyZoom(); }
+  panTo(pv.sl, pv.st);                             // 巡回率＋元の位置へスーッと戻す
+  drawMinimap();
+}
+function togglePeek(){ peeking ? exitPeek() : enterPeek(); }
+
+let peekDownX=0, peekDownY=0, peekDownT=0, peekArmed=false;
+notesEl.addEventListener("pointerdown", e=>{
+  const ne = e.target.closest(".note");
+  peekArmed = !!(ne && ne.dataset.id === focusId && ne.classList.contains("found")
+            && !e.target.closest("button, .acts, .admin-line, input, a")   // 操作系の子は除外
+            && !placing && !repositioningId && !(rotorEl && rotorEl.classList.contains("show")));
+  if(peekArmed){ peekDownX=e.clientX; peekDownY=e.clientY; peekDownT=Date.now(); }
+});
+notesEl.addEventListener("pointerup", e=>{
+  if(!peekArmed) return;
+  peekArmed = false;
+  if(pinchActive) return;
+  const ne = e.target.closest(".note");
+  if(!ne || ne.dataset.id !== focusId) return;
+  if(Math.hypot(e.clientX-peekDownX, e.clientY-peekDownY) > 8) return;   // ドラッグ/スクロールは無視
+  if(Date.now()-peekDownT > 500) return;                                 // 長押しは無視
+  togglePeek();
+});
 
 /* ---------- 起動時：貼られた半紙のどれかにランダムでフォーカス ---------- */
 let didInitialFocus = false;
@@ -3058,17 +3183,25 @@ function toast(msg, ms){
 
 /* ---------- 自分の半紙への「そうだね」通知（まとめて・控えめ・作業中は黙る） ---------- */
 const mySouSeen = new Map();    // 自分の半紙の既知そうだね数（通知の基準）
-const souPending = new Map();   // 未通知の増分： id -> {delta, name}
+const souPending = new Map();   // 未通知の新着フラグ： id -> true（中身は使わない）
 let souFlushT = null;
+let souTotal = 0;               // このセッションで自分の半紙にもらった そうだね 累計
+let souSessionStart = 0;        // 最初のそうだねが来た時刻（「○○で」の起点）
+function humanDur(ms){          // ざっくり経過（精度より動機づけ優先）
+  const m = Math.floor(ms/60000);
+  if(m < 1) return "さっきから";
+  if(m < 60) return `${m}分で`;
+  return `${Math.floor(m/60)}時間で`;
+}
 function seedMySou(id, p){ if(p && p.uid===myUid) mySouSeen.set(id, p.sou||0); }   // 基準を記録（通知はしない）
 function noteMySou(id, p){      // 自分の半紙のsou変化（onChildChangedから）
   if(!p || p.uid !== myUid) return;
   const now = p.sou||0;
   const seen = mySouSeen.has(id) ? mySouSeen.get(id) : now;   // 未記録なら今を基準に（最初の変化は飲み込む）
   if(now > seen){
-    const cur = souPending.get(id) || { delta:0, name:(p.name||"あなたの半紙") };
-    cur.delta += (now - seen); cur.name = p.name || cur.name;
-    souPending.set(id, cur);
+    if(!souSessionStart) souSessionStart = Date.now();   // 最初の そうだね で起点を打つ
+    souTotal += (now - seen);
+    souPending.set(id, true);                            // 新着あり
     scheduleSouFlush();
   }
   mySouSeen.set(id, now);
@@ -3077,15 +3210,9 @@ function scheduleSouFlush(){ if(!souFlushT) souFlushT = setTimeout(()=>{ souFlus
 function flushSouNotify(){
   if(!souPending.size) return;
   if(!floatDesk.classList.contains("collapsed")){ scheduleSouFlush(); return; }   // 作業中（半紙を開いている）は黙る＝閉じたら出す
-  const entries = [...souPending.entries()];
   souPending.clear();
-  let total = 0; for(const [,inf] of entries) total += inf.delta;
-  entries.sort((a,b)=> b[1].delta - a[1].delta);   // 一番増えた半紙へ飛べるように
-  const [topId, topInfo] = entries[0];
-  const msg = (entries.length===1)
-    ? `「${topInfo.name}」にそうだね +${topInfo.delta}`
-    : `${entries.length}枚にそうだね 合計+${total}`;
-  showSouNotify(msg, topId);
+  const when = humanDur(Date.now() - (souSessionStart || Date.now()));
+  showSouNotify(`${when}${souTotal}そうだね もらったよ！`);
 }
 // 通知を出す前に、クラスタの画面位置から伸びる向きを決める：
 // 下半分にある→下辺を固定して通知をツールの上に積む（上へ伸びる）／上半分→上辺を固定して通知をツールの下に（下へ伸びる）。どちらもツール本体は動かない
@@ -3103,7 +3230,7 @@ function anchorClusterForNotif(){
     if(wrap) wrap.style.order = "1";   // ツールの下＝下へ伸びる
   }
 }
-function showSouNotify(msg, id){
+function showSouNotify(msg){
   let wrap = document.getElementById("souNotifs");
   if(!wrap){ wrap = document.createElement("div"); wrap.id="souNotifs"; document.body.appendChild(wrap); }
   anchorClusterForNotif();   // 位置に応じて伸びる向きを決めてから積む
@@ -3112,11 +3239,7 @@ function showSouNotify(msg, id){
   const seal = document.createElement("span"); seal.className="sn-seal"; seal.textContent="そうだね";
   const m = document.createElement("span"); m.className="sn-msg"; m.textContent = msg;
   el.appendChild(seal); el.appendChild(m);
-  el.addEventListener("click", ()=>{
-    const p = posts.get(id);
-    if(p){ setDeskCollapsed(true); centerOnNote(id, p, Math.min(ZOOM_MAX, 1.8)); }   // タップでその半紙へ
-    el.classList.remove("show"); setTimeout(()=> el.remove(), 250);
-  });
+  el.addEventListener("click", ()=>{ el.classList.remove("show"); setTimeout(()=> el.remove(), 250); });   // タップで消すだけ（半紙へは飛ばない）
   wrap.appendChild(el);
   requestAnimationFrame(()=> el.classList.add("show"));
   setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=> el.remove(), 300); }, 6000);
@@ -3377,14 +3500,14 @@ window.addEventListener("load", ()=> requestAnimationFrame(()=>setupCanvas())); 
   const pos = (savedPos!=null && !isNaN(+savedPos)) ? clamp(Math.round(+savedPos),0,SIZE_STEPS-1) : Math.floor(Math.random()*3); // 既定は細めの段をランダム
   sl.value = pos;
   size = sizeFromPos(pos);
-  brushType = ["taper","round","flat"].includes(savedBrush) ? savedBrush : ["taper","round","flat"][Math.floor(Math.random()*3)];
+  brushType = ["taper","round","flat","fude"].includes(savedBrush) ? savedBrush : "fude";   // 既定は本筆（保存があればそれを優先）
   document.querySelectorAll(".brush-opt").forEach(o=> o.classList.toggle("active", o.dataset.brush===brushType));
 })();
 if (document.fonts && document.fonts.load) { document.fonts.load('700 20px "Shippori Mincho"').catch(()=>{}); }
 computeZoomMin();
 applyZoom();
 setDeskCollapsed(true);   // 初期状態は閉じる（PC・モバイルとも）
-floatDesk.classList.add("guiding");   // ガイドが中央にいる間は左上バーを隠す（runGuideで到着時に表示）
+if(!LS.get("fg_guideSeen")) floatDesk.classList.add("guiding");   // 初回ガイドを出す時だけ左上バーを隠す（2回目以降は付けない＝起動フラッシュ防止）
 requestAnimationFrame(()=>{ randomStartScroll(); drawMinimap(); });
 
 /* ---------- 同時接続100枠の節約：放置・裏タブは自動で接続を解放、操作/再表示で再接続 ---------- */
