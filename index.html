@@ -365,6 +365,15 @@
   .btn-post:disabled{opacity:.5;cursor:default;box-shadow:0 3px 0 var(--shu-deep)}
 
   .hint{font-size:11px;color:var(--ink-faint);opacity:.75;margin-top:9px;line-height:1.6}
+  .pwa-link{display:none;margin-top:8px;font-size:11.5px;line-height:1.5;color:var(--shu);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+  .pwa-link.show{display:block}
+  .pwa-card{width:min(360px,calc(100vw - 36px));max-height:calc(100dvh - 40px);overflow-y:auto;text-align:left}
+  .pwa-body{font-size:13px;line-height:1.75;color:var(--sumi)}
+  .pwa-body p{margin:0 0 12px}
+  .pwa-steps{background:#fffdf7;border:1px solid var(--paper-edge);border-radius:10px;padding:8px 11px;margin-top:8px;font-size:13px}
+  .pwa-steps.me{box-shadow:0 0 0 2px var(--shu) inset}   /* 使ってる端末に合う手順を強調 */
+  .pwa-steps ol{margin:5px 0 0;padding-left:1.3em}
+  .pwa-steps li{margin:3px 0}
 
   /* ---- seal (落款) on the 半紙：書き出しと同じふたば朱印PNGをプレビュー ---- */
   .seal-stamp{
@@ -829,6 +838,7 @@
         </div>
         <input type="file" id="photoInput" accept="image/*" style="display:none">
         <div class="hint" id="photoHint">お習字撮影は自分のもの限定。要撮影登録</div>
+        <div class="pwa-link" id="pwaLink" role="button" tabindex="0" hidden>📲 ホーム画面に追加してアプリのように使う</div>
       </div>
       <div class="desk-foot">
         <input class="name-field" id="who" type="text" maxlength="16" placeholder="名前（空欄ならランダム）">
@@ -911,6 +921,28 @@
     <div class="login-btns">
       <button class="login-cancel" id="nameCancel">キャンセル</button>
       <button class="login-ok" id="nameSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="login-mask" id="pwaMask">
+  <div class="login-card pwa-card">
+    <div class="login-title">アプリのように使う（PWA）</div>
+    <div class="pwa-body">
+      <p><b>PWAって？</b><br>Progressive Web App の略 ホーム画面にアイコンを置いて アプリみたいに全画面で開けるようにする仕組み ストアから落とすアプリとは別物で このサイトをアイコンから開けるようにするだけ</p>
+      <p><b>「インストール」と出るけど安心して</b><br>スマホの写真 連絡先 位置情報などを覗いたり保存したりは一切しない やってるのは ふつうのWebサイトを全画面で開くだけ タブが減って起動が速くなって 横回転もしなくなるから描きやすくなる ぐらい いつでもアイコン長押しで消せる</p>
+      <div class="pwa-steps" id="pwaStepsIOS">
+        <b>iPhone・iPad（Safari）</b>
+        <ol><li>下の 共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を選ぶ</li><li>右上の「追加」を押す</li></ol>
+      </div>
+      <div class="pwa-steps" id="pwaStepsAndroid">
+        <b>Android（Chrome）</b>
+        <ol><li>右上のメニュー（⋮）を押す</li><li>「アプリをインストール」か「ホーム画面に追加」を選ぶ</li><li>「追加」か「インストール」を押す</li></ol>
+      </div>
+    </div>
+    <div class="login-btns">
+      <button class="login-ok" id="pwaInstall" hidden>今すぐ追加</button>
+      <button class="login-cancel" id="pwaClose">とじる</button>
     </div>
   </div>
 </div>
@@ -3530,6 +3562,37 @@ function setBig(on){
 }
 bigBtn.addEventListener("click", ()=> setBig(!floatDesk.classList.contains("big")));
 if(LS.get("fg_big")==="1") setBig(true);    // 前回の設定を引き継ぐ
+
+/* PWA：ホーム画面に追加の案内（モバイルかつ未インストール時だけ出す） */
+(function(){
+  const link = document.getElementById("pwaLink");
+  const mask = document.getElementById("pwaMask");
+  if(!link || !mask) return;
+  const ua = navigator.userAgent || "";
+  const isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);   // iPadOSのSafari対策
+  const isAndroid = /android/i.test(ua);
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  let deferred = null;   // Android Chromeのネイティブ追加プロンプト
+  const instBtn = document.getElementById("pwaInstall");
+  window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferred = e; if(instBtn) instBtn.hidden = false; });
+  if((isIOS || isAndroid) && !standalone){ link.hidden = false; link.classList.add("show"); }   // 該当端末で未インストールなら表示
+  const sIOS = document.getElementById("pwaStepsIOS"), sAnd = document.getElementById("pwaStepsAndroid");
+  if(isIOS && sIOS) sIOS.classList.add("me");                         // 端末に合う手順を強調
+  if(isAndroid && sAnd) sAnd.classList.add("me");
+  const open  = ()=>{ if(instBtn) instBtn.hidden = !deferred; mask.classList.add("show"); };
+  const close = ()=> mask.classList.remove("show");
+  link.addEventListener("click", open);
+  link.addEventListener("keydown", e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); open(); } });
+  document.getElementById("pwaClose").addEventListener("click", close);
+  mask.addEventListener("click", e=>{ if(e.target===mask) close(); });
+  if(instBtn) instBtn.addEventListener("click", async ()=>{
+    if(!deferred) return;
+    close(); deferred.prompt();
+    try{ await deferred.userChoice; }catch(_){}
+    deferred = null; instBtn.hidden = true;
+  });
+  window.addEventListener("appinstalled", ()=>{ link.classList.remove("show"); link.hidden = true; close(); });
+})();
 
 /* 初回ガイド：画面中央で点滅 → 左上の「半紙を広げる」バーへスッと移動 → 短く点滅して消える */
 function runGuide(){
