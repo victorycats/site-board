@@ -1547,6 +1547,7 @@ function isBlank(){
 
 /* ---------- board (Firebase Realtime DB) ---------- */
 const NOTE_W = 104, NOTE_H = 196;
+const NOTE_LAND_W = 160, NOTE_LAND_H = 150;   // 横向き半紙の実寸（CSS contain-intrinsic-size と一致）。中心算出に使う
 const WALL_W = 6000, WALL_H = 2200;
 const GUT_X = 220, GUT_Y = 300;                      // 壁の外側スクロール余白（ガター）。端の半紙も画面中央へ寄せられる
 const FULL_W = WALL_W + GUT_X*2, FULL_H = WALL_H + GUT_Y*2;   // スクロール領域（壁＋ガター）の総寸
@@ -2252,8 +2253,8 @@ function rotorCenter(){
   const p = posts.get(rotorId); if(!p) return null;
   const r = notesEl.getBoundingClientRect();  // notes層（ガターぶん内側）基準＝半紙ローカルのまま
   return {
-    cx: r.left + (clamp(nxOf(p,rotorId),0,1)*(WALL_W-NOTE_W) + NOTE_W/2)*zoom,
-    cy: r.top  + (clamp(nyOf(p,rotorId),0,1)*(WALL_H-NOTE_H) + NOTE_H/2)*zoom
+    cx: r.left + (clamp(nxOf(p,rotorId),0,1)*(WALL_W-NOTE_W) + (p.land?NOTE_LAND_W:NOTE_W)/2)*zoom,
+    cy: r.top  + (clamp(nyOf(p,rotorId),0,1)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2)*zoom
   };
 }
 function rotorPoint(angle, C, Rr){           // 角度→ダイヤル上の座標（真下=0、左で＋）
@@ -2335,8 +2336,8 @@ function rotorMoveDrag(e){
   const r = notesEl.getBoundingClientRect();              // notes層（ガターぶん内側）基準＝半紙ローカルへ変換
   const cx = (e.clientX - rotorMoveOff.x - r.left)/zoom;   // 半紙中心の狙い位置（wall内・等倍）
   const cy = (e.clientY - rotorMoveOff.y - r.top)/zoom;
-  p.nx = clamp((cx - NOTE_W/2)/(WALL_W-NOTE_W), 0, 1);
-  p.ny = clamp((cy - NOTE_H/2)/(WALL_H-NOTE_H), 0, 1);
+  p.nx = clamp((cx - (p.land?NOTE_LAND_W:NOTE_W)/2)/(WALL_W-NOTE_W), 0, 1);
+  p.ny = clamp((cy - (p.land?NOTE_LAND_H:NOTE_H)/2)/(WALL_H-NOTE_H), 0, 1);
   const el = rotorNoteEl();
   if(el){ el.style.left = (clamp(p.nx,0,1)*(WALL_W-NOTE_W))+"px"; el.style.top = (clamp(p.ny,0,1)*(WALL_H-NOTE_H))+"px"; }
   positionRotor();                            // ダイヤルも半紙に追従
@@ -3111,8 +3112,8 @@ function centerOnNote(id, p, targetZoom, smooth){
   const target = (targetZoom != null) ? targetZoom : ((window.innerWidth <= 560) ? 1.0 : 1.3);  // 既定: PC130%/モバイル100%
   const z = clamp(target, zoomMin, ZOOM_MAX);
   if(z !== zoom){ zoom = z; applyZoom(); }
-  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
-  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
+  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + (p.land?NOTE_LAND_W:NOTE_W)/2) * zoom;
+  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2) * zoom;
   const {ax, ay} = focusAnchor();
   const tLeft = clamp(px - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
   const tTop  = clamp(py - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
@@ -3173,8 +3174,8 @@ function fitZoomForFocus(){
 function zoomToNoteInstant(id, p, z){   // のぞき見用：パン演出・赤枠の再点滅なしで、その場でズームして中央へ
   if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; }
   if(z !== zoom){ zoom = z; applyZoom(); }
-  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
-  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
+  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + (p.land?NOTE_LAND_W:NOTE_W)/2) * zoom;
+  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2) * zoom;
   const {ax, ay} = focusAnchor();
   scrollEl.scrollLeft = clamp(px - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
   scrollEl.scrollTop  = clamp(py - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
@@ -3223,7 +3224,7 @@ let focusTimer = null;
 function focusReachable(id, p, z){
   const vh = scrollEl.clientHeight;
   const {ay} = focusAnchor();
-  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * z;
+  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2) * z;
   const st = clamp(py - ay, 0, Math.max(0, FULL_H*z - vh));
   const sy = py - st;                       // 画面上のY
   const topSafe = 60;                        // ヘッダーぶん
