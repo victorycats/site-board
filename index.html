@@ -227,8 +227,6 @@
     position:relative;
     flex:0 0 auto;
   }
-  /* iOS対策：道具をスクロールしても半紙は上端に固定（画面外へ出さない＝canvasの描画バッファ破棄＝空白化を防ぐ）。横向き2カラム時は除外 */
-  body.touch .float-desk:not(.land):not(.collapsed) .canvas-frame{ position:sticky; top:0; z-index:3; }
   /* 8 x 12 cm => 2 : 3 */
   .canvas-frame::before{
     content:"";position:absolute;inset:5px;
@@ -3468,8 +3466,30 @@ function updateDeskMore(){
     deskMoreUpEl.classList.toggle("show", showUp);
   }
 }
+/* iOS対策：本文スクロールでcanvasが画面外に出ると描画バッファを捨てて白紙化することがある。
+   スクロール開始時に半紙を控え、停止後に描き戻して必ず復元する（レイアウトは変えない）。*/
+let padShadow = null, padScrollT = 0, padCaptured = false;
+function capturePad(){
+  try{
+    if(!pad.width || !pad.height) return;
+    if(!padShadow) padShadow = document.createElement("canvas");
+    if(padShadow.width!==pad.width || padShadow.height!==pad.height){ padShadow.width=pad.width; padShadow.height=pad.height; }
+    padShadow.getContext("2d").drawImage(pad,0,0);
+    padCaptured = true;
+  }catch(_){}
+}
+function restorePad(){
+  if(!padCaptured || !padShadow) return;
+  try{ if(pad.width===padShadow.width && pad.height===padShadow.height) ctx.drawImage(padShadow,0,0); }catch(_){}
+}
 if(deskBodyEl){
   deskBodyEl.addEventListener("scroll", updateDeskMore, {passive:true});
+  deskBodyEl.addEventListener("scroll", ()=>{
+    if(floatDesk.classList.contains("collapsed")) return;
+    if(!padCaptured) capturePad();                                   // ジェスチャ開始：今の絵を控える
+    clearTimeout(padScrollT);
+    padScrollT = setTimeout(()=>{ restorePad(); padCaptured=false; }, 220);   // 停止後に描き戻す（白紙化していても復元）
+  }, {passive:true});
   deskMoreEl.addEventListener("click", ()=> deskBodyEl.scrollBy({top:deskBodyEl.clientHeight*0.6, behavior:"smooth"}));
   if(deskMoreUpEl) deskMoreUpEl.addEventListener("click", ()=> deskBodyEl.scrollBy({top:-deskBodyEl.clientHeight*0.6, behavior:"smooth"}));
 }
