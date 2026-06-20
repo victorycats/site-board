@@ -1369,15 +1369,22 @@ const PAL_DEFAULT_MID = ["#b5341f","#1d5a8c","#2f7d3b","#e6b800","#f0e0d6"];
 let paletteMid = PAL_DEFAULT_MID.slice();
 let extraNames = [];   // 運営が meta/randomNames で追加したランダムネーム（全員共有）
 function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
+const PAL_NAMES = {"#1a1714":"黒","#b5341f":"赤","#1d5a8c":"青","#2f7d3b":"緑","#e6b800":"黄","#f0e0d6":"肌","#f7f4ec":"白"};
+function palLabel(hex){ return PAL_NAMES[(hex||"").toLowerCase()] || ""; }                 // 既知色は色名、未知（カスタム）色は空
+function palIsLight(hex){ const m=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex||""); if(!m) return false; const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); return (0.299*r+0.587*g+0.114*b) > 150; }  // 明るい色＝濃い文字(lite)
+function swatchHTML(hex, extraStyle){
+  const lab = palLabel(hex), title = lab || hex;
+  return '<div class="swatch'+(palIsLight(hex)?" lite":"")+'" data-color="'+hex+'" style="background:'+hex+(extraStyle||"")+'" title="'+title+'" aria-label="'+title+'">'+lab+'</div>';
+}
 function renderPalette(){
   const wrap = document.getElementById("swatchScroll");
   if(!wrap) return;
   const cur = color;        // 今の選択を覚える
   const mids = (paletteMid||[]).filter(isHex6).slice(0,5);
   let html = '';
-  html += '<div class="swatch" data-color="'+PAL_BLACK+'" style="background:'+PAL_BLACK+'"></div>';
-  mids.forEach(c=>{ html += '<div class="swatch" data-color="'+c+'" style="background:'+c+'"></div>'; });
-  html += '<div class="swatch" data-color="#f7f4ec" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="半紙色"></div>';
+  html += swatchHTML(PAL_BLACK);                                                  // 墨＝黒
+  mids.forEach(c=>{ html += swatchHTML(c); });                                    // 中間色（既定は赤青緑黄肌、カスタム可）
+  html += swatchHTML("#f7f4ec", ";box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)");   // 半紙色＝白
   wrap.innerHTML = html;
   // 選択を復元（無くなっていたら墨）。描画状態も合わせる
   let sel = wrap.querySelector('.swatch[data-color="'+cur+'"]') || wrap.querySelector('.swatch[data-color="'+PAL_BLACK+'"]');
