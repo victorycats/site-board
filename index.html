@@ -2981,7 +2981,6 @@ let mmRaf=0;
 scrollEl.addEventListener("scroll", ()=>{ if(panRAF) return; if(!mmRaf) mmRaf=requestAnimationFrame(()=>{ mmRaf=0; drawMinimap(); }); scheduleLazy(); });   // 自動パン中(panRAF)は毎フレーム再描画しない＝着地時にまとめて
 
 /* ---------- 半紙めぐり ---------- */
-let meguriIdx = -1;
 let shuffleOrder = [];   // 未読なし巡回用：シャッフル済みの並び（id配列）。←→で往復
 let shuffleIdx = -1;
 let meguriStarted = false;   // めぐりを開始したか（初回だけ読みやすい下限を当て、以降は今の率を維持）
@@ -3073,14 +3072,22 @@ function gotoNote(step){
   meguriStarted = true;
   const u = unreadList();   // 未読を古い→新しい
   if(u.length){
-    // 未読があれば常に未読優先。▶＝最古の未読から順に / ◀＝最新の未読を、押すたびに端から1枚ずつ消化（古い順に読み進められる）
-    const [id,p] = (step >= 0) ? u[0] : u[u.length-1];
+    // 未読があれば常に未読優先。▶＝最古から順に / ◀＝最新から、押すたびに端から1枚ずつ消化（古い順に読み進められる）
+    let idx = (step >= 0) ? 0 : u.length-1;
+    if(u.length > 1 && u[idx][0] === focusId){   // 今見てる端の未読＝初回フォーカスで見せた未消化の1枚なら、消化しつつ次へ進める＝初手の空振り防止
+      markSeen(focusId, posts.get(focusId));
+      u.splice(idx, 1);
+      idx = (step >= 0) ? 0 : u.length-1;
+    }
+    const [id,p] = u[idx];
     meguriCollapse(); markSeen(id, p); centerOnNote(id, p, useZoom);
     return;
   }
   // 未読が無くなったら自由閲覧：開いた時にシャッフルした並びを作り、←→でその順を往復（末尾でループ）
   rebuildShuffleIfNeeded();
   if(!shuffleOrder.length){ toast("まだ半紙がないよ"); return; }
+  const cur = focusId ? shuffleOrder.indexOf(focusId) : -1;   // 今見てる半紙がシャッフル順にあれば、そこを起点に＝▶◀が現在地の隣へ動く（起動直後の飛びを防ぐ）
+  if(cur >= 0) shuffleIdx = cur;
   shuffleIdx = ((shuffleIdx + step) % shuffleOrder.length + shuffleOrder.length) % shuffleOrder.length;
   let sid = shuffleOrder[shuffleIdx];
   let sp = posts.get(sid);
@@ -3154,11 +3161,10 @@ function initialFocus(){
   const full = visibleByRecency();
   if(!full.length) return;       // まだ無ければ何もしない（次の追加で再トライ）
   didInitialFocus = true;
-  // 2回目以降の訪問で未読があれば、最新の未読にフォーカス。初回訪問（seenT=今で未読0）や未読なしはランダムのまま
+  // 2回目以降の訪問で未読があれば、最古の未読にフォーカス＝そこから▶で前進して読み進められる。初回訪問や未読なしはランダム
   const u = unreadList();        // 未読を古い→新しい
   if(u.length){
-    const [id,p] = u[u.length-1];                 // 最新の未読
-    meguriIdx = full.findIndex(e=> e[0]===id);    // めぐりの番号も合わせる
+    const [id,p] = u[0];                          // 最古の未読＝読み始めの先頭
     centerOnNote(id, p, Math.min(ZOOM_MAX, 1.8), false); // 読みやすい倍率で即時（既読化はしない＝未読は保持）
     return;
   }
@@ -3169,7 +3175,6 @@ function initialFocus(){
     if(ok.length) list = ok;     // 候補があれば絞り込み、無ければ全体から選ぶ
   }
   const [id,p] = list[Math.floor(Math.random()*list.length)];
-  meguriIdx = full.findIndex(e=> e[0]===id);   // めぐりの番号は全体基準で合わせる
   centerOnNote(id, p, focusZoom, false);   // 開いたときは100%以上のランダム倍率で即時フォーカス
 }
 
