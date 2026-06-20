@@ -187,6 +187,7 @@
   @media(max-width:560px){
     .float-desk{width:min(300px,calc(100vw - 24px));left:12px;top:14px;max-height:calc(100dvh - 28px)}
     .zoom-ctl input[type=range]{display:none}  /* モバイルは幅広スライダーだけ隠す（＋／−と％は残す） */
+    .zoom-ctl .zval{flex:1;font-size:15px;min-width:0}   /* 空いた中央を％で埋める（タップで100%） */
   }
   /* 横半紙（手動の「横」ボタン）×タッチ端末×画面が横長：モーダルをほぼ全画面・2カラム（左＝半紙が高さいっぱい／右＝道具＋貼る）。縦持ちでは発動させない（縦レイアウトのまま横半紙を収める） */
   @media (orientation: landscape){
@@ -448,7 +449,9 @@
   }
   .zoom-ctl .zbtn:hover{filter:brightness(1.05)}
   .zoom-ctl .zbtn:active{transform:scale(.96)}
-  .zoom-block .zval{align-self:center;font-size:10px;font-weight:700;color:#e9dcc0;opacity:.92;line-height:1;letter-spacing:.04em;margin-bottom:-6px}
+  .zoom-ctl .zval{flex:0 0 auto;min-width:44px;text-align:center;font-size:11px;font-weight:700;color:#e9dcc0;opacity:.92;letter-spacing:.04em;cursor:pointer;user-select:none;padding:4px 2px;border-radius:6px}
+  .zoom-ctl .zval:hover{background:rgba(255,255,255,.10)}
+  .zoom-ctl .zval:active{transform:scale(.96)}
 
   .note{
     position:absolute;width:104px;
@@ -866,10 +869,10 @@
       <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
     </div>
     <div class="zoom-block">
-      <span class="zval" id="zoomVal">50%</span>
       <div class="zoom-ctl">
         <div class="zbtn" id="zoomOut" title="縮小">－</div>
         <input type="range" id="zoomRange" min="0.5" max="2" step="0.1" value="0.5">
+        <span class="zval" id="zoomVal" role="button" tabindex="0" title="タップで100%に戻す">50%</span>
         <div class="zbtn" id="zoomIn" title="拡大">＋</div>
       </div>
       <div class="status"><span class="live-dot"></span><span id="count">読み込み中…</span><span class="remain" id="remain"></span></div>
@@ -1146,9 +1149,9 @@ function start(e){
     lastWidth = Math.max(1, size*0.10)*DPR;                // 入りはごく細い種点から
     dot(last, lastWidth); return;
   }
-  if(brushType==="nijimi"){                                // にじみ筆：柔らか縁＋遅いほど太く溜まる
+  if(brushType==="nijimi"){                                // にじみ筆：柔らか縁＋遅いほど太く溜まる＋入り/はらい
     velEMA = null; buildNijimiDab();
-    lastWidth = size*DPR*0.5;                              // 半径として使う
+    lastWidth = size*DPR*0.32 + 1.5*DPR;                  // 入り：細い種点から育てる（タップは小さめの濡れ点）
     stampDab(last.x, last.y, lastWidth); return;
   }
   lastWidth = Math.max(1, size*0.12)*DPR; // 入り：ごく細い種点から
@@ -1291,9 +1294,10 @@ function buildNijimiDab(){
   const S = 96, c = document.createElement("canvas"); c.width = S; c.height = S;
   const g = c.getContext("2d");
   const grd = g.createRadialGradient(S/2,S/2,0, S/2,S/2,S/2);
-  grd.addColorStop(0,    hexA(color, 0.60));   // 芯はしっかり
-  grd.addColorStop(0.45, hexA(color, 0.30));
-  grd.addColorStop(0.80, hexA(color, 0.08));   // 外へ向けて羽毛のように薄く＝にじみ
+  grd.addColorStop(0,    hexA(color, 0.50));   // 芯（重なりで締まる）
+  grd.addColorStop(0.28, hexA(color, 0.34));
+  grd.addColorStop(0.58, hexA(color, 0.15));
+  grd.addColorStop(0.80, hexA(color, 0.05));   // 外へ向けて羽毛のように薄く＝にじみ
   grd.addColorStop(1,    hexA(color, 0.0));
   g.fillStyle = grd; g.beginPath(); g.arc(S/2,S/2,S/2,0,Math.PI*2); g.fill();
   nijimiDab = c;
@@ -1311,15 +1315,36 @@ function nijimiMove(p){
   velEMA = (velEMA==null) ? v : velEMA*0.6 + v*0.4;
   const slow = clamp(1 - (velEMA-0.1)/2.0, 0, 1);       // 0=速い .. 1=遅い（遅いほど太く溜まる）
   const base = size*DPR;
-  const targetR = base*(0.42 + 0.30*slow);              // 半径：遅いと太く滲む・速いと締まる
+  strokeLen += dist;
+  const head = Math.min(1, strokeLen/(base*1.6));        // 入り：置いた直後は細く、少し進むと本来の太さへ
+  const core  = base*(0.34 + 0.24*slow) * (0.5 + 0.5*head);  // インクの芯：遅いと太い／入りで立ち上げ
+  const bleed = Math.max(core*0.80, 3*DPR);            // にじみ余白：最低3px(CSS)＝細くても柔らか縁が必ず出る（＝丸筆と差別化）
+  const targetR = core + bleed;
   const r = lastWidth + (targetR-lastWidth)*0.35;       // なめらかに
-  const step = Math.max(1, r*0.32);                     // パスに沿って隙間なく撒く
+  const step = Math.max(1, r*0.30);                     // パスに沿って隙間なく撒く
   const n = Math.max(1, Math.ceil(dist/step));
   for(let i=1;i<=n;i++){
     const t=i/n;
     stampDab(last.x+dx*t, last.y+dy*t, r);
   }
+  if(dist>0.5){ lastDir = { x:dx/dist, y:dy/dist }; }   // はらいの向き
   last = p; lastTime = now; lastWidth = r;
+}
+function nijimiEnd(){                                     // 終わりを速度で出し分け：速い＝はらい / 遅い＝止め(溜まり)
+  if(!last) return;
+  const base = size*DPR;
+  const fast = (velEMA!=null) ? clamp((velEMA-0.3)/1.8, 0, 1) : 0;
+  if(fast>0.15 && lastDir){                              // はらい：運筆方向へ細く抜く（濡れたまま小さな点へ）
+    const len = Math.min((lastWidth||base)*2.4, base*2.8) * fast;
+    const steps = 6;
+    const r0 = lastWidth || base*0.5;
+    for(let i=1;i<=steps;i++){
+      const t=i/steps;
+      stampDab(last.x+lastDir.x*len*t, last.y+lastDir.y*len*t, Math.max(1.0*DPR, r0*(1 - t*0.9)));
+    }
+  } else {                                               // 止め：丸い溜まり
+    stampDab(last.x, last.y, (lastWidth||base*0.5)*1.08);
+  }
 }
 function dot(p,w){
   ctx.fillStyle = color;
@@ -1331,7 +1356,7 @@ function end(){
   const wasDrawing = drawing;
   if(drawing && brushType==="taper") taperTail();
   if(drawing && brushType==="fude") fudeTail();
-  if(drawing && brushType==="nijimi" && last) stampDab(last.x, last.y, (lastWidth||size*DPR*0.5)*1.08);   // 抜きは丸い溜まりで終わる
+  if(drawing && brushType==="nijimi") nijimiEnd();   // にじみ：速い＝はらい / 遅い＝丸い溜まり
   drawing=false; last=null; lastDir=null;
   if(wasDrawing) scheduleDraftSave();   // 描き終わりごとに下書き退避
 }
@@ -2876,6 +2901,11 @@ function notifyZoomedOut(prev){
   }
 }
 document.getElementById("zoomRange").addEventListener("input", e=> zoomTo(+e.target.value));
+(function(){ const zv=document.getElementById("zoomVal"); if(!zv) return;
+  const reset=()=> zoomTo(1.0);                 // ％タップ＝100%（画面中央基準）へ戻す
+  zv.addEventListener("click", reset);
+  zv.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); reset(); } });
+})();
 const zoomStep = ()=> isMobileView() ? 0.2 : 0.1;   // モバイルはピンチが重いので、ボタン1回で20%（PCは従来の10%）
 document.getElementById("zoomIn").addEventListener("click", ()=> zoomTo(zoom+zoomStep()));
 document.getElementById("zoomOut").addEventListener("click", ()=> zoomTo(zoom-zoomStep()));
