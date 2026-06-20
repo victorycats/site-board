@@ -831,9 +831,9 @@
           <span class="tool-label">筆</span>
           <div class="brush-seg" id="brushSeg">
             <button class="brush-opt active" data-brush="fude">本筆</button>
-            <button class="brush-opt" data-brush="taper">先細</button>
             <button class="brush-opt" data-brush="round">丸筆</button>
             <button class="brush-opt" data-brush="flat">平筆</button>
+            <button class="brush-opt" data-brush="nijimi">にじみ</button>
           </div>
         </div>
         <input type="file" id="photoInput" accept="image/*" style="display:none">
@@ -1072,7 +1072,8 @@ let lastWidth = 0;
 let lastDir = null;   // 直近の運筆方向（抜きの三角テールに使う）
 let penOff = false;   // 描画中にカーソルが描画エリア外に出ているか
 let strokeLen = 0;    // ストローク開始からの累積距離（入りの筆圧ランプ用）
-let velEMA = null;    // 運筆速度の平滑値（本筆の太さ・かすれ判定）
+let velEMA = null;    // 運筆速度の平滑値（本筆の太さ・かすれ判定／にじみの溜まり判定）
+let nijimiDab = null; // にじみ筆の柔らかダブ（色付きスプライト。ストローク毎に作り直す）
 let fudeStrands = []; // 本筆の毛束オフセット（ストローク開始時に固定し、線に沿って連続させる）
 let fillMode = false; // 塗りつぶし（バケツ）モード
 let undoStack = [];
@@ -1145,6 +1146,11 @@ function start(e){
     lastWidth = Math.max(1, size*0.10)*DPR;                // 入りはごく細い種点から
     dot(last, lastWidth); return;
   }
+  if(brushType==="nijimi"){                                // にじみ筆：柔らか縁＋遅いほど太く溜まる
+    velEMA = null; buildNijimiDab();
+    lastWidth = size*DPR*0.5;                              // 半径として使う
+    stampDab(last.x, last.y, lastWidth); return;
+  }
   lastWidth = Math.max(1, size*0.12)*DPR; // 入り：ごく細い種点から
   dot(last, lastWidth);
 }
@@ -1184,6 +1190,7 @@ function move(e){
     last = p; return;
   }
   if(brushType==="fude"){ fudeMove(p); return; }
+  if(brushType==="nijimi"){ nijimiMove(p); return; }
 
   const now = performance.now();
   const dx = p.x-last.x, dy = p.y-last.y;
@@ -1240,14 +1247,14 @@ function fudeMove(p){
   const targetW = base*(0.10+0.90*head)*(1 - 0.55*fast);// 速いほど細い（溜めると太い）
   const w = lastWidth + (targetW-lastWidth)*0.45;       // 太さをなめらかに
   ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
-  if(fast < 0.45 || w < 3){                             // ゆっくり＝満遍なく接地（ベタ一本）
+  if(fast < 0.45 || w < base*0.33){                    // ゆっくり、または細い部分（はらい）＝ベタ一本（割らない）
     ctx.lineWidth = w;
     ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
-  } else {                                              // 速い＝毛が割れて隙間（かすれ）
+  } else {                                              // 太くて速い所だけ毛が割れて隙間（かすれ）
     const ux = dist>0?dx/dist:0, uy = dist>0?dy/dist:0;
     const px = -uy, py = ux;                            // 進行方向に直交
     const split = (fast-0.45)/0.55;                     // 速いほど広がる
-    const offMul = w*(0.5 + 0.5*split);
+    const offMul = w*(0.35 + 0.35*split);               // 控えめに広げる（広げすぎるとカーブで毛が捻れてドリルになる）
     for(const s of fudeStrands){
       const ox = px*s.off*offMul, oy = py*s.off*offMul;
       ctx.lineWidth = Math.max(0.6, w*s.w);
@@ -1257,27 +1264,62 @@ function fudeMove(p){
   if(dist>0.5){ lastDir = { x:dx/dist, y:dy/dist }; }
   last = p; lastTime = now; lastWidth = w;
 }
-// 本筆の抜き：運筆方向へ延長しつつ毛を割って擦れさせ、先端を紙へ消す
+// 本筆の抜き：運筆方向へ延長して0へ細める＝きれいな先細りの点に（毛を扇状に割らない＝はらいが螺旋にならない）
 function fudeTail(){
   if(!last || !lastDir || lastWidth<=0.6) return;
-  const steps = 7;
-  const len = Math.min(lastWidth*2.2, size*DPR*1.8);
-  const ux=lastDir.x, uy=lastDir.y, px=-uy, py=ux;
+  const steps = 8;
+  const len = Math.min(lastWidth*2.0, size*DPR*1.6);
+  const ux=lastDir.x, uy=lastDir.y;
   ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
   let x=last.x, y=last.y, w0=lastWidth;
   for(let i=1;i<=steps;i++){
     const nx = last.x + ux*(len*i/steps);
     const ny = last.y + uy*(len*i/steps);
     const w1 = lastWidth*(1 - i/steps);
-    const seg = Math.max(0.4,(w0+w1)/2);
-    const spread = seg*1.1;
-    for(const s of fudeStrands){
-      const ox=px*s.off*spread, oy=py*s.off*spread;
-      ctx.lineWidth = Math.max(0.4, seg*s.w*1.1);
-      ctx.beginPath(); ctx.moveTo(x+ox,y+oy); ctx.lineTo(nx+ox,ny+oy); ctx.stroke();
-    }
+    ctx.lineWidth = Math.max(0.3,(w0+w1)/2);
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
     x=nx; y=ny; w0=w1;
   }
+}
+// にじみ筆：柔らか縁＋遅いほど太く滲む（ソフトなダブをパスに沿ってスタンプ。重なりで芯が締まり縁は羽毛のまま＝濡れた質感）
+function hexA(hex, a){
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex||"#1a1714");
+  if(!m) return "rgba(26,23,20,"+a+")";
+  return "rgba("+parseInt(m[1],16)+","+parseInt(m[2],16)+","+parseInt(m[3],16)+","+a+")";
+}
+function buildNijimiDab(){
+  const S = 96, c = document.createElement("canvas"); c.width = S; c.height = S;
+  const g = c.getContext("2d");
+  const grd = g.createRadialGradient(S/2,S/2,0, S/2,S/2,S/2);
+  grd.addColorStop(0,    hexA(color, 0.60));   // 芯はしっかり
+  grd.addColorStop(0.45, hexA(color, 0.30));
+  grd.addColorStop(0.80, hexA(color, 0.08));   // 外へ向けて羽毛のように薄く＝にじみ
+  grd.addColorStop(1,    hexA(color, 0.0));
+  g.fillStyle = grd; g.beginPath(); g.arc(S/2,S/2,S/2,0,Math.PI*2); g.fill();
+  nijimiDab = c;
+}
+function stampDab(cx, cy, r){
+  if(!nijimiDab || r<=0) return;
+  ctx.drawImage(nijimiDab, cx-r, cy-r, r*2, r*2);
+}
+function nijimiMove(p){
+  const now = performance.now();
+  const dx = p.x-last.x, dy = p.y-last.y;
+  const dist = Math.hypot(dx,dy);
+  const dt = Math.max(1, now-lastTime);
+  const v = (dist/DPR)/dt;                              // CSS px/ms
+  velEMA = (velEMA==null) ? v : velEMA*0.6 + v*0.4;
+  const slow = clamp(1 - (velEMA-0.1)/2.0, 0, 1);       // 0=速い .. 1=遅い（遅いほど太く溜まる）
+  const base = size*DPR;
+  const targetR = base*(0.42 + 0.30*slow);              // 半径：遅いと太く滲む・速いと締まる
+  const r = lastWidth + (targetR-lastWidth)*0.35;       // なめらかに
+  const step = Math.max(1, r*0.32);                     // パスに沿って隙間なく撒く
+  const n = Math.max(1, Math.ceil(dist/step));
+  for(let i=1;i<=n;i++){
+    const t=i/n;
+    stampDab(last.x+dx*t, last.y+dy*t, r);
+  }
+  last = p; lastTime = now; lastWidth = r;
 }
 function dot(p,w){
   ctx.fillStyle = color;
@@ -1289,6 +1331,7 @@ function end(){
   const wasDrawing = drawing;
   if(drawing && brushType==="taper") taperTail();
   if(drawing && brushType==="fude") fudeTail();
+  if(drawing && brushType==="nijimi" && last) stampDab(last.x, last.y, (lastWidth||size*DPR*0.5)*1.08);   // 抜きは丸い溜まりで終わる
   drawing=false; last=null; lastDir=null;
   if(wasDrawing) scheduleDraftSave();   // 描き終わりごとに下書き退避
 }
@@ -3634,7 +3677,8 @@ window.addEventListener("load", ()=> requestAnimationFrame(()=>setupCanvas())); 
   const pos = (savedPos!=null && !isNaN(+savedPos)) ? clamp(Math.round(+savedPos),0,SIZE_STEPS-1) : Math.floor(Math.random()*3); // 既定は細めの段をランダム
   sl.value = pos;
   size = sizeFromPos(pos);
-  brushType = ["taper","round","flat","fude"].includes(savedBrush) ? savedBrush : "fude";   // 既定は本筆（保存があればそれを優先）
+  const sb = (savedBrush==="taper") ? "nijimi" : savedBrush;   // 先細は廃止＝にじみへ移行
+  brushType = ["nijimi","round","flat","fude"].includes(sb) ? sb : "fude";   // 既定は本筆（保存があればそれを優先）
   document.querySelectorAll(".brush-opt").forEach(o=> o.classList.toggle("active", o.dataset.brush===brushType));
 })();
 if (document.fonts && document.fonts.load) { document.fonts.load('700 20px "Shippori Mincho"').catch(()=>{}); }
