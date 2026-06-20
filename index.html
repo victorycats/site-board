@@ -278,6 +278,7 @@
   .swatch > *{ pointer-events:none }
   .swatch.active{border-color:var(--sumi);box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--sumi)}
   .swatch.active::after{content:"";position:absolute;inset:0;border-radius:50%}
+  .swatch.paper-swatch:not(.active){ box-shadow:inset 0 0 0 1px rgba(140,110,60,.28) }   /* 白(半紙色)の薄い縁。選択時は他と同じ選択リングを優先（インラインで上書きしない） */
   /* 色パレット：折り返さず横1列。入りきらない分は横スクロール、右端に矢印ヒント */
   #colors{position:relative;flex-wrap:nowrap;gap:6px}
   .swatch-wrap{position:relative;flex:1 1 auto;min-width:0;display:flex}
@@ -801,7 +802,7 @@
               <div class="swatch" data-color="#2f7d3b" style="background:#2f7d3b" title="緑" aria-label="緑">緑</div>
               <div class="swatch lite" data-color="#e6b800" style="background:#e6b800" title="黄" aria-label="黄">黄</div>
               <div class="swatch lite" data-color="#f0e0d6" style="background:#f0e0d6" title="肌" aria-label="肌">肌</div>
-              <div class="swatch lite" data-color="#f7f4ec" style="background:#f7f4ec;box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)" title="白" aria-label="白">白</div>
+              <div class="swatch lite paper-swatch" data-color="#f7f4ec" style="background:#f7f4ec" title="白" aria-label="白">白</div>
             </div>
             <div class="swatch-more left" id="swatchMoreL" aria-hidden="true">◀</div>
             <div class="swatch-more right" id="swatchMore" aria-hidden="true">▶</div>
@@ -1086,6 +1087,7 @@ function pos(e){
   return { x: cx * (pad.width / r.width), y: cy * (pad.height / r.height) };
 }
 function pushUndo(){
+  if(typeof cancelPadRestore==="function") cancelPadRestore();   // 描く/塗る/消す等の直前＝控えからの描き戻しを止める（新しい変更を消さない）
   try{ undoStack.push(ctx.getImageData(0,0,pad.width,pad.height)); if(undoStack.length>12) undoStack.shift(); }catch(e){}
 }
 // 念のため：描き始める瞬間に半紙の内部解像度が表示サイズと合っているか確認し、ズレてたら設定し直す
@@ -1372,9 +1374,10 @@ function isHex6(c){ return typeof c==="string" && /^#[0-9a-fA-F]{6}$/.test(c); }
 const PAL_NAMES = {"#1a1714":"黒","#b5341f":"赤","#1d5a8c":"青","#2f7d3b":"緑","#e6b800":"黄","#f0e0d6":"肌","#f7f4ec":"白"};
 function palLabel(hex){ return PAL_NAMES[(hex||"").toLowerCase()] || ""; }                 // 既知色は色名、未知（カスタム）色は空
 function palIsLight(hex){ const m=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex||""); if(!m) return false; const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); return (0.299*r+0.587*g+0.114*b) > 150; }  // 明るい色＝濃い文字(lite)
-function swatchHTML(hex, extraStyle){
+function swatchHTML(hex){
   const lab = palLabel(hex), title = lab || hex;
-  return '<div class="swatch'+(palIsLight(hex)?" lite":"")+'" data-color="'+hex+'" style="background:'+hex+(extraStyle||"")+'" title="'+title+'" aria-label="'+title+'">'+lab+'</div>';
+  const isPaper = (hex||"").toLowerCase()==="#f7f4ec";
+  return '<div class="swatch'+(palIsLight(hex)?" lite":"")+(isPaper?" paper-swatch":"")+'" data-color="'+hex+'" style="background:'+hex+'" title="'+title+'" aria-label="'+title+'">'+lab+'</div>';
 }
 function renderPalette(){
   const wrap = document.getElementById("swatchScroll");
@@ -1384,7 +1387,7 @@ function renderPalette(){
   let html = '';
   html += swatchHTML(PAL_BLACK);                                                  // 墨＝黒
   mids.forEach(c=>{ html += swatchHTML(c); });                                    // 中間色（既定は赤青緑黄肌、カスタム可）
-  html += swatchHTML("#f7f4ec", ";box-shadow:inset 0 0 0 1px rgba(140,110,60,.28)");   // 半紙色＝白
+  html += swatchHTML("#f7f4ec");   // 半紙色＝白（縁取りはCSSのpaper-swatchで。選択時は他と同じリング）
   wrap.innerHTML = html;
   // 選択を復元（無くなっていたら墨）。描画状態も合わせる
   let sel = wrap.querySelector('.swatch[data-color="'+cur+'"]') || wrap.querySelector('.swatch[data-color="'+PAL_BLACK+'"]');
@@ -2901,8 +2904,9 @@ function randomStartScroll(){
   const vw = scrollEl.clientWidth, vh = scrollEl.clientHeight;
   const maxX = Math.max(0, FULL_W*zoom - vw);
   const maxY = Math.max(0, FULL_H*zoom - vh);
-  scrollEl.scrollLeft = Math.random()*maxX;
-  scrollEl.scrollTop  = Math.random()*maxY;
+  // 壁の内側に着地（ガターの空白へは飛ばない）
+  scrollEl.scrollLeft = clamp(GUT_X*zoom + Math.random()*Math.max(0, WALL_W*zoom - vw), 0, maxX);
+  scrollEl.scrollTop  = clamp(GUT_Y*zoom + Math.random()*Math.max(0, WALL_H*zoom - vh), 0, maxY);
 }
 
 /* ---------- minimap ---------- */
@@ -3134,18 +3138,29 @@ function fitZoomForFocus(){
   const z = Math.min(vw*0.9/bw, vh*0.82/bh);      // 横9割・縦8割に収める＝ぴたっと
   return clamp(Math.round(z*100)/100, zoomMin, ZOOM_MAX);
 }
+function zoomToNoteInstant(id, p, z){   // のぞき見用：パン演出・赤枠の再点滅なしで、その場でズームして中央へ
+  if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; }
+  if(z !== zoom){ zoom = z; applyZoom(); }
+  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + NOTE_W/2) * zoom;
+  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + NOTE_H/2) * zoom;
+  const {ax, ay} = focusAnchor();
+  scrollEl.scrollLeft = clamp(px - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(py - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
+  drawMinimap();
+}
 function enterPeek(){
   const p = focusId && posts.get(focusId);
   if(!p) return;
   peekPrev = { z: zoom, sl: scrollEl.scrollLeft, st: scrollEl.scrollTop };   // 戻し先＝巡回率＋今の位置
-  peeking = true;                                  // 同一idなのでcenterOnNote内のclearPeekは発火しない
-  centerOnNote(focusId, p, fitZoomForFocus());     // ぴたっと率で中央へ（赤枠は維持）
+  peeking = true;
+  zoomToNoteInstant(focusId, p, fitZoomForFocus());   // ぴたっと率へ即ズーム（めぐりの演出は入れない＝目障りな動きを省く）
 }
 function exitPeek(){
   if(!peekPrev){ clearPeek(); return; }
   const pv = peekPrev; clearPeek();
+  if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; }
   if(pv.z !== zoom){ zoom = pv.z; applyZoom(); }
-  panTo(pv.sl, pv.st);                             // 巡回率＋元の位置へスーッと戻す
+  scrollEl.scrollLeft = pv.sl; scrollEl.scrollTop = pv.st;   // 巡回率＋元の位置へ即時で戻す
   drawMinimap();
 }
 function togglePeek(){ peeking ? exitPeek() : enterPeek(); }
@@ -3489,6 +3504,7 @@ function restorePad(){
   if(!padCaptured || !padShadow) return;
   try{ if(pad.width===padShadow.width && pad.height===padShadow.height) ctx.drawImage(padShadow,0,0); }catch(_){}
 }
+function cancelPadRestore(){ if(padScrollT){ clearTimeout(padScrollT); padScrollT=0; } padCaptured=false; }   // 半紙を変更したら控えは無効化（描き戻しで上書きしない）
 if(deskBodyEl){
   deskBodyEl.addEventListener("scroll", updateDeskMore, {passive:true});
   deskBodyEl.addEventListener("scroll", ()=>{
