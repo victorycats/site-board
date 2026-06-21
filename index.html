@@ -177,7 +177,7 @@
   .desk-orient:hover{filter:brightness(1.04)}
   .desk-orient.active{background:var(--shu);color:#fff}
   /* body.touch でも向きボタンは出す（試験的：端末の向きに加えて手動でも切替可） */
-  .desk-body{padding:0 10px 0;overflow-x:hidden;overflow-y:auto;min-height:0;flex:1 1 auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .desk-body{padding:0 10px 0;overflow-x:hidden;overflow-y:auto;min-height:0;flex:1 1 auto;scrollbar-width:none}  /* iOS: -webkit-overflow-scrolling:touch を外す（内部テキスト入力がフォーカス不能になる既知バグ回避） */
   .desk-body::-webkit-scrollbar{display:none}   /* スクロールバーで右側に段差(へこみ)が出ないように隠す（合図は▼で表示） */
   .float-desk.collapsed .desk-body{display:none}
   .float-desk.collapsed{width:auto;max-width:none}
@@ -211,7 +211,7 @@
     height:100%; width:auto; max-width:100%;   /* 高さいっぱい・幅はアスペクト（.landで3:2） */
   }
   body.touch .float-desk.land:not(.collapsed) .tools{
-    grid-column:2; grid-row:1; margin:0; padding:0; overflow-y:auto; min-height:0; -webkit-overflow-scrolling:touch;
+    grid-column:2; grid-row:1; margin:0; padding:0; overflow-y:auto; min-height:0;
   }
   body.touch .float-desk.land:not(.collapsed) .desk-foot{
     grid-column:2; grid-row:2; margin:0; padding:6px 0 0; background:transparent; border-top:1px solid rgba(140,110,60,.25);
@@ -290,7 +290,7 @@
     display:flex;align-items:center;gap:6px;
     flex:1 1 auto;min-width:0;
     overflow-x:auto;overflow-y:hidden;
-    scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;
+    scrollbar-width:none;scroll-behavior:smooth;
     padding:7px 4px;     /* 上下＝選択リング(4px)が切れない余白／左右＝端の色のリング分 */
   }
   .swatch-scroll::-webkit-scrollbar{display:none}
@@ -411,7 +411,7 @@
     height:100%;width:100%;
     border-radius:0;
     background:#e7ddc6;
-    -webkit-overflow-scrolling:touch;
+
     cursor:grab;
     touch-action:pan-x pan-y;
     scrollbar-width:thin;
@@ -585,7 +585,7 @@
   .login-mask.show{display:flex}
   .login-card{width:min(320px,calc(100vw - 40px));background:var(--paper);border-radius:14px;padding:18px 16px;box-shadow:0 14px 40px rgba(0,0,0,.4), inset 0 0 0 1px var(--paper-edge);display:flex;flex-direction:column;gap:10px;max-height:calc(100dvh - 40px);overflow-y:auto;position:relative}
   /* 小画面で中身が見切れる時だけ ▲▼ を出してスクロール可能を示す（タップでスクロール） */
-  .scroll-cue{position:sticky;z-index:6;display:none;align-self:center;flex:0 0 auto;width:40px;height:22px;line-height:22px;text-align:center;border-radius:11px;background:rgba(60,42,24,.62);color:#fff;font-size:11px;cursor:pointer;user-select:none;box-shadow:0 2px 7px rgba(0,0,0,.28)}
+  .scroll-cue{position:sticky;z-index:6;display:none;align-self:center;flex:0 0 auto;width:40px;height:22px;line-height:22px;text-align:center;border-radius:11px;background:rgba(60,42,24,.62);color:#fff;font-size:11px;pointer-events:none;user-select:none;box-shadow:0 2px 7px rgba(0,0,0,.28)}
   .scroll-cue.up{top:4px;margin-bottom:-32px}
   .scroll-cue.down{bottom:4px;margin-top:-32px}
   .login-card.cue-up > .scroll-cue.up{display:block}
@@ -2352,7 +2352,7 @@ async function createPost(nx, ny){
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
   const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
   const img = pendingImg;
-  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, dev: deviceTag() };  // 画像は含めない・作成者UID・端末区分付き
+  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid };  // 画像は含めない・作成者UID付き（dev等の追加項目は既存ルールが弾くので入れない）
   if(landscape) meta.land = true;   // 横向きの時だけ向き情報を付与（縦は項目を増やさない＝既存ルールのまま通る）
   postBtn.disabled = true;
   let reserved = false;
