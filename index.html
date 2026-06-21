@@ -2352,7 +2352,7 @@ async function createPost(nx, ny){
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
   const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
   const img = pendingImg;
-  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid };  // 画像は含めない・作成者UID付き（dev等の追加項目は既存ルールが弾くので入れない）
+  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, dev: deviceTag() };  // 端末区分(dev)付き。ルール未許可なら下で自動的にdev無し再試行するので投稿は止まらない
   if(landscape) meta.land = true;   // 横向きの時だけ向き情報を付与（縦は項目を増やさない＝既存ルールのまま通る）
   postBtn.disabled = true;
   let reserved = false;
@@ -2388,7 +2388,17 @@ async function createPost(nx, ny){
     const writes = { [bpath("posts/"+id)]: meta };
     if(!imgPath) writes[bpath("imgs/"+id)] = img;
     if(finalNow) writes["throttle/"+myUid] = serverTimestamp();
-    await update(ref(db), writes);
+    try{
+      await update(ref(db), writes);
+    }catch(err){
+      // 端末区分(dev)を許可してないルールだと弾かれる → devを外して再試行（投稿は止めない）
+      if(meta.dev !== undefined){
+        console.warn("dev付き投稿が拒否されたためdev無しで再試行（端末割合を使うならルールでdevを許可）", err);
+        delete meta.dev;
+        writes[bpath("posts/"+id)] = meta;
+        await update(ref(db), writes);
+      } else { throw err; }
+    }
     reserved = false;   // 書き込み成功＝枠は確定
     if(finalNow){ lastPostAt = Date.now(); LS.set("fg_lastPost", String(lastPostAt)); }
     editingId = id;
