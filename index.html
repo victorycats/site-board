@@ -578,7 +578,13 @@
   /* 運営ログイン（メール＋パスワード同時入力） */
   .login-mask{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(26,23,20,.5);backdrop-filter:blur(3px);padding:20px}
   .login-mask.show{display:flex}
-  .login-card{width:min(320px,calc(100vw - 40px));background:var(--paper);border-radius:14px;padding:18px 16px;box-shadow:0 14px 40px rgba(0,0,0,.4), inset 0 0 0 1px var(--paper-edge);display:flex;flex-direction:column;gap:10px}
+  .login-card{width:min(320px,calc(100vw - 40px));background:var(--paper);border-radius:14px;padding:18px 16px;box-shadow:0 14px 40px rgba(0,0,0,.4), inset 0 0 0 1px var(--paper-edge);display:flex;flex-direction:column;gap:10px;max-height:calc(100dvh - 40px);overflow-y:auto;position:relative}
+  /* 小画面で中身が見切れる時だけ ▲▼ を出してスクロール可能を示す（タップでスクロール） */
+  .scroll-cue{position:sticky;z-index:6;display:none;align-self:center;flex:0 0 auto;width:40px;height:22px;line-height:22px;text-align:center;border-radius:11px;background:rgba(60,42,24,.62);color:#fff;font-size:11px;cursor:pointer;user-select:none;box-shadow:0 2px 7px rgba(0,0,0,.28)}
+  .scroll-cue.up{top:4px;margin-bottom:-32px}
+  .scroll-cue.down{bottom:4px;margin-top:-32px}
+  .login-card.cue-up > .scroll-cue.up{display:block}
+  .login-card.cue-down > .scroll-cue.down{display:block}
   .login-title{font-weight:700;color:var(--sumi);text-align:center;letter-spacing:.08em;margin-bottom:2px}
   .login-card input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border:1px solid var(--paper-edge);background:#fffdf7;color:var(--sumi);font-size:16px}
   .login-card input:focus{outline:none;border-color:var(--shu)}
@@ -3632,6 +3638,32 @@ function makeDraggable(el, lsKey, ignoreSel){
 // 右下クラスタ（ズーム/めぐり/マップ/通知）を一体で可動に。ボタン・スライダー・マップ・通知の上では掴まず、ピルの余白やラベル・枚数行で掴んで移動
 makeDraggable(document.querySelector(".corner-cluster"), "fg_clusterpos", "button, input, .zbtn, .zval, .minimap, .sou-notif");
 makeDraggable(document.getElementById("adminBar"), "fg_adminbarpos", ".ab-act");   // 運営バーも可動（操作チップの上では掴まない）
+
+/* 全モーダル共通：小画面で中身が見切れる時だけ ▲▼ を出してスクロール可能を示す（タップでスクロール／上端・下端では消える） */
+(function(){
+  function update(card){
+    card.classList.toggle("cue-up",   card.scrollTop > 4);
+    card.classList.toggle("cue-down", card.scrollTop + card.clientHeight < card.scrollHeight - 4);
+  }
+  function ensure(card){
+    if(card._cued) return; card._cued = true;
+    const up = document.createElement("div");   up.className = "scroll-cue up";   up.textContent = "▲";
+    const down = document.createElement("div"); down.className = "scroll-cue down"; down.textContent = "▼";
+    up.addEventListener("click",   ()=> card.scrollBy({ top:-card.clientHeight*0.8, behavior:"smooth" }));
+    down.addEventListener("click", ()=> card.scrollBy({ top: card.clientHeight*0.8, behavior:"smooth" }));
+    card.prepend(up); card.appendChild(down);
+    card.addEventListener("scroll", ()=> update(card), { passive:true });
+  }
+  function refresh(mask){
+    if(!mask.classList.contains("show")) return;
+    const card = mask.firstElementChild; if(!card) return;
+    ensure(card);
+    requestAnimationFrame(()=>{ update(card); requestAnimationFrame(()=> update(card)); });   // フォント/画像反映後にも再判定
+  }
+  const mo = new MutationObserver(ms=> ms.forEach(m=>{ if(m.attributeName==="class") refresh(m.target); }));
+  document.querySelectorAll(".login-mask").forEach(mask=> mo.observe(mask, { attributes:true, attributeFilter:["class"] }));
+  window.addEventListener("resize", ()=> document.querySelectorAll(".login-mask.show").forEach(refresh));
+})();
 window.addEventListener("resize", ()=>{ if(typeof fitStatusTicker==="function") fitStatusTicker(); });
 
 // 配置リセット：半紙パネルと右下クラスタの位置を既定に戻す
