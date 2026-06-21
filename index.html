@@ -111,7 +111,7 @@
   .zoom-block{
     display:flex;flex-direction:column;align-items:stretch;gap:5px;
     background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
-    padding:7px 9px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
+    padding:7px 8px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
   .zoom-block .status{font-size:11px;color:#e9dcc0;display:flex;align-items:center;justify-content:flex-end;overflow:hidden}
   .zoom-block .status .status-inner{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;will-change:transform}
@@ -685,7 +685,7 @@
   .meguri{
     display:flex;align-items:center;justify-content:space-between;gap:6px;
     background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
-    padding:6px 9px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
+    padding:6px 8px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
   .meguri button{
     width:36px;height:32px;border-radius:7px;border:none;cursor:pointer;
@@ -699,7 +699,7 @@
     0%,100%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 0 rgba(181,52,31,0)}
     50%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 7px rgba(181,52,31,.38)}
   }
-  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:3px 6px;min-width:34px;text-align:center;cursor:pointer;border-radius:7px}
+  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:2px 2px;min-width:34px;text-align:center;cursor:pointer;border-radius:7px;white-space:nowrap}
   .meguri .lab:hover{background:rgba(255,255,255,.10)}
   .meguri .lab:active{transform:scale(.97)}
   .meguri .lab-pc{white-space:nowrap}
@@ -722,11 +722,11 @@
   .minimap canvas{display:block;width:100%;height:auto;aspect-ratio:6000/2200}
   @media(max-width:560px){
     .corner-cluster{right:10px;bottom:10px;gap:6px;width:148px}   /* モバイルは幅も間隔も詰めてコンパクトに */
-    .meguri{padding:5px 9px;gap:5px}
+    .meguri{padding:5px 7px;gap:5px}
     .meguri .lab-pc{display:none}
     .meguri .lab-mb{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
     .meguri button{width:40px;height:34px;font-size:16px}
-    .zoom-block{padding:6px 9px;gap:4px}
+    .zoom-block{padding:6px 7px;gap:4px}
     .zoom-ctl{justify-content:center;gap:4px}   /* スライダー非表示。中央％を伸縮させ−／＋を端へ＝左右対称（gap+min-widthのはみ出しで＋が右に寄るのを解消） */
     .zoom-ctl .zbtn{width:40px;height:34px}
     .zoom-ctl .zval{flex:1;min-width:0;font-size:14px;padding:4px 2px}
