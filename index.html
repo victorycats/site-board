@@ -498,9 +498,11 @@
     text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     font-family:"Shippori Mincho",serif;margin:4px 2px 4px;
   }
-  .note .who-uid{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:9px;color:#9c7f5e;text-align:center;word-break:break-all;line-height:1.25;margin:3px 2px;padding:0 1px}
-  body.is-admin .note .who{display:none}        /* 運営ビュー：名前の代わりに固有情報(uid)を出す */
-  body.is-admin .note .who-uid{display:block}
+  .note .who-uid{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:#7c6650;line-height:1.2;margin:3px 2px;padding:0 1px;align-items:center;justify-content:center;gap:4px}
+  .note .who-uid .uid-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+  .note .who-uid .uid-code{letter-spacing:.06em;font-weight:600}
+  body.is-admin .note .who{display:none}        /* 運営ビュー：名前の代わりに匿名の同一性タグを出す */
+  body.is-admin .note .who-uid{display:flex}
   .note .acts{display:flex;align-items:center;gap:3px;margin-top:auto;flex-wrap:wrap}
   .sou-btn{
     flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:2px;white-space:nowrap;
@@ -645,6 +647,8 @@
   .hist-rank .rk{display:flex;align-items:center;gap:7px;font-size:12px}
   .hist-rank .rk-n{width:18px;text-align:right;color:var(--ink-faint);font-variant-numeric:tabular-nums}
   .hist-rank .rk-name{flex:1;color:var(--sumi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hist-rank .rk-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+  .hist-rank .rk-tag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--ink-faint);margin-left:6px;letter-spacing:.05em}
   .hist-rank .rk-c{color:var(--shu);font-weight:700;font-variant-numeric:tabular-nums}
   .hist-dev{display:flex;flex-direction:column;gap:4px;margin-top:2px}
   .hist-dev .dv{display:flex;align-items:center;gap:7px;font-size:11px}
@@ -1938,13 +1942,14 @@ function render(){
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
     const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span style="flex:1"></span>${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
+    const idtg = admin ? idTag(p.uid) : null;
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     return `
     <div class="note${mine}${rotoring}${fresh}${flippedCls}${p.land?' land':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
-      ${ admin ? `<div class="who-uid" title="${esc(p.uid||'')}">${esc(p.uid||'(uid無し)')}</div>` : '' }
+      ${ admin ? `<div class="who-uid" title="同一性タグ ${idtg.code}（個人特定不可）"><span class="uid-dot" style="background:hsl(${idtg.hue} 62% 55%)"></span><span class="uid-code">${idtg.code}</span></div>` : '' }
       <div class="acts">
         ${ admin ? adminActs : `${souBtn}${delBtn}${repoBtn}${undoBtn}` }
       </div>
@@ -2970,6 +2975,17 @@ async function composeBoardCanvas(list, imgsMap){
 
 /* ---------- 板の履歴・分析（運営） ---------- */
 function escHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// 個人特定を避けつつ同一性だけ認識できる匿名タグ：同じuid→同じコード＆色、違うuid→別。生uid/生IPは出さない
+function idTag(uid){
+  const s = String(uid||"");
+  if(!s) return { code:"------", hue:0 };
+  let h = 2166136261;                                  // FNV-1a 32bit
+  for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h = h >>> 0;
+  const code = (h % 2176782336).toString(36).toUpperCase().padStart(6,"0");   // 36^6＝固定6桁
+  const hue  = (h >> 9) % 360;                          // 色相は別ビットから（コードと独立気味に）
+  return { code, hue };
+}
 function fmtDate(ms){ if(!ms) return "—"; const d=new Date(ms), p=n=>String(n).padStart(2,"0"); return (d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes()); }
 function humanGap(ms){ if(!(ms>0)) return "—"; const mins=Math.floor(ms/60000), h=Math.floor(mins/60), d=Math.floor(h/24); if(d>0) return d+"日"+(h%24)+"時間"; if(h>0) return h+"時間"+(mins%60)+"分"; return mins+"分"; }
 function parseStamp(s){ const m=/^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})$/.exec(s||""); return m ? Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]) : null; }
@@ -2983,7 +2999,7 @@ function renderCurrentStats(){
   arr.forEach(p=>{ const u=p.uid||"?"; const e=(byUid[u]=byUid[u]||{n:0,name:p.name,uid:u}); e.n++; if(p.name) e.name=p.name; });
   const top = Object.values(byUid).sort((a,b)=>b.n-a.n).slice(0,8);
   h += '<div class="hist-sec">投稿者ランキング（同一端末＝同一uid）</div><div class="hist-rank">';
-  top.forEach((t,i)=>{ h += '<div class="rk"><span class="rk-n">'+(i+1)+'</span><span class="rk-name" title="'+escHtml(t.uid)+'">'+escHtml(t.name||"名無し")+'</span><span class="rk-c">'+t.n+'回</span></div>'; });
+  top.forEach((t,i)=>{ const tg=idTag(t.uid); h += '<div class="rk"><span class="rk-n">'+(i+1)+'</span><span class="rk-dot" style="background:hsl('+tg.hue+' 62% 55%)"></span><span class="rk-name" title="同一性タグ '+tg.code+'">'+escHtml(t.name||"名無し")+'<span class="rk-tag">'+tg.code+'</span></span><span class="rk-c">'+t.n+'回</span></div>'; });
   h += '</div>';
   const dev = {}; let devN=0;
   arr.forEach(p=>{ if(p.dev){ dev[p.dev]=(dev[p.dev]||0)+1; devN++; } });
