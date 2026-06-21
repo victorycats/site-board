@@ -111,7 +111,7 @@
   .zoom-block{
     display:flex;flex-direction:column;align-items:stretch;gap:5px;
     background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
-    padding:7px 10px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
+    padding:7px 9px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
   .zoom-block .status{font-size:11px;color:#e9dcc0;display:flex;align-items:center;justify-content:flex-end;overflow:hidden}
   .zoom-block .status .status-inner{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;will-change:transform}
@@ -498,6 +498,9 @@
     text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     font-family:"Shippori Mincho",serif;margin:4px 2px 4px;
   }
+  .note .who-uid{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:9px;color:#9c7f5e;text-align:center;word-break:break-all;line-height:1.25;margin:3px 2px;padding:0 1px}
+  body.is-admin .note .who{display:none}        /* 運営ビュー：名前の代わりに固有情報(uid)を出す */
+  body.is-admin .note .who-uid{display:block}
   .note .acts{display:flex;align-items:center;gap:3px;margin-top:auto;flex-wrap:wrap}
   .sou-btn{
     flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:2px;white-space:nowrap;
@@ -620,6 +623,35 @@
   .name-slot .nm{flex:1;color:var(--sumi);font-size:14px;word-break:break-all}
   .name-slot .pal-del{flex:0 0 auto}
   #nameSlots:empty::after{content:"まだ追加された名前はありません";color:var(--ink-faint);font-size:12px;opacity:.7}
+  .name-grp-h{font-size:11px;color:var(--ink-faint);opacity:.85;font-weight:700;margin:8px 2px 1px}
+  .name-slot.fixed{opacity:.85;background:#f6f1e6}
+  .name-slot .nm-fixed{flex:0 0 auto;font-size:10px;color:var(--ink-faint);opacity:.7}
+  /* 履歴・分析モーダル */
+  .hist-card{width:min(420px,calc(100vw - 28px))}
+  #histBody{display:flex;flex-direction:column;gap:5px}
+  .hist-h{font-weight:700;color:var(--sumi);font-size:13px;margin:8px 2px 2px;border-bottom:1px solid var(--paper-edge);padding-bottom:3px}
+  .hist-sec{font-size:11px;color:var(--ink-faint);font-weight:700;margin:6px 2px 0}
+  .hist-empty{color:var(--ink-faint);font-size:12px;opacity:.8;padding:4px 2px}
+  .hist-empty.small{font-size:11px}
+  .hist-row{background:#fffdf7;border:1px solid var(--paper-edge);border-radius:8px;padding:7px 9px;display:flex;flex-direction:column;gap:3px}
+  .hist-main{font-size:13px;color:var(--sumi)}
+  .hist-main .hist-dt{color:var(--ink-faint);font-size:11px;margin-left:6px}
+  .hist-sub{font-size:11px;color:var(--ink-faint)}
+  .hist-acts{display:flex;gap:6px;align-items:center;margin-top:2px;flex-wrap:wrap}
+  .hist-dl{font-size:11px;color:var(--shu);text-decoration:underline;cursor:pointer}
+  .hist-redo{font-size:11px;background:rgba(140,36,20,.08);color:#9c6b50;border:1px solid rgba(140,36,20,.22);border-radius:6px;padding:3px 9px;cursor:pointer}
+  .hist-redo:disabled{opacity:.5}
+  .hist-rank{display:flex;flex-direction:column;gap:2px}
+  .hist-rank .rk{display:flex;align-items:center;gap:7px;font-size:12px}
+  .hist-rank .rk-n{width:18px;text-align:right;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  .hist-rank .rk-name{flex:1;color:var(--sumi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hist-rank .rk-c{color:var(--shu);font-weight:700;font-variant-numeric:tabular-nums}
+  .hist-dev{display:flex;flex-direction:column;gap:4px;margin-top:2px}
+  .hist-dev .dv{display:flex;align-items:center;gap:7px;font-size:11px}
+  .hist-dev .dv-l{width:78px;color:var(--sumi)}
+  .hist-dev .dv-bar{flex:1;height:8px;border-radius:5px;background:var(--paper-edge);overflow:hidden}
+  .hist-dev .dv-bar>span{display:block;height:100%;background:var(--shu);border-radius:5px}
+  .hist-dev .dv-c{width:64px;text-align:right;color:var(--ink-faint);font-variant-numeric:tabular-nums}
   .rotor-hint{
     position:absolute;left:50%;transform:translateX(-50%);
     white-space:nowrap;font-size:11px;font-family:"Zen Kaku Gothic New",sans-serif;
@@ -653,7 +685,7 @@
   .meguri{
     display:flex;align-items:center;justify-content:space-between;gap:6px;
     background:rgba(26,23,20,.55);backdrop-filter:blur(3px);
-    padding:6px 8px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
+    padding:6px 9px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.3);
   }
   .meguri button{
     width:36px;height:32px;border-radius:7px;border:none;cursor:pointer;
@@ -667,7 +699,9 @@
     0%,100%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 0 rgba(181,52,31,0)}
     50%{box-shadow:0 4px 12px rgba(0,0,0,.3), 0 0 0 7px rgba(181,52,31,.38)}
   }
-  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:0 2px;min-width:34px;text-align:center}
+  .meguri .lab{color:#e9dcc0;font-size:11px;font-family:"Shippori Mincho",serif;letter-spacing:.08em;padding:3px 6px;min-width:34px;text-align:center;cursor:pointer;border-radius:7px}
+  .meguri .lab:hover{background:rgba(255,255,255,.10)}
+  .meguri .lab:active{transform:scale(.97)}
   .meguri .lab-pc{white-space:nowrap}
   .meguri .lab-mb{display:none}
   .meguri .lab-mb .l2{font-size:11px}
@@ -688,7 +722,7 @@
   .minimap canvas{display:block;width:100%;height:auto;aspect-ratio:6000/2200}
   @media(max-width:560px){
     .corner-cluster{right:10px;bottom:10px;gap:6px;width:148px}   /* モバイルは幅も間隔も詰めてコンパクトに */
-    .meguri{padding:5px 7px;gap:5px}
+    .meguri{padding:5px 9px;gap:5px}
     .meguri .lab-pc{display:none}
     .meguri .lab-mb{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
     .meguri button{width:40px;height:34px;font-size:16px}
@@ -980,6 +1014,14 @@
   </div>
 </div>
 
+<div class="login-mask" id="historyMask">
+  <div class="login-card hist-card">
+    <div class="login-title">板の履歴・分析</div>
+    <div id="histBody"><div class="hist-empty">読み込み中…</div></div>
+    <div class="login-btns"><button class="login-cancel" id="histClose">とじる</button></div>
+  </div>
+</div>
+
 <div class="login-mask" id="donateMask">
   <div class="login-card donate-card">
     <div class="login-title">差し入れ・応援</div>
@@ -1075,6 +1117,15 @@ const SUPA_BUCKET = CFG.bucket;
 let supa = null;
 try { supa = createClient(SUPA_URL, SUPA_ANON); } catch(e) { console.error("Supabase init failed", e); }
 function imgUrl(path){ return SUPA_URL + "/storage/v1/object/public/" + SUPA_BUCKET + "/" + path; }   // 公開URLの組み立て
+// 端末のOS大分類だけ（生UAは保存しない）。端末割合の集計用
+function deviceTag(){
+  const ua = navigator.userAgent || "";
+  if(/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document)) return "ios";
+  if(/Android/i.test(ua)) return "and";
+  if(/Windows/i.test(ua)) return "win";
+  if(/Macintosh|Mac OS X/i.test(ua)) return "mac";
+  return "etc";
+}
 function isSafePath(p){ return typeof p==="string" && p.length<200 && /^[A-Za-z0-9_./-]+$/.test(p) && !p.includes(".."); }   // 変な値を弾く
 
 let db = null, auth = null;
@@ -1813,6 +1864,7 @@ function setMsg(html){ msgEl.innerHTML = html || ""; }
 // 運営バー（#msgから独立した固定・ドラッグ可能要素）。adminの時だけ表示し、動的部分（枚数・画像投稿ON/OFF）を更新
 function renderAdminBar(){
   const bar = document.getElementById("adminBar");
+  document.body.classList.toggle("is-admin", !!admin);   // 運営ビュー（名前→uid 等）の切替
   if(!bar) return;
   if(!admin){ bar.hidden = true; return; }
   bar.innerHTML =
@@ -1822,6 +1874,7 @@ function renderAdminBar(){
     '<button class="ab-act" type="button" onclick="toggleImgPost()">画像投稿 '+(imgPostOn?'ON':'OFF')+'</button>'+
     '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
     '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
+    '<button class="ab-act" type="button" onclick="openHistory()">履歴</button>'+
     '<button class="ab-act" type="button" onclick="archiveAndAdvance()">保存して新ボード</button>'+
     '<button class="ab-act ab-exit" type="button" onclick="exitAdmin()">終了</button>';
   bar.hidden = false;
@@ -1884,26 +1937,17 @@ function render(){
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
-    const adminLine = admin ? `
-      <div class="admin-line">
-        <span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span>
-        <span style="flex:1"></span>
-        ${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }
-        <button class="mini del" onclick="adminDelete('${p.id}')">削除</button>
-      </div>` : '';
+    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span style="flex:1"></span>${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     return `
     <div class="note${mine}${rotoring}${fresh}${flippedCls}${p.land?' land':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:rotate(${ang}deg)${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
+      ${ admin ? `<div class="who-uid" title="${esc(p.uid||'')}">${esc(p.uid||'(uid無し)')}</div>` : '' }
       <div class="acts">
-        ${souBtn}
-        ${delBtn}
-        ${repoBtn}
-        ${undoBtn}
+        ${ admin ? adminActs : `${souBtn}${delBtn}${repoBtn}${undoBtn}` }
       </div>
-      ${adminLine}
     </div>`;
   }).join("");
 
@@ -2303,7 +2347,7 @@ async function createPost(nx, ny){
   const finalNow = isMobileView();   // モバイルはドロップで確定。PCは回転確定時にクールダウンを消費
   const angle = finalNow ? (Math.random()<0.5?-4:4) : rndAngle();  // モバイルは左右4°のみ
   const img = pendingImg;
-  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid };  // 画像は含めない・作成者UID付き
+  const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, dev: deviceTag() };  // 画像は含めない・作成者UID・端末区分付き
   if(landscape) meta.land = true;   // 横向きの時だけ向き情報を付与（縦は項目を増やさない＝既存ルールのまま通る）
   postBtn.disabled = true;
   let reserved = false;
@@ -2707,12 +2751,24 @@ const nameSlots = document.getElementById("nameSlots");
 const nameInput = document.getElementById("nameInput");
 function renderNameSlots(){
   nameSlots.innerHTML = "";
+  if(nameEdit.length){
+    const h = document.createElement("div"); h.className="name-grp-h"; h.textContent = "追加した名前（"+nameEdit.length+"）"; nameSlots.appendChild(h);
+  }
   nameEdit.forEach((nm,idx)=>{
     const row = document.createElement("div"); row.className = "name-slot";
     const span = document.createElement("span"); span.className = "nm"; span.textContent = nm;
     const del = document.createElement("button"); del.className = "pal-del"; del.textContent = "×"; del.title = "削除";
     del.addEventListener("click", ()=>{ nameEdit.splice(idx,1); renderNameSlots(); });
     row.append(span, del);
+    nameSlots.appendChild(row);
+  });
+  // 初期リスト（固定・閲覧のみ）
+  const h2 = document.createElement("div"); h2.className="name-grp-h"; h2.textContent = "初期リスト（固定・"+RANDOM_NAMES.length+"）"; nameSlots.appendChild(h2);
+  RANDOM_NAMES.forEach(nm=>{
+    const row = document.createElement("div"); row.className = "name-slot fixed";
+    const span = document.createElement("span"); span.className = "nm"; span.textContent = nm;
+    const tag = document.createElement("span"); tag.className = "nm-fixed"; tag.textContent = "固定";
+    row.append(span, tag);
     nameSlots.appendChild(row);
   });
 }
@@ -2791,7 +2847,8 @@ async function buildFullLookCanvas(){
   wallClone.style.left = "0"; wallClone.style.top = "0";
   // 来場者が見たまま＝管理者向けを除去：隠し半紙を外し、ボタン類(.acts)と管理行(.admin-line＝そうだね/del数・復活/削除)を消す（絵・名前・枠・テープ・判子は残す）
   wallClone.querySelectorAll(".note.is-hidden").forEach(n=> n.remove());
-  wallClone.querySelectorAll(".acts, .admin-line").forEach(n=> n.remove());
+  wallClone.querySelectorAll(".acts, .admin-line, .who-uid").forEach(n=> n.remove());   // 管理ビュー要素を除去
+  wallClone.querySelectorAll(".who").forEach(n=> n.style.display="block");              // 名前を表示（運営ビューのuid非表示を打ち消す）
   cap.appendChild(wallClone);
   const header = document.querySelector(".float-header"); // 左下ロゴ
   if(header){
@@ -2827,7 +2884,9 @@ async function archiveAndAdvance(auto){
       const im = await loadImg(src); if(!im) continue;
       const x = clamp(nxOf(p,p.id),0,1)*(WALL_W-NOTE_W);
       const y = clamp(nyOf(p,p.id),0,1)*(WALL_H-NOTE_H);
-      const w = NOTE_W, h = NOTE_W*1.5;          // 半紙の画像部（2:3）
+      const land = !!p.land;
+      const w = land ? NOTE_LAND_W : NOTE_W;          // 横向きは3:2の箱（縦詰まり修正）／縦向きは2:3
+      const h = land ? NOTE_LAND_W*2/3 : NOTE_W*1.5;
       g.save();
       g.translate(x + w/2, y + h/2);
       g.rotate((p.angle||0)*Math.PI/180);
@@ -2868,6 +2927,14 @@ async function archiveAndAdvance(auto){
         }
       }
     }catch(e){ console.error("見たまま版の保存に失敗（クリーン版は保存済み）", e); }
+    // リセット履歴を記録（日時・枚数・画像パス）。運営のみ書ける
+    try{
+      await set(ref(db, "meta/resetLog/"+(boardId||1)), {
+        at: Date.now(), count: boardCount||0, stamp,
+        clean: "archives/board-"+(boardId||1)+"-"+stamp+".jpg",
+        full:  "archives/board-"+(boardId||1)+"-"+stamp+"-full.jpg"
+      });
+    }catch(e){ console.error("resetLog書き込み失敗", e); }
     // 新しいボードへ（運営のみ書ける）。全クライアントが meta/board 監視で自動移行
     await set(ref(db, "meta/board"), (boardId||1) + 1);
     toast(auto ? "満員のため新ボードへ自動切替しました" : "保存しました。新しいボードに切り替えました", 4000);
@@ -2875,6 +2942,123 @@ async function archiveAndAdvance(auto){
   }catch(e){ console.error(e); toast("保存に失敗しました"); return false; }
 }
 window.archiveAndAdvance = archiveAndAdvance;
+
+// 任意ボードのpostsから板画像を再合成（横向き修正済みロジック。再出力で使用）
+async function composeBoardCanvas(list, imgsMap){
+  const cv = document.createElement("canvas"); cv.width = WALL_W; cv.height = WALL_H;
+  const g = cv.getContext("2d");
+  g.fillStyle = "#ece3cd"; g.fillRect(0,0,WALL_W,WALL_H);
+  const loadImg = src => new Promise(res=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
+  let drawn=0, skipped=0;
+  for(const p of list){
+    let src = null;
+    if(isSafePath(p.imgPath)) src = imgUrl(p.imgPath);
+    else if(imgsMap && isImgData(imgsMap[p.id])) src = imgsMap[p.id];
+    else if(isImgData(p.img)) src = p.img;
+    if(!src){ skipped++; continue; }
+    const im = await loadImg(src); if(!im){ skipped++; continue; }
+    const x = clamp(+p.nx||0,0,1)*(WALL_W-NOTE_W);
+    const y = clamp(+p.ny||0,0,1)*(WALL_H-NOTE_H);
+    const land = !!p.land;
+    const w = land ? NOTE_LAND_W : NOTE_W;
+    const h = land ? NOTE_LAND_W*2/3 : NOTE_W*1.5;
+    g.save(); g.translate(x+w/2, y+h/2); g.rotate((p.angle||0)*Math.PI/180); g.drawImage(im,-w/2,-h/2,w,h); g.restore();
+    drawn++;
+  }
+  return { cv, drawn, skipped };
+}
+
+/* ---------- 板の履歴・分析（運営） ---------- */
+function escHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(ms){ if(!ms) return "—"; const d=new Date(ms), p=n=>String(n).padStart(2,"0"); return (d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes()); }
+function humanGap(ms){ if(!(ms>0)) return "—"; const mins=Math.floor(ms/60000), h=Math.floor(mins/60), d=Math.floor(h/24); if(d>0) return d+"日"+(h%24)+"時間"; if(h>0) return h+"時間"+(mins%60)+"分"; return mins+"分"; }
+function parseStamp(s){ const m=/^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})$/.exec(s||""); return m ? Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]) : null; }
+const DEV_LABEL = { ios:"iPhone/iPad", and:"Android", win:"Windows", mac:"Mac", etc:"その他" };
+
+function renderCurrentStats(){
+  const arr = [...posts.values()];
+  let h = '<div class="hist-h">今のボード（板'+(boardId||1)+'・'+arr.length+'枚）</div>';
+  if(!arr.length) return h + '<div class="hist-empty">まだ投稿がありません</div>';
+  const byUid = {};
+  arr.forEach(p=>{ const u=p.uid||"?"; const e=(byUid[u]=byUid[u]||{n:0,name:p.name,uid:u}); e.n++; if(p.name) e.name=p.name; });
+  const top = Object.values(byUid).sort((a,b)=>b.n-a.n).slice(0,8);
+  h += '<div class="hist-sec">投稿者ランキング（同一端末＝同一uid）</div><div class="hist-rank">';
+  top.forEach((t,i)=>{ h += '<div class="rk"><span class="rk-n">'+(i+1)+'</span><span class="rk-name" title="'+escHtml(t.uid)+'">'+escHtml(t.name||"名無し")+'</span><span class="rk-c">'+t.n+'回</span></div>'; });
+  h += '</div>';
+  const dev = {}; let devN=0;
+  arr.forEach(p=>{ if(p.dev){ dev[p.dev]=(dev[p.dev]||0)+1; devN++; } });
+  h += '<div class="hist-sec">端末の割合</div>';
+  if(!devN){ h += '<div class="hist-empty small">この機能の追加後の投稿から集計します（今は0件）</div>'; }
+  else{
+    h += '<div class="hist-dev">';
+    Object.entries(dev).sort((a,b)=>b[1]-a[1]).forEach(([k,n])=>{ const pct=Math.round(n/devN*100); h += '<div class="dv"><span class="dv-l">'+(DEV_LABEL[k]||k)+'</span><span class="dv-bar"><span style="width:'+pct+'%"></span></span><span class="dv-c">'+pct+'% ('+n+')</span></div>'; });
+    h += '</div>';
+  }
+  return h;
+}
+
+async function openHistory(){
+  if(!admin) return;
+  const mask = document.getElementById("historyMask"), body = document.getElementById("histBody");
+  if(!mask || !body) return;
+  mask.classList.add("show");
+  body.innerHTML = '<div class="hist-empty">読み込み中…</div>';
+  try{
+    let log = {};
+    try{ const s = await get(ref(db, "meta/resetLog")); log = s.val()||{}; }catch(e){}
+    let files = [];
+    if(supa){ try{ const r = await supa.storage.from(SUPA_BUCKET).list("archives", { limit:500 }); files = (r && r.data) || []; }catch(e){} }
+    const byId = {};
+    Object.entries(log).forEach(([id,v])=>{ byId[id] = { id:+id, at:v.at, count:v.count, clean:v.clean, full:v.full }; });
+    files.forEach(f=>{
+      const m = /^board-(\d+)-(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})(-full)?\.jpg$/.exec(f.name||"");
+      if(!m) return;
+      const id=m[1], path="archives/"+f.name, isFull=!!m[3];
+      const e = (byId[id] = byId[id] || { id:+id });
+      if(isFull) e.full = e.full || path; else e.clean = e.clean || path;
+      if(e.at==null) e.at = parseStamp(m[2]);
+    });
+    const rows = Object.values(byId).sort((a,b)=> a.id-b.id);
+    let html = renderCurrentStats();
+    html += '<div class="hist-h">リセット履歴</div>';
+    if(!rows.length) html += '<div class="hist-empty">まだ履歴がありません（次回リセットから記録されます）</div>';
+    rows.forEach((r,i)=>{
+      const prev = rows[i-1];
+      const elapsed = (prev && prev.at && r.at) ? humanGap(r.at - prev.at) : "—";
+      const dlC = r.clean ? '<a class="hist-dl" href="'+imgUrl(r.clean)+'" download target="_blank" rel="noopener">クリーンDL</a>' : '';
+      const dlF = r.full ? '<a class="hist-dl" href="'+imgUrl(r.full)+'" download target="_blank" rel="noopener">見たままDL</a>' : '';
+      html += '<div class="hist-row"><div class="hist-main"><b>板'+r.id+'</b><span class="hist-dt">'+fmtDate(r.at)+'</span></div>'
+        + '<div class="hist-sub">前回から '+elapsed+'・'+(r.count!=null?r.count+'枚':'枚数不明')+'</div>'
+        + '<div class="hist-acts">'+dlC+dlF+'<button class="hist-redo" data-board="'+r.id+'">再出力</button></div></div>';
+    });
+    body.innerHTML = html;
+    body.querySelectorAll(".hist-redo").forEach(btn=> btn.addEventListener("click", ()=> reoutputBoard(+btn.dataset.board, btn)));
+  }catch(e){ console.error(e); body.innerHTML = '<div class="hist-empty">読み込みに失敗しました</div>'; }
+}
+window.openHistory = openHistory;
+
+async function reoutputBoard(id, btn){
+  if(!db) return;
+  const label = btn ? btn.textContent : "";
+  if(btn){ btn.textContent="出力中…"; btn.disabled=true; }
+  try{
+    const [ps, is] = await Promise.all([ get(ref(db,"boards/"+id+"/posts")), get(ref(db,"boards/"+id+"/imgs")) ]);
+    const pv = ps.val()||{}, imgs = is.val()||{};
+    const list = Object.entries(pv).map(([pid,p])=> Object.assign({id:pid}, p)).filter(p=> typeof p.id==="string");
+    if(!list.length){ toast("板"+id+"に半紙データがありません"); return; }
+    const { cv, drawn, skipped } = await composeBoardCanvas(list, imgs);
+    const url = cv.toDataURL("image/jpeg", 0.85);
+    const a = document.createElement("a"); a.href=url; a.download="oshuji-board-"+id+"-reoutput.jpg"; document.body.appendChild(a); a.click(); a.remove();
+    toast("板"+id+"を再出力（"+drawn+"枚"+(skipped?"・"+skipped+"枚は画像取得失敗":"")+"）", 4000);
+  }catch(e){ console.error(e); toast("再出力に失敗しました"); }
+  finally{ if(btn){ btn.textContent=label; btn.disabled=false; } }
+}
+
+(function(){
+  const c = document.getElementById("histClose"), m = document.getElementById("historyMask");
+  if(c) c.addEventListener("click", ()=> m.classList.remove("show"));
+  if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
+})();
 
 // 運営タブだけ：満員を検知したら自動で保存→新ボード（複数タブでも1つだけ実行）
 let autoArchiving = false;
@@ -3188,6 +3372,7 @@ scrollEl.addEventListener("scroll", ()=>{ if(panRAF) return; if(!mmRaf) mmRaf=re
 
 /* ---------- 半紙めぐり ---------- */
 let shuffleOrder = [];   // 未読なし巡回用：シャッフル済みの並び（id配列）。←→で往復
+const discoverySeen = new Set();   // 中央「おまかせ発見」で出した半紙（このセッション内でno-repeat）
 let shuffleIdx = -1;
 let meguriStarted = false;   // めぐりを開始したか（初回だけ読みやすい下限を当て、以降は今の率を維持）
 let focusId = null;          // 今フォーカス中（赤枠）の半紙id
@@ -3302,6 +3487,35 @@ function gotoNote(step){
 }
 document.getElementById("prevNote").addEventListener("click", ()=> gotoNote(-1));
 document.getElementById("nextNote").addEventListener("click", ()=> gotoNote(1));
+
+// 中央「半紙めぐり」ラベル＝おまかせ発見：未見・他人・軽く良作寄りの重み付けで1枚。▶◀の順送りとは別物
+function discoveryJump(){
+  if(peeking && peekPrev){ zoom = peekPrev.z; clearPeek(); applyZoom(); }
+  stopNavHint();
+  const dz = (window.innerWidth <= 560) ? 1.0 : 1.3;
+  const useZoom = meguriStarted ? zoom : Math.max(zoom, dz);
+  meguriStarted = true;
+  const all = [...posts.entries()].filter(([id,p])=> !p.hidden);
+  let pool = all.filter(([id,p])=> p.uid!==myUid && !discoverySeen.has(id));   // 他人の・未見
+  if(!pool.length){ discoverySeen.clear(); pool = all.filter(([id,p])=> p.uid!==myUid); }  // 全部見たらリセット
+  if(!pool.length) pool = all;                                                  // 他人のが無ければ自分含む
+  if(!pool.length){ toast("まだ半紙がないよ"); return; }
+  const now = Date.now();
+  const weighted = pool.map(([id,p])=>{
+    const ageH = Math.max(0,(now-(p.t||now))/3600000);
+    const w = 1 + (p.sou||0)*0.4 + Math.max(0, 1.5 - ageH*0.1);   // そうだねで軽く加点・新しめを微加点
+    return { id, p, w };
+  });
+  let r = Math.random()*weighted.reduce((s,x)=>s+x.w,0), pick = weighted[0];
+  for(const x of weighted){ r -= x.w; if(r<=0){ pick = x; break; } }
+  discoverySeen.add(pick.id);
+  if(!floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);
+  centerOnNote(pick.id, pick.p, useZoom);   // 未読しおりは動かさない＝順送り(▶◀)の進行を汚さない
+}
+(function(){
+  const lab = document.querySelector(".meguri .lab");
+  if(lab){ lab.title = "おまかせで1枚見る"; lab.addEventListener("click", discoveryJump); }
+})();
 
 /* ---------- のぞき見：赤枠の半紙を単タップ→ぴたっと寄せ／もう一度タップ・めぐり・手動ズームで戻る ---------- */
 function clearPeek(){ peeking = false; peekPrev = null; }
@@ -3636,7 +3850,7 @@ function makeDraggable(el, lsKey, ignoreSel){
   window.addEventListener("resize", reclamp);
 }
 // 右下クラスタ（ズーム/めぐり/マップ/通知）を一体で可動に。ボタン・スライダー・マップ・通知の上では掴まず、ピルの余白やラベル・枚数行で掴んで移動
-makeDraggable(document.querySelector(".corner-cluster"), "fg_clusterpos", "button, input, .zbtn, .zval, .minimap, .sou-notif");
+makeDraggable(document.querySelector(".corner-cluster"), "fg_clusterpos", "button, input, .zbtn, .zval, .lab, .minimap, .sou-notif");
 makeDraggable(document.getElementById("adminBar"), "fg_adminbarpos", ".ab-act");   // 運営バーも可動（操作チップの上では掴まない）
 
 /* 全モーダル共通：小画面で中身が見切れる時だけ ▲▼ を出してスクロール可能を示す（タップでスクロール／上端・下端では消える） */
