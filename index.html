@@ -1283,6 +1283,7 @@ function fidIndexMap(){   // postId -> {r, idx}（枠内の並び順）
   return out;
 }
 let pendingFid = null;     // 枠内へ投稿する予定の枠ID（タップ→描く→自動整列）
+let rsvLoaded = false;     // 枠(reservations)の初回読み込みが済んだか
 let deepFrameDone = false; // #f= ディープリンクで1回だけ寄せる
 function rsvLivingList(){ const now=Date.now(); return [...reservations.entries()].filter(([id,r])=> r && now < (r.end||0)); }
 function rsvRectPx(r){ return { left:(r.rx||0)*WALL_W, top:(r.ry||0)*WALL_H, w:(r.rw||0)*WALL_W, h:(r.rh||0)*WALL_H }; }
@@ -2140,7 +2141,8 @@ function render(){
   // 運営は全部表示。一般表示は「運営が非表示」または「delがしきい値以上」を隠す（恒久削除は運営のみ）
   // さらに、キーが安全な文字のみの半紙だけを描画（細工キーによるXSSを遮断）
   const visible = (admin ? list : list.filter(p=> !p.hidden && (p.del||0) < DEL_THRESHOLD))
-    .filter(p=> typeof p.id==="string" && /^[A-Za-z0-9_-]+$/.test(p.id));
+    .filter(p=> typeof p.id==="string" && /^[A-Za-z0-9_-]+$/.test(p.id))
+    .filter(p=> !(p.fid && !rsvLoaded));   // 枠未ロード中は枠内半紙を伏せる（整列できるまで重なって見えるのを防ぐ）
   visible.sort((a,b)=> (a.t||0)-(b.t||0)); // 古い順に重ねる（新しいものが上）
   countEl.textContent = visible.length ? visible.length + " 枚" : (postsLoaded ? "まだ0枚" : "読み込み中…");
   if(typeof fitStatusTicker==="function") fitStatusTicker();
@@ -2290,6 +2292,7 @@ function switchToBoard(id){
   setTimeout(()=>{ flashArmed = true; }, 1800);                  // 既存分の流し込みが落ち着いてから有効化
   postsLoaded = false; boardCount = 0; didInitialFocus = false;
   reservations.clear(); renderReservations();
+  rsvLoaded = false;
   navStack = []; navIdx = -1;
   setActiveCount();
   render();
@@ -2333,9 +2336,11 @@ function switchToBoard(id){
       reservations.clear();
       const v = (s && s.val()) || {};
       Object.keys(v).forEach(k=>{ if(/^[A-Za-z0-9_-]+$/.test(k)) reservations.set(k, v[k]||{}); });
+      rsvLoaded = true;          // 枠の初回読み込み完了（これ以降 fid半紙を整列／無ければ浮遊フォールバック）
       rsvCheckTransitions();
       rsvCleanupLazy();
       renderReservations();
+      render();                  // 枠到着で枠内半紙を整列し直す
     }));
   }catch(e){ console.error(e); showConnError(); }
 }
