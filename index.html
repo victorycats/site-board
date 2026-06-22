@@ -125,6 +125,7 @@
   .rsv-wait{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:#3a2a18}
   .rsv-wait .rsv-wait-l{font-weight:800;letter-spacing:.06em}
   .rsv-wait .rsv-wait-t{opacity:.8}
+  .rsv-wait .rsv-wait-clock{font-weight:800;font-size:30px;line-height:1.1;color:#8c2414;letter-spacing:.02em;font-variant-numeric:tabular-nums}
   .rsv-invite{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9c7f5e;opacity:.6;pointer-events:none;font-family:"Shippori Mincho",serif}
   .rsv-del{position:absolute;top:6px;right:6px;pointer-events:auto;cursor:pointer;width:26px;height:26px;border-radius:50%;
     border:none;background:#3a2a18;color:#fff;font-size:16px;line-height:1;font-weight:700;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
@@ -1123,6 +1124,13 @@
     <div class="rsv-title"><span class="rsv-grab" aria-hidden="true">⠿</span>お題枠を予約<span class="rsv-beta">試験運用</span></div>
     <div class="rsv-note" id="rsvGateNote"></div>
     <div class="rsv-row">
+      <span class="rsv-lbl">作品の向き</span>
+      <div class="rsv-aspects" id="rsvOri">
+        <button type="button" data-ori="p" class="on">縦書き</button>
+        <button type="button" data-ori="l">横書き</button>
+      </div>
+    </div>
+    <div class="rsv-row">
       <span class="rsv-lbl">形</span>
       <div class="rsv-aspects" id="rsvAspects">
         <button type="button" data-asp="1.5" class="on">横長</button>
@@ -1264,30 +1272,31 @@ const RSV = {
   T1:"寝る前に描きなさい", T2:"もう何でもいいや適当で", T3:"筆落書きでも委員会"
 };
 const reservations = new Map();        // id -> rsv レコード
-const FCELL = { W:104, H:196, GAP:16, PAD:18, HEAD:72 };   // 原寸セル（NOTE_W×NOTE_H＝104×196）。定義順の都合でリテラル。後で調整可
+const FGAP=16, FPAD=18, FHEAD=72;   // 枠内グリッドの余白（壁px）
 const FMIN_ROWS = 2;
-function rsvMinW(){ return (3*FCELL.W + 2*FCELL.GAP + 2*FCELL.PAD)/WALL_W; }                                  // 最低 横3セル
-function rsvMinH(){ return (FCELL.HEAD + 2*FCELL.PAD + FMIN_ROWS*FCELL.H + (FMIN_ROWS-1)*FCELL.GAP)/WALL_H; }  // 最低 縦2段＋お題ヘッダー
-function rsvCols(r){ const innerW=(r.rw||0)*WALL_W - 2*FCELL.PAD; return Math.max(1, Math.floor((innerW + FCELL.GAP)/(FCELL.W + FCELL.GAP))); }
-function rsvMaxRows(r){ const avail=(r.rh||0)*WALL_H - FCELL.HEAD - 2*FCELL.PAD; return Math.max(FMIN_ROWS, Math.floor((avail + FCELL.GAP)/(FCELL.H + FCELL.GAP))); }   // 予約した高さに収まる行数
+function cellW(ori){ return ori==="l" ? NOTE_LAND_W : NOTE_W; }   // 縦=104 / 横=160
+function cellH(ori){ return ori==="l" ? NOTE_LAND_H : NOTE_H; }   // 縦=196 / 横=150
+function oriOf(r){ return (r && r.ori==="l") ? "l" : "p"; }       // 枠の作品向き
+function rsvMinW(ori){ const W=cellW(ori); return (3*W + 2*FGAP + 2*FPAD)/WALL_W; }                                 // 最低 横3セル
+function rsvMinH(ori){ const H=cellH(ori); return (FHEAD + 2*FPAD + FMIN_ROWS*H + (FMIN_ROWS-1)*FGAP)/WALL_H; }     // 最低 縦2段＋ヘッダー
+function rsvCols(r){ const W=cellW(oriOf(r)); const innerW=(r.rw||0)*WALL_W - 2*FPAD; return Math.max(1, Math.floor((innerW + FGAP)/(W + FGAP))); }
+function rsvMaxRows(r){ const H=cellH(oriOf(r)); const avail=(r.rh||0)*WALL_H - FHEAD - 2*FPAD; return Math.max(FMIN_ROWS, Math.floor((avail + FGAP)/(H + FGAP))); }
 function rsvCapacity(r){ return rsvCols(r)*rsvMaxRows(r); }
-function rsvRowsShown(r,n){ const cols=rsvCols(r); return Math.min(rsvMaxRows(r), Math.max(FMIN_ROWS, Math.ceil((n||0)/cols))); }   // 今の枚数で見せる行数（2行〜上限）
-function rsvContentHpx(r,n){ const cols=rsvCols(r); const rows=Math.max(1, Math.ceil((n||0)/cols)); return FCELL.HEAD + 2*FCELL.PAD + rows*FCELL.H + (rows-1)*FCELL.GAP; }   // 終了枠：実枚数ぴったりの高さ
-function rsvDisplayHpx(r,n){   // 表示高さ＝「予約した高さ」と「実際の枚数に必要な高さ」の大きい方（壁下端でクランプ）。常に全部の半紙を枠内に収める
-  const cols=rsvCols(r);
+function rsvContentHpx(r,n){ const H=cellH(oriOf(r)); const cols=rsvCols(r); const rows=Math.max(1, Math.ceil((n||0)/cols)); return FHEAD + 2*FPAD + rows*H + (rows-1)*FGAP; }   // 終了枠：実枚数ぴったり
+function rsvDisplayHpx(r,n){   // 表示高さ＝「予約した高さ」と「実際の枚数に必要な高さ」の大きい方（壁下端でクランプ）
+  const H=cellH(oriOf(r)), cols=rsvCols(r);
   const contentRows = Math.max(FMIN_ROWS, Math.ceil((n||0)/cols));
-  const contentH = FCELL.HEAD + 2*FCELL.PAD + contentRows*FCELL.H + (contentRows-1)*FCELL.GAP;
-  const claimedH = (r.rh||0)*WALL_H;
-  const wallH = (1-(r.ry||0))*WALL_H;
+  const contentH = FHEAD + 2*FPAD + contentRows*H + (contentRows-1)*FGAP;
+  const claimedH = (r.rh||0)*WALL_H, wallH = (1-(r.ry||0))*WALL_H;
   return Math.min(wallH, Math.max(claimedH, contentH));
 }
 function rsvCellXY(r, i){   // i番目セルの左上（壁px・絶対）。左上から行→列。左寄せ＝延長しても既存がズレない
-  const cols=rsvCols(r), col=i%cols, row=Math.floor(i/cols);
+  const W=cellW(oriOf(r)), H=cellH(oriOf(r)), cols=rsvCols(r), col=i%cols, row=Math.floor(i/cols);
   const frameL=(r.rx||0)*WALL_W, frameT=(r.ry||0)*WALL_H;
-  return { left: frameL + FCELL.PAD + col*(FCELL.W+FCELL.GAP), top: frameT + FCELL.HEAD + FCELL.PAD + row*(FCELL.H+FCELL.GAP) };
+  return { left: frameL + FPAD + col*(W+FGAP), top: frameT + FHEAD + FPAD + row*(H+FGAP) };
 }
-function rhForRows(n){ return (FCELL.HEAD + 2*FCELL.PAD + n*FCELL.H + (n-1)*FCELL.GAP)/WALL_H; }   // n行ぶんに必要な rh
-function rwForCols(n){ return (2*FCELL.PAD + n*FCELL.W + (n-1)*FCELL.GAP)/WALL_W; }                // n列ぶんに必要な rw
+function rhForRows(r,n){ const H=cellH(oriOf(r)); return (FHEAD + 2*FPAD + n*H + (n-1)*FGAP)/WALL_H; }   // n行ぶんに必要な rh
+function rwForCols(r,n){ const W=cellW(oriOf(r)); return (2*FPAD + n*W + (n-1)*FGAP)/WALL_W; }            // n列ぶんに必要な rw
 function rectHitsFloatNotes(rx,ry,rw,rh){   // 浮遊半紙（枠外）と矩形が重なるか
   for(const [id,p] of posts){ if(p.hidden||p.fid) continue;
     const lpx=clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W), tpx=clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
@@ -1306,7 +1315,7 @@ function rectHitsOtherFrames(rx,ry,rw,rh, exclId){   // 他の予約枠の矩形
 }
 function rsvCanGrow(r){   // 幾何上まだ伸ばせる余地があるか（衝突は投稿時に最終判定）
   const cols=rsvCols(r), rows=rsvMaxRows(r);
-  const rhDown=rhForRows(rows+1), rwRight=rwForCols(cols+1);
+  const rhDown=rhForRows(r,rows+1), rwRight=rwForCols(r,cols+1);
   const down  = ((r.ry||0)+rhDown<=1+1e-9) && (rhDown<=RSV.H_MAX+1e-9) && ((r.rw||0)*rhDown<=0.201+1e-6);
   const right = ((r.rx||0)+rwRight<=1+1e-9) && (rwRight<=RSV.W_MAX+1e-9) && (rwRight*(r.rh||0)<=0.201+1e-6);
   return down || right;
@@ -1315,7 +1324,7 @@ async function rsvEnsureSpace(fid){   // 投稿前：空きが無ければ下/�
   const r = reservations.get(fid); if(!r) return false;
   if(((buildFrameNotes().get(fid)||[]).length) < rsvCapacity(r)) return true;   // すでに空きあり
   const cols=rsvCols(r), rows=rsvMaxRows(r);
-  const rhDown=rhForRows(rows+1), rwRight=rwForCols(cols+1);
+  const rhDown=rhForRows(r,rows+1), rwRight=rwForCols(r,cols+1);
   const downOK  = ((r.ry||0)+rhDown<=1+1e-9) && (rhDown<=RSV.H_MAX+1e-9) && ((r.rw||0)*rhDown<=0.201+1e-6)
                   && !rectHitsFloatNotes(r.rx, r.ry, r.rw, rhDown) && !rectHitsOtherFrames(r.rx, r.ry, r.rw, rhDown, fid);
   const rightOK = ((r.rx||0)+rwRight<=1+1e-9) && (rwRight<=RSV.W_MAX+1e-9) && (rwRight*(r.rh||0)<=0.201+1e-6)
@@ -2707,7 +2716,7 @@ async function createPost(nx, ny, fid){
   const img = pendingImg;
   const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, dev: deviceTag() };  // 端末区分(dev)付き。ルール未許可なら下で自動的にdev無し再試行するので投稿は止まらない
   if(fid) meta.fid = fid;            // 枠内投稿（自動整列）
-  if(landscape && !fid) meta.land = true;   // 横向きの時だけ向き情報を付与（枠内は常に縦）
+  if(landscape) meta.land = true;    // 横向きで描いたら向き情報を付与（枠内も枠の向きに一致）
   postBtn.disabled = true;
   let reserved = false;
   try{
@@ -4331,6 +4340,8 @@ function rsvDrawInto(fid){   // 枠タップ → お題付きで描くモード�
   if(st!=="active"){ toast("この枠は終了しました"); return; }
   if((buildFrameNotes().get(fid)||[]).length >= rsvCapacity(r) && !rsvCanGrow(r)){ toast("この枠は満員です"); return; }
   pendingFid = fid;
+  const needLand = (oriOf(r)==="l");
+  if(landscape !== needLand) setLandscape(needLand, false, true);   // キャンバスを枠の向きへ（向きが違う時だけ・中身は作り直す）
   setDeskCollapsed(false);          // 道具（半紙）を開く
   rsvSyncDeskTopic();
   toast("お題「"+(r.t1||RSV.T1)+"」。書けたら「貼る」で枠へ");
@@ -4346,8 +4357,8 @@ function rsvSyncDeskTopic(){   // 描くエリア上部のお題バナー
 }
 function rsvFocusFrame(fid){   // #f= ディープリンク：その枠へ寄せる
   const r=reservations.get(fid); if(!r) return;
-  const fitW = scrollEl.clientWidth /((r.rw*WALL_W)+2*FCELL.PAD+80);
-  const fitH = scrollEl.clientHeight/((r.rh*WALL_H)+FCELL.HEAD+80);
+  const fitW = scrollEl.clientWidth /((r.rw*WALL_W)+2*FPAD+80);
+  const fitH = scrollEl.clientHeight/((r.rh*WALL_H)+FHEAD+80);
   zoom = clamp(Math.min(fitW,fitH), zoomMin, ZOOM_MAX); applyZoom();
   scrollToFrac((r.rx||0)+(r.rw||0)/2, (r.ry||0)+(r.rh||0)/2);
   toast("お題枠「"+(r.t1||RSV.T1)+"」へ");
@@ -4376,7 +4387,7 @@ function renderReservations(){
     const fh = (st==="ended") ? rsvContentHpx(r, cnt) : rsvDisplayHpx(r, cnt);   // 終了枠は実枚数ぴったりに縮small／それ以外は下伸長
     let overlay = "";
     if(st==="reserved"){
-      overlay = `<div class="rsv-wait"><div class="rsv-wait-l" style="font-size:${fsBand}px">枠予約済み</div><div class="rsv-wait-t" style="font-size:${fsCorner}px">${fmtClock(r.start)} 開始</div></div>`;
+      overlay = `<div class="rsv-wait"><div class="rsv-wait-l" style="font-size:${fsBand}px">枠予約済み</div><div class="rsv-wait-t" style="font-size:${fsCorner}px">この枠は</div><div class="rsv-wait-clock">${fmtClock(r.start)}</div><div class="rsv-wait-t" style="font-size:${fsCorner}px">から開催</div></div>`;
     } else if(st==="active"){
       const full = cnt >= cap, hardFull = full && !rsvCanGrow(r);
       overlay = hardFull
@@ -4441,17 +4452,24 @@ function rsvCleanupLazy(){
 let rsvDraft = null;
 let rsvDragging=false, rsvDragOX=0, rsvDragOY=0;   // 枠ドラッグ状態（window move/up で追従＝capture非依存）
 function rsvAreaMin(){ return (document.getElementById("rsvIgnore")||{}).checked ? RSV.AREA_MIN_TEST : RSV.AREA_MIN; }
+function rsvSelectedOri(){ const b=document.querySelector("#rsvOri button.on"); return (b && b.dataset.ori==="l") ? "l" : "p"; }
 function rsvComputeSize(asp, t){
+  const ori = rsvSelectedOri();
   const test=(document.getElementById("rsvIgnore")||{}).checked;
-  const minW = test?0.01:rsvMinW(), minH = test?0.03:rsvMinH();
+  const minW = test?0.01:rsvMinW(ori), minH = test?0.03:rsvMinH(ori);
   const lo = minW*minH, hi = Math.max(rsvActiveCaps().areaMax, lo);
   const area = lo + (hi - lo)*clamp(t,0,1);                                 // 壁に対する面積比（上限は混雑で縮小／テストで全開）
   const k = asp * (WALL_H/WALL_W);                                          // rw = k*rh（aspは描画ピクセル比 w/h）
   let rh = Math.sqrt(area/k), rw = k*rh;
   if(rw > RSV.W_MAX){ rw = RSV.W_MAX; rh = area/rw; }
   if(rh > RSV.H_MAX){ rh = RSV.H_MAX; rw = area/rh; }
-  rw = Math.max(rw, minW); rh = Math.max(rh, minH);                         // 最低 横3セル×縦2段 を保証
-  return { rw: Math.min(rw, RSV.W_MAX), rh: Math.min(rh, RSV.H_MAX) };
+  rw = Math.max(rw, minW); rh = Math.max(rh, minH);
+  rw = Math.min(rw, RSV.W_MAX); rh = Math.min(rh, RSV.H_MAX);
+  const tmp = { rw, rh, ori };                                             // 列・行ぴったりにスナップ＝右/下の余白を消す（最低 横3×縦2）
+  const cols = Math.max(3, rsvCols(tmp)), rows = Math.max(FMIN_ROWS, rsvMaxRows(tmp));
+  rw = Math.min(RSV.W_MAX, rwForCols(tmp, cols));
+  rh = Math.min(RSV.H_MAX, rhForRows(tmp, rows));
+  return { rw, rh };
 }
 function viewCenterFrac(){
   const r = notesEl.getBoundingClientRect();
@@ -4491,7 +4509,8 @@ function rsvValidity(d){
   if(d.rx<-1e-4||d.ry<-1e-4||d.rx+d.rw>1+1e-4||d.ry+d.rh>1+1e-4) return "枠が壁からはみ出しています";
   const area = d.rw*d.rh;
   const ign0 = (document.getElementById("rsvIgnore")||{}).checked;
-  if(!ign0 && (d.rw < rsvMinW()-1e-4 || d.rh < rsvMinH()-1e-4)) return "枠が小さすぎます（最低 横3×縦2）";
+  const _ori = rsvSelectedOri();
+  if(!ign0 && (d.rw < rsvMinW(_ori)-1e-4 || d.rh < rsvMinH(_ori)-1e-4)) return "枠が小さすぎます（最低 横3×縦2）";
   if(area > rsvActiveCaps().areaMax+2e-3) return "枠が大きすぎます";
   if(postsInRect(d.rx,d.ry,d.rw,d.rh)) return "枠の中に既存の半紙があります。空いてる場所へ";
   const ign = ign0;
@@ -4589,6 +4608,7 @@ function rsvCardReset(){   // 位置を既定（下中央）へ戻す＝開く�
 function rsvOpen(){
   if(!db){ toast("接続中です。少し待ってね"); return; }
   rsvDraft = { asp:1.5, t:0.55 };
+  document.querySelectorAll("#rsvOri button").forEach(b=> b.classList.toggle("on", b.dataset.ori==="p"));   // 既定は縦書き
   const sz = rsvComputeSize(rsvDraft.asp, rsvDraft.t); rsvDraft.rw=sz.rw; rsvDraft.rh=sz.rh;
   const ctr = viewCenterFrac();
   const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh, ctr.fx, ctr.fy);
@@ -4620,7 +4640,7 @@ async function rsvConfirm(){
   const dur = clamp(parseInt(document.getElementById("rsvDur").value,10)||RSV.DUR_MIN_MS, RSV.DUR_MIN_MS, caps.durMaxMs);
   const start = Date.now() + startOff, end = start + dur;
   const gv=v=>(v||"").slice(0,20);
-  const rec = { uid: myUid, t: Date.now(), start, end,
+  const rec = { uid: myUid, t: Date.now(), start, end, ori: rsvSelectedOri(),
     rx:+d.rx.toFixed(4), ry:+d.ry.toFixed(4), rw:+d.rw.toFixed(4), rh:+d.rh.toFixed(4), hasPost:false,
     t1:gv(document.getElementById("rsvT1").value)||RSV.T1, t2:gv(document.getElementById("rsvT2").value)||RSV.T2, t3:gv(document.getElementById("rsvT3").value)||RSV.T3 };
   const btn=document.getElementById("rsvConfirm"); btn.disabled=true;
@@ -4645,6 +4665,7 @@ async function rsvConfirm(){
   if(on("rsvOpen")) on("rsvOpen").addEventListener("click", rsvOpen);
   if(on("rsvSize")) on("rsvSize").addEventListener("input", e=>{ if(rsvDraft){ rsvDraft.t=(parseInt(e.target.value,10)||0)/100; rsvResize(); } });
   document.querySelectorAll("#rsvAspects button").forEach(b=> b.addEventListener("click", ()=>{ if(!rsvDraft) return; rsvDraft.asp=parseFloat(b.dataset.asp)||1; rsvAspectsSet(rsvDraft.asp); rsvResize(); }));
+  document.querySelectorAll("#rsvOri button").forEach(b=> b.addEventListener("click", ()=>{ document.querySelectorAll("#rsvOri button").forEach(x=>x.classList.toggle("on", x===b)); if(rsvDraft){ rsvResize(); } }));
   if(on("rsvCancel")) on("rsvCancel").addEventListener("click", rsvClose);
   if(on("rsvConfirm")) on("rsvConfirm").addEventListener("click", rsvConfirm);
   if(on("rsvFind")) on("rsvFind").addEventListener("click", rsvFindAnother);
