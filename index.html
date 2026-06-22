@@ -119,11 +119,20 @@
   .rsv-wait .rsv-wait-l{font-weight:800;letter-spacing:.06em}
   .rsv-wait .rsv-wait-t{opacity:.8}
   .rsv-share{pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;padding:5px 16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-  #rsvPreview{position:absolute;box-sizing:border-box;z-index:5;pointer-events:auto;cursor:grab;touch-action:none;
-    border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;align-items:center;justify-content:center;
+  #rsvPreview{position:absolute;box-sizing:border-box;z-index:5;pointer-events:none;touch-action:none;
+    border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;align-items:center;justify-content:center;overflow:visible;
     color:#1f5a2a;font-family:"Shippori Mincho",serif;font-weight:700;text-shadow:0 1px 2px rgba(255,255,255,.6)}
   #rsvPreview.bad{border-color:#b3261e;background:rgba(179,38,30,.16);color:#7c1d18}
-  #rsvPreview.drag{cursor:grabbing}
+  .rsv-preview-label{pointer-events:none;padding-top:16px}
+  .rsv-preview-handle{position:absolute;left:50%;top:0;transform:translate(-50%,-55%);min-width:158px;
+    display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 14px;border-radius:999px;
+    background:#1f7a33;color:#fff;border:2px solid #fff;box-shadow:0 3px 12px rgba(0,0,0,.28);
+    font-size:13px;line-height:1;letter-spacing:.02em;text-shadow:none;cursor:grab;pointer-events:auto;user-select:none;touch-action:none}
+  #rsvPreview.bad .rsv-preview-handle{background:#b3261e}
+  #rsvPreview.drag .rsv-preview-handle{cursor:grabbing}
+  .rsv-auto{flex:0 0 auto;padding:7px 10px;border-radius:8px;border:1px solid rgba(31,122,51,.45);
+    background:#f5fff7;color:#1f7a33;font-family:inherit;font-weight:700;cursor:pointer}
+  .rsv-auto:hover{background:#e9f8ed}
   .btn-rsv{margin-top:8px;width:100%;background:rgba(60,42,24,.06);color:#5b4636;border:1px dashed rgba(90,70,54,.5);
     border-radius:9px;padding:8px 10px;font-family:inherit;font-size:13px;cursor:pointer}
   .btn-rsv:hover{background:rgba(60,42,24,.1)}
@@ -1092,6 +1101,7 @@
     <div class="rsv-row">
       <span class="rsv-lbl">大きさ</span>
       <input type="range" id="rsvSize" min="0" max="100" value="55">
+      <button class="rsv-auto" id="rsvAutoPlace" type="button">空き場所を探す</button>
     </div>
     <div class="rsv-row">
       <span class="rsv-lbl">開始</span>
@@ -1119,7 +1129,7 @@
       <input id="rsvT2" type="text" maxlength="20" placeholder="帯の文字">
       <input id="rsvT3" type="text" maxlength="20" placeholder="右下の文字">
     </div>
-    <div class="rsv-hint">枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。開始から40分だれも描かないと枠は消えます。</div>
+    <div class="rsv-hint">枠の上のつまみをドラッグして移動できます。全体で300枚に達すると枠も含めて終了します。開始から40分だれも描かないと枠は消えます。</div>
     <div class="rsv-valid" id="rsvValid"></div>
     <div class="rsv-btns">
       <button class="rsv-cancel" id="rsvCancel" type="button">やめる</button>
@@ -1234,9 +1244,20 @@ function postsInRect(rx,ry,rw,rh){
   }
   return false;
 }
+function rectsOverlap(a,b){
+  return a.rx < b.rx+b.rw && a.rx+a.rw > b.rx && a.ry < b.ry+b.rh && a.ry+a.rh > b.ry;
+}
+function reservationsInRect(rx,ry,rw,rh){
+  const now = Date.now(), a = { rx, ry, rw, rh };
+  for(const [id,r] of reservations){
+    if(!r || now >= (r.end||0)) continue;
+    if(rectsOverlap(a, { rx:+r.rx||0, ry:+r.ry||0, rw:+r.rw||0, rh:+r.rh||0 })) return true;
+  }
+  return false;
+}
 function rsvGateReason(){   // 予約可なら""／不可なら理由
   if(!myUid) return "接続中です。少し待ってね";
-  if(boardCount >= RSV.GATE_COUNT) return "この板は投稿が増えてきたので予約できません（50枚未満のときだけ）";
+  if(boardCount >= RSV.GATE_COUNT) return "現在の混み具合では予約できません";
   if(rsvLivingList().length >= RSV.MAX_FRAMES) return "枠が上限（"+RSV.MAX_FRAMES+"つ）に達しています";
   if(rsvLivingList().filter(([id,r])=> r.uid===myUid).length >= RSV.MAX_PER_UID) return "予約できる枠は1人1つまでです";
   return "";
@@ -4145,36 +4166,67 @@ function rsvValidity(d){
   if(area < RSV.AREA_MIN-2e-3) return "枠が小さすぎます";
   if(area > RSV.AREA_MAX+2e-3) return "枠が大きすぎます";
   if(postsInRect(d.rx,d.ry,d.rw,d.rh)) return "枠の中に既存の半紙があります。空いてる場所へ";
+  if(reservationsInRect(d.rx,d.ry,d.rw,d.rh)) return "ほかの予約枠と重なっています";
   const g = rsvGateReason(); if(g) return g;
   return "";
 }
 function rsvRenderPreview(){
   let el = document.getElementById("rsvPreview");
-  if(!el){ el=document.createElement("div"); el.id="rsvPreview"; el.textContent="ドラッグで移動"; document.getElementById("frames").appendChild(el); rsvAttachDrag(el); }
+  if(!el){
+    el=document.createElement("div"); el.id="rsvPreview";
+    el.innerHTML='<div class="rsv-preview-handle">ここをドラッグ</div><div class="rsv-preview-label">予約枠</div>';
+    document.getElementById("frames").appendChild(el); rsvAttachDrag(el);
+  }
   const d=rsvDraft;
   el.style.left=(d.rx*WALL_W)+"px"; el.style.top=(d.ry*WALL_H)+"px";
   el.style.width=(d.rw*WALL_W)+"px"; el.style.height=(d.rh*WALL_H)+"px";
-  el.style.fontSize=Math.max(16,Math.round(d.rw*WALL_W*0.05))+"px";
+  const fs = Math.max(16,Math.round(d.rw*WALL_W*0.05));
+  el.style.fontSize=fs+"px";
+  const h=el.querySelector(".rsv-preview-handle"); if(h) h.style.fontSize=Math.max(12,Math.min(14,Math.round(fs*.58)))+"px";
 }
 function rsvAttachDrag(el){
+  const grip = el.querySelector(".rsv-preview-handle") || el;
   let dragging=false, ox=0, oy=0;
-  el.addEventListener("pointerdown", e=>{
+  grip.addEventListener("pointerdown", e=>{
     if(!rsvDraft) return;
-    dragging=true; el.classList.add("drag"); try{el.setPointerCapture(e.pointerId);}catch(_){}
+    dragging=true; el.classList.add("drag"); try{grip.setPointerCapture(e.pointerId);}catch(_){}
     const r=notesEl.getBoundingClientRect();
     ox = (e.clientX-r.left)/zoom - rsvDraft.rx*WALL_W;
     oy = (e.clientY-r.top)/zoom - rsvDraft.ry*WALL_H;
     e.preventDefault();
   });
-  el.addEventListener("pointermove", e=>{
+  grip.addEventListener("pointermove", e=>{
     if(!dragging||!rsvDraft) return;
     const r=notesEl.getBoundingClientRect();
     rsvDraft.rx = clamp(((e.clientX-r.left)/zoom - ox)/WALL_W, 0, 1-rsvDraft.rw);
     rsvDraft.ry = clamp(((e.clientY-r.top)/zoom - oy)/WALL_H, 0, 1-rsvDraft.rh);
     rsvRenderPreview(); rsvRefresh();
   });
-  const end=e=>{ dragging=false; el.classList.remove("drag"); try{el.releasePointerCapture(e.pointerId);}catch(_){} };
-  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+  const end=e=>{ dragging=false; el.classList.remove("drag"); try{grip.releasePointerCapture(e.pointerId);}catch(_){} };
+  grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+}
+function rsvAutoPlace(showToast=true){
+  if(!rsvDraft) return false;
+  const g = rsvGateReason();
+  if(g){ rsvRefresh(); if(showToast) toast(g); return false; }
+  const w=rsvDraft.rw, h=rsvDraft.rh, ctr=viewCenterFrac();
+  const cols=30, rows=14;
+  let best=null, bestScore=Infinity;
+  for(let yi=0; yi<=rows; yi++){
+    const ry = (1-h) * yi / rows;
+    for(let xi=0; xi<=cols; xi++){
+      const rx = (1-w) * xi / cols;
+      if(postsInRect(rx,ry,w,h) || reservationsInRect(rx,ry,w,h)) continue;
+      const cx=rx+w/2, cy=ry+h/2;
+      const score = Math.pow(cx-ctr.fx,2) + Math.pow(cy-ctr.fy,2);
+      if(score < bestScore){ bestScore=score; best={rx,ry}; }
+    }
+  }
+  if(!best){ rsvRefresh(); if(showToast) toast("空き場所が見つかりませんでした"); return false; }
+  rsvDraft.rx = best.rx; rsvDraft.ry = best.ry;
+  rsvRenderPreview(); rsvRefresh();
+  if(showToast) toast("空いてる場所へ移動しました");
+  return true;
 }
 function rsvRefresh(){
   if(!rsvDraft) return;
@@ -4208,7 +4260,7 @@ function rsvOpen(){
   rsvAspectsSet(rsvDraft.asp);
   document.getElementById("rsvMask").classList.add("show");
   if(floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // デスクをしまって壁を見やすく
-  rsvRenderPreview(); rsvRefresh();
+  rsvRenderPreview(); rsvRefresh(); rsvAutoPlace(false);
 }
 function rsvClose(){
   document.getElementById("rsvMask").classList.remove("show");
@@ -4238,6 +4290,7 @@ async function rsvConfirm(){
   if(on("rsvOpen")) on("rsvOpen").addEventListener("click", rsvOpen);
   if(on("rsvSize")) on("rsvSize").addEventListener("input", e=>{ if(rsvDraft){ rsvDraft.t=(parseInt(e.target.value,10)||0)/100; rsvResize(); } });
   document.querySelectorAll("#rsvAspects button").forEach(b=> b.addEventListener("click", ()=>{ if(!rsvDraft) return; rsvDraft.asp=parseFloat(b.dataset.asp)||1; rsvAspectsSet(rsvDraft.asp); rsvResize(); }));
+  if(on("rsvAutoPlace")) on("rsvAutoPlace").addEventListener("click", ()=>rsvAutoPlace(true));
   if(on("rsvCancel")) on("rsvCancel").addEventListener("click", rsvClose);
   if(on("rsvConfirm")) on("rsvConfirm").addEventListener("click", rsvConfirm);
   setInterval(()=>{ if(reservations.size){ rsvCleanupLazy(); renderReservations(); } }, 30000);   // 状態遷移・期限切れの遅延反映
