@@ -1255,7 +1255,7 @@ const RSV = {
   T1:"寝る前に描きなさい", T2:"もう何でもいいや適当で", T3:"筆落書きでも委員会"
 };
 const reservations = new Map();        // id -> rsv レコード
-const FCELL = { W:NOTE_W, H:NOTE_H, GAP:16, PAD:18, HEAD:72 };   // 原寸セル（104×196）。縮小しない。後で調整可
+const FCELL = { W:104, H:196, GAP:16, PAD:18, HEAD:72 };   // 原寸セル（NOTE_W×NOTE_H＝104×196）。定義順の都合でリテラル。後で調整可
 const FMIN_ROWS = 2;
 function rsvMinW(){ return (3*FCELL.W + 2*FCELL.GAP + 2*FCELL.PAD)/WALL_W; }                                  // 最低 横3セル
 function rsvMinH(){ return (FCELL.HEAD + 2*FCELL.PAD + FMIN_ROWS*FCELL.H + (FMIN_ROWS-1)*FCELL.GAP)/WALL_H; }  // 最低 縦2段＋お題ヘッダー
