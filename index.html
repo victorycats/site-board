@@ -127,7 +127,7 @@
   .rsv-wait .rsv-wait-t{opacity:.8}
   .rsv-invite{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9c7f5e;opacity:.6;pointer-events:none;font-family:"Shippori Mincho",serif}
   .rsv-del{position:absolute;top:6px;right:6px;pointer-events:auto;cursor:pointer;width:26px;height:26px;border-radius:50%;
-    border:none;background:#3a2a18;color:#fff;font-size:16px;line-height:1;font-weight:700;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.4);z-index:10;display:flex;align-items:center;justify-content:center}
+    border:none;background:#3a2a18;color:#fff;font-size:16px;line-height:1;font-weight:700;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
   .rsv-del:hover{background:#8c2414}
   .rsv-draw{position:absolute;inset:0;border:none;background:transparent;cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;padding-bottom:8px;color:#9c7f5e;font-weight:700;font-family:"Shippori Mincho",serif}
   .rsv-draw .rsv-draw-hint{font-size:15px}
@@ -142,7 +142,7 @@
   .desk-topic b{font-size:14px;color:#3a2a18}
   .desk-topic .dt-sub{font-size:12px;color:#7a6a4d}
   .desk-topic .dt-x{margin-left:auto;border:none;background:#8c2414;color:#fff;border-radius:999px;font-size:11px;padding:3px 11px;cursor:pointer;font-family:inherit;flex:0 0 auto}
-  .rsv-share{position:absolute;top:6px;left:6px;pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;font-size:12px;line-height:1;padding:5px 12px;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.35);z-index:10}
+  .rsv-share{position:absolute;top:6px;left:6px;pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;font-size:12px;line-height:1;padding:5px 12px;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.35)}
   #rsvPreview{position:absolute;box-sizing:border-box;z-index:56;pointer-events:auto;cursor:grab;touch-action:none;
     border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;flex-direction:column;justify-content:space-between;
     color:#1f5a2a;font-family:"Shippori Mincho",serif;font-weight:700;text-shadow:0 1px 2px rgba(255,255,255,.6)}
@@ -876,6 +876,11 @@
   .admin-banner .ab-act:hover{background:rgba(255,255,255,.18)}
   .admin-banner .ab-act:active{transform:scale(.97)}
   .admin-banner .ab-exit{background:rgba(0,0,0,.20)}
+  @media (max-width:600px){
+    .admin-banner{flex-wrap:wrap;overflow-x:visible;left:6px !important;right:6px;width:auto;max-width:calc(100vw - 12px);max-height:none;gap:7px;padding:7px 9px}
+    .admin-banner .ab-act{font-size:11px;padding:5px 8px}
+    .admin-banner .ab-sep{display:none}
+  }
 
   .empty,.loading{
     text-align:center;padding:48px 20px;
@@ -4361,7 +4366,9 @@ function renderReservations(){
     const px = rsvRectPx(r), cap = rsvCapacity(r);
     const fsHead = 24, fsBand = 20, fsCorner = 13;   // 固定（ヘッダー高さ＝FCELL.HEADと一致させる）
     const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2);
-    const cornerText = (st==="ended") ? `終了 ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚` : esc(r.t3||RSV.T3);
+    const cornerText = (st==="ended") ? `終了 ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚`
+      : (st==="active") ? `〜${fmtClock(r.end)} まで`
+      : esc(r.t3||RSV.T3);
     const canDel = (r.uid===myUid) || admin;
     const delBtn = canDel ? `<button class="rsv-del" data-rid="${id}" type="button" title="${(admin&&r.uid!==myUid)?'運営として削除':'この枠を取り消す'}">×</button>` : "";
     const shareBtn = `<button class="rsv-share" data-rid="${id}" type="button" title="この枠のリンクを共有">共有</button>`;
