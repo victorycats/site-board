@@ -3679,6 +3679,22 @@ function drawMinimap(){
   g.clearRect(0,0,mmW,mmH);
   const sx = mmW/WALL_W, sy = mmH/WALL_H;
   const now = Date.now();
+  // お題枠（予約中＝淡い金／開催中＝濃い金）をゾーンとして敷く。終了枠は光らせない
+  const pulse = 0.5 + 0.5*Math.sin(now/520);
+  for(const [id,r] of reservations){
+    if(!r) continue;
+    const st = rsvState(r);
+    if(st!=="reserved" && st!=="active") continue;
+    const fx=(r.rx||0)*WALL_W*sx, fy=(r.ry||0)*WALL_H*sy, fw=Math.max(3,(r.rw||0)*WALL_W*sx), fh=Math.max(3,(r.rh||0)*WALL_H*sy);
+    const base = (st==="active") ? 0.30 : 0.16;
+    g.save();
+    g.fillStyle = "rgba(214,175,60,"+(base + 0.22*pulse).toFixed(3)+")";
+    g.shadowColor = "rgba(214,175,60,.95)"; g.shadowBlur = (st==="active"? 10 : 6);
+    g.fillRect(fx, fy, fw, fh);
+    g.strokeStyle = "rgba(224,188,80,"+(0.55 + 0.4*pulse).toFixed(3)+")"; g.lineWidth = 1.4;
+    g.strokeRect(fx+0.5, fy+0.5, Math.max(3,fw-1), Math.max(3,fh-1));
+    g.restore();
+  }
   for(const [id,p] of posts){
     if(p.hidden && !admin) continue;
     const x = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W)*sx;
@@ -3722,6 +3738,7 @@ window.addEventListener("pointerup", ()=>{ miniDown=false; });
 
 let mmRaf=0;
 scrollEl.addEventListener("scroll", ()=>{ if(panRAF) return; if(!mmRaf) mmRaf=requestAnimationFrame(()=>{ mmRaf=0; drawMinimap(); }); scheduleLazy(); });   // 自動パン中(panRAF)は毎フレーム再描画しない＝着地時にまとめて
+setInterval(()=>{ for(const [,r] of reservations){ const s=rsvState(r); if(s==="reserved"||s==="active"){ drawMinimap(); break; } } }, 360);   // 金ゾーンの明滅（枠があるときだけ軽く再描画）
 
 /* ---------- 半紙めぐり ---------- */
 let shuffleOrder = [];   // 未読なし巡回用：シャッフル済みの並び（id配列）。←→で往復
