@@ -185,6 +185,16 @@
   .rsv-valid.ok{color:#1f7a33}
   .rsv-valid.ng{color:#b3261e}
   .rsv-find{flex:0 0 auto;padding:6px 12px;border-radius:8px;border:1px solid var(--paper-edge);background:#fffdf7;font-family:inherit;cursor:pointer;color:var(--sumi);white-space:nowrap}
+  .rsv-find-primary{display:block;width:100%;margin:2px 0 4px;padding:12px;font-size:15px;font-weight:800;color:#fff;background:#8c2414;border:none;border-radius:10px;box-shadow:0 2px 8px rgba(140,36,20,.3)}
+  .rsv-find-primary:active{transform:translateY(1px)}
+  .rsv-adv{margin:2px 0;border:1px solid var(--paper-edge);border-radius:10px;background:rgba(255,253,247,.5);overflow:hidden}
+  .rsv-adv>summary{list-style:none;cursor:pointer;padding:9px 12px;font-size:13px;font-weight:700;color:var(--sumi);user-select:none;display:flex;align-items:center;gap:6px}
+  .rsv-adv>summary::-webkit-details-marker{display:none}
+  .rsv-adv>summary::before{content:"▸";font-size:11px;transition:transform .15s;opacity:.7}
+  .rsv-adv[open]>summary::before{transform:rotate(90deg)}
+  .rsv-adv>summary:hover{background:rgba(140,36,20,.06)}
+  .rsv-adv .rsv-row{padding:0 12px}
+  .rsv-adv .rsv-row:last-child{padding-bottom:11px}
   .rsv-find:hover{background:#fff}
   .rsv-ign{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-faint)}
   .rsv-ign input{width:16px;height:16px}
@@ -1123,36 +1133,18 @@
   <div class="rsv-card">
     <div class="rsv-title"><span class="rsv-grab" aria-hidden="true">⠿</span>お題枠を予約<span class="rsv-beta">試験運用</span></div>
     <div class="rsv-note" id="rsvGateNote"></div>
-    <div class="rsv-row">
-      <span class="rsv-lbl">作品の向き</span>
-      <div class="rsv-aspects" id="rsvOri">
-        <button type="button" data-ori="p" class="on">縦書き</button>
-        <button type="button" data-ori="l">横書き</button>
-      </div>
-    </div>
-    <div class="rsv-row">
-      <span class="rsv-lbl">形</span>
-      <div class="rsv-aspects" id="rsvAspects">
-        <button type="button" data-asp="1.5" class="on">横長</button>
-        <button type="button" data-asp="1.0">正方</button>
-        <button type="button" data-asp="0.6667">縦長</button>
-      </div>
-    </div>
-    <div class="rsv-row">
-      <span class="rsv-lbl">大きさ</span>
-      <input type="range" id="rsvSize" min="0" max="100" value="55">
-      <button type="button" id="rsvFind" class="rsv-find">空き探す</button>
-    </div>
+    <button type="button" id="rsvFind" class="rsv-find rsv-find-primary">📍 この辺の空きを探す</button>
+    <div class="rsv-hint" id="rsvHint">「空きを探す」をタップして、気に入らなければドラッグで微調整。</div>
     <div class="rsv-row">
       <span class="rsv-lbl">開始</span>
       <select id="rsvStart">
         <option value="0">今すぐ</option>
+        <option value="300000">5分後</option>
         <option value="900000">15分後</option>
         <option value="1800000">30分後</option>
+        <option value="2700000">45分後</option>
         <option value="3600000">1時間後</option>
-        <option value="7200000">2時間後</option>
-        <option value="10800000">3時間後</option>
-        <option value="14400000">4時間後</option>
+        <option value="5400000">1時間半後</option>
       </select>
       <span class="rsv-lbl">長さ</span>
       <select id="rsvDur">
@@ -1161,7 +1153,7 @@
         <option value="3600000">1時間</option>
         <option value="7200000">2時間</option>
         <option value="10800000">3時間</option>
-        <option value="14400000">4時間</option>
+        <option value="roll">追加があれば48時間</option>
       </select>
     </div>
     <div class="rsv-texts">
@@ -1169,7 +1161,28 @@
       <input id="rsvT2" type="text" maxlength="20" placeholder="帯の文字">
       <input id="rsvT3" type="text" maxlength="20" placeholder="右下の文字">
     </div>
-    <div class="rsv-hint" id="rsvHint">枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。</div>
+    <details class="rsv-adv" id="rsvAdv">
+      <summary>向き・形・大きさを調整</summary>
+      <div class="rsv-row">
+        <span class="rsv-lbl">作品の向き</span>
+        <div class="rsv-aspects" id="rsvOri">
+          <button type="button" data-ori="p" class="on">縦書き</button>
+          <button type="button" data-ori="l">横書き</button>
+        </div>
+      </div>
+      <div class="rsv-row">
+        <span class="rsv-lbl">形</span>
+        <div class="rsv-aspects" id="rsvAspects">
+          <button type="button" data-asp="1.5" class="on">横長</button>
+          <button type="button" data-asp="1.0">正方</button>
+          <button type="button" data-asp="0.6667">縦長</button>
+        </div>
+      </div>
+      <div class="rsv-row">
+        <span class="rsv-lbl">大きさ</span>
+        <input type="range" id="rsvSize" min="0" max="100" value="55">
+      </div>
+    </details>
     <div class="rsv-valid" id="rsvValid"></div>
     <label class="rsv-ign"><input type="checkbox" id="rsvIgnore"> 混雑を無視（テスト用）</label>
     <div class="rsv-btns">
@@ -1264,6 +1277,7 @@ let boardSubs = [];               // 現在ボードの購読解除関数
 function bpath(sub){ return "boards/" + boardId + "/" + sub; }   // 現在ボードのパス
 
 /* ===== お題枠予約（試験運用・Stage1：データ層＋作成＋描画。投稿制限/適応上限は後段） ===== */
+const ROLL_BASE_MS = 7200000, ROLL_MAX_MS = 172800000, ROLL_KEEP_MS = 1800000;   // 継続枠：初期2h／上限48h／最終投稿+30分まで延命
 const RSV = {
   MAX_FRAMES: 2, MAX_PER_UID: 1, GATE_COUNT: 50,
   AHEAD_MS: 4*3600e3, DUR_MAX_MS: 4*3600e3, DUR_MIN_MS: 10*60e3,
@@ -2763,7 +2777,15 @@ async function createPost(nx, ny, fid){
       } else { throw err; }
     }
     reserved = false;   // 書き込み成功＝枠は確定
-    if(meta.fid){ try{ set(ref(db, bpath("reservations/"+meta.fid+"/hasPost")), true).catch(()=>{}); }catch(_){} }   // 枠に1枚入った＝自動消滅を回避
+    if(meta.fid){
+      try{ set(ref(db, bpath("reservations/"+meta.fid+"/hasPost")), true).catch(()=>{}); }catch(_){}   // 枠に1枚入った＝自動消滅を回避
+      try{ const fr=reservations.get(meta.fid);
+        if(fr && fr.roll){   // 継続枠：最終投稿+30分まで延命（開始+48hでキャップ）
+          const newEnd = Math.min((fr.start||0)+ROLL_MAX_MS, Math.max(fr.end||0, Date.now()+ROLL_KEEP_MS));
+          if(newEnd > (fr.end||0)){ set(ref(db, bpath("reservations/"+meta.fid+"/end")), newEnd).catch(()=>{}); fr.end=newEnd; }
+        }
+      }catch(_){}
+    }
     else { try{ const hp = rsvFrameAt(nx, ny, meta.land); if(hp && rsvState(hp.r)==="active" && hp.r.hasPost!==true){ set(ref(db, bpath("reservations/"+hp.id+"/hasPost")), true).catch(()=>{}); } }catch(_){} }
     if(finalNow){ lastPostAt = Date.now(); LS.set("fg_lastPost", String(lastPostAt)); }
     editingId = id;
@@ -3740,10 +3762,13 @@ function drawMinimap(){
     g.strokeRect(fx+0.5, fy+0.5, Math.max(3,fw-1), Math.max(3,fh-1));
     g.restore();
   }
+  const mmFidx = fidIndexMap();   // 枠内半紙は実セルに配置（中央重なりを解消）
   for(const [id,p] of posts){
     if(p.hidden && !admin) continue;
-    const x = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W)*sx;
-    const y = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H)*sy;
+    const mfp = mmFidx.get(id);
+    let x, y;
+    if(mfp){ const c=rsvCellXY(mfp.r, mfp.idx); x=c.left*sx; y=c.top*sy; }
+    else { x=clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W)*sx; y=clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H)*sy; }
     const lw = p.land ? NOTE_H*0.82 : NOTE_W;   // 横長は幅広・縦短
     const lh = p.land ? NOTE_W : NOTE_H*0.85;
     const w = Math.max(2, lw*sx), h = Math.max(2, lh*sy);
@@ -3854,8 +3879,12 @@ function centerOnNote(id, p, targetZoom, smooth){
   const target = (targetZoom != null) ? targetZoom : ((window.innerWidth <= 560) ? 1.0 : 1.3);  // 既定: PC130%/モバイル100%
   const z = clamp(target, zoomMin, ZOOM_MAX);
   if(z !== zoom){ zoom = z; applyZoom(); }
-  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + (p.land?NOTE_LAND_W:NOTE_W)/2) * zoom;
-  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2) * zoom;
+  const fp = fidIndexMap().get(id);   // 枠内なら実セル位置で寄せる
+  let baseL, baseT, nw, nh;
+  if(fp){ const c=rsvCellXY(fp.r, fp.idx); baseL=c.left; baseT=c.top; nw=cellW(oriOf(fp.r)); nh=cellH(oriOf(fp.r)); }
+  else { baseL=clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W); baseT=clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H); nw=(p.land?NOTE_LAND_W:NOTE_W); nh=(p.land?NOTE_LAND_H:NOTE_H); }
+  const px = (GUT_X + baseL + nw/2) * zoom;
+  const py = (GUT_Y + baseT + nh/2) * zoom;
   const {ax, ay} = focusAnchor();
   const tLeft = clamp(px - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
   const tTop  = clamp(py - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
@@ -3983,8 +4012,12 @@ function fitZoomForFocus(){
 function zoomToNoteInstant(id, p, z){   // のぞき見用：パン演出・赤枠の再点滅なしで、その場でズームして中央へ
   if(panRAF){ cancelAnimationFrame(panRAF); panRAF=null; }
   if(z !== zoom){ zoom = z; applyZoom(); }
-  const px = (GUT_X + clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W) + (p.land?NOTE_LAND_W:NOTE_W)/2) * zoom;
-  const py = (GUT_Y + clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2) * zoom;
+  const fp = fidIndexMap().get(id);   // 枠内なら実セル位置で寄せる
+  let baseL, baseT, nw, nh;
+  if(fp){ const c=rsvCellXY(fp.r, fp.idx); baseL=c.left; baseT=c.top; nw=cellW(oriOf(fp.r)); nh=cellH(oriOf(fp.r)); }
+  else { baseL=clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W); baseT=clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H); nw=(p.land?NOTE_LAND_W:NOTE_W); nh=(p.land?NOTE_LAND_H:NOTE_H); }
+  const px = (GUT_X + baseL + nw/2) * zoom;
+  const py = (GUT_Y + baseT + nh/2) * zoom;
   const {ax, ay} = focusAnchor();
   scrollEl.scrollLeft = clamp(px - ax, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
   scrollEl.scrollTop  = clamp(py - ay, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
@@ -4554,9 +4587,10 @@ function rsvResize(){
 function rsvAspectsSet(asp){ document.querySelectorAll("#rsvAspects button").forEach(b=> b.classList.toggle("on", Math.abs(parseFloat(b.dataset.asp)-asp)<0.01)); }
 function rsvUpdateHint(){
   const el=document.getElementById("rsvHint"); if(!el) return;
-  const dur=parseInt(document.getElementById("rsvDur").value,10)||RSV.DUR_MIN_MS;
+  const dv=document.getElementById("rsvDur").value;
+  const dur=(dv==="roll") ? ROLL_BASE_MS : (parseInt(dv,10)||RSV.DUR_MIN_MS);
   const grace=Math.min(RSV.GRACE_MS, Math.max(5*60e3, Math.floor(dur/2)));
-  el.textContent="枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。開始から"+Math.round(grace/60000)+"分だれも描かないと枠は消えます。";
+  el.textContent="「空きを探す」をタップして、気に入らなければドラッグで微調整。全体で300枚に達すると枠も含めて終了。開始から"+Math.round(grace/60000)+"分だれも描かないと枠は消えます。";
 }
 function rsvApplyTimeCaps(){
   const caps=rsvActiveCaps();
@@ -4598,8 +4632,21 @@ function rsvAttachCardDrag(){
     card.style.top =clamp(e.clientY-offY, 6, Math.max(6, window.innerHeight - h - 6))+"px";
     e.preventDefault();
   });
-  const end=e=>{ if(dragging){ dragging=false; title.classList.remove("grabbing"); try{ title.releasePointerCapture(e.pointerId); }catch(_){} } };
+  const end=e=>{ if(dragging){ dragging=false; title.classList.remove("grabbing"); try{ title.releasePointerCapture(e.pointerId); }catch(_){}
+    try{ LS.set("fg_rsvcardpos", JSON.stringify({ left:card.style.left, top:card.style.top })); }catch(_){}   // 位置を記憶（半紙と同じくLS）
+  } };
   title.addEventListener("pointerup", end); title.addEventListener("pointercancel", end);
+}
+function rsvApplyCardPos(){   // 記憶した位置を復元（無ければ既定の下中央）
+  const card=document.querySelector(".rsv-card"); if(!card) return;
+  let pos=null; try{ pos=JSON.parse(LS.get("fg_rsvcardpos")||"null"); }catch(_){}
+  if(pos && pos.left && pos.top){
+    card.style.transform="none"; card.style.bottom="auto"; card.style.left=pos.left; card.style.top=pos.top;
+    // 画面外に出ていたら引き戻す
+    requestAnimationFrame(()=>{ const r=card.getBoundingClientRect(); const w=card.offsetWidth,h=card.offsetHeight;
+      card.style.left=clamp(r.left,6,Math.max(6,window.innerWidth-w-6))+"px";
+      card.style.top =clamp(r.top ,6,Math.max(6,window.innerHeight-h-6))+"px"; });
+  } else { card.style.left=""; card.style.top=""; card.style.transform=""; card.style.bottom=""; }
 }
 function rsvCardReset(){   // 位置を既定（下中央）へ戻す＝開くたびに同じ位置から
   const card=document.querySelector(".rsv-card");
@@ -4609,6 +4656,7 @@ function rsvOpen(){
   if(!db){ toast("接続中です。少し待ってね"); return; }
   rsvDraft = { asp:1.5, t:0.55 };
   document.querySelectorAll("#rsvOri button").forEach(b=> b.classList.toggle("on", b.dataset.ori==="p"));   // 既定は縦書き
+  { const adv=document.getElementById("rsvAdv"); if(adv) adv.open = (window.innerWidth > 560); }            // PCは開く／モバイルは畳む
   const sz = rsvComputeSize(rsvDraft.asp, rsvDraft.t); rsvDraft.rw=sz.rw; rsvDraft.rh=sz.rh;
   const ctr = viewCenterFrac();
   const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh, ctr.fx, ctr.fy);
@@ -4619,7 +4667,7 @@ function rsvOpen(){
   document.getElementById("rsvSize").value = Math.round(rsvDraft.t*100);
   rsvAspectsSet(rsvDraft.asp);
   rsvApplyTimeCaps(); rsvUpdateHint(); rsvCapsNote();
-  rsvCardReset(); rsvAttachCardDrag();   // 既定位置へ戻してからドラッグ有効化
+  rsvApplyCardPos(); rsvAttachCardDrag();   // 記憶した位置に開く＋ドラッグ有効化
   document.getElementById("rsvMask").classList.add("show");
   document.body.classList.add("rsv-open");   // 配置中は板スクロール停止
   if(floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // デスクをしまって壁を見やすく
@@ -4637,12 +4685,15 @@ async function rsvConfirm(){
   const d=rsvDraft; const msg=rsvValidity(d); if(msg){ toast(msg); return; }
   const caps = rsvActiveCaps();
   const startOff = clamp(parseInt(document.getElementById("rsvStart").value,10)||0, 0, caps.aheadMs);
-  const dur = clamp(parseInt(document.getElementById("rsvDur").value,10)||RSV.DUR_MIN_MS, RSV.DUR_MIN_MS, caps.durMaxMs);
+  const durVal = document.getElementById("rsvDur").value;
+  const roll = (durVal === "roll");
+  const dur = roll ? ROLL_BASE_MS : clamp(parseInt(durVal,10)||RSV.DUR_MIN_MS, RSV.DUR_MIN_MS, caps.durMaxMs);
   const start = Date.now() + startOff, end = start + dur;
   const gv=v=>(v||"").slice(0,20);
   const rec = { uid: myUid, t: Date.now(), start, end, ori: rsvSelectedOri(),
     rx:+d.rx.toFixed(4), ry:+d.ry.toFixed(4), rw:+d.rw.toFixed(4), rh:+d.rh.toFixed(4), hasPost:false,
     t1:gv(document.getElementById("rsvT1").value)||RSV.T1, t2:gv(document.getElementById("rsvT2").value)||RSV.T2, t3:gv(document.getElementById("rsvT3").value)||RSV.T3 };
+  if(roll) rec.roll = true;   // 継続枠（投稿で延命）
   const btn=document.getElementById("rsvConfirm"); btn.disabled=true;
   try{
     const id = push(ref(db, bpath("reservations"))).key;
