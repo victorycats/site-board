@@ -115,6 +115,9 @@
   .rsv-frame{position:absolute;box-sizing:border-box;pointer-events:none;display:flex;flex-direction:column;
     background:rgba(255,255,255,.5);border:3px solid #111;border-radius:5px;overflow:hidden;font-family:"Shippori Mincho",serif}
   .rsv-frame.reserved{background:rgba(250,247,238,.66);border-style:dashed}
+  .rsv-frame.ended{border-style:solid;border-color:#9a8f7d;background:rgba(250,247,238,.45)}
+  .rsv-frame.ended .rsv-band{background:#6b6157}
+  .rsv-frame.ended .rsv-corner{opacity:.9;color:#6b6157;font-weight:800}
   .rsv-frame .rsv-head{flex:0 0 auto;height:38px;line-height:38px;text-align:center;color:#111;font-weight:700;padding:0 48px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .rsv-frame .rsv-band{flex:0 0 auto;height:34px;line-height:34px;background:#111;color:#fff;text-align:center;font-weight:700;padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .rsv-frame .rsv-body{flex:1 1 auto;position:relative;min-height:0}
@@ -1263,7 +1266,15 @@ function rsvCols(r){ const innerW=(r.rw||0)*WALL_W - 2*FCELL.PAD; return Math.ma
 function rsvMaxRows(r){ const avail=(r.rh||0)*WALL_H - FCELL.HEAD - 2*FCELL.PAD; return Math.max(FMIN_ROWS, Math.floor((avail + FCELL.GAP)/(FCELL.H + FCELL.GAP))); }   // 予約した高さに収まる行数
 function rsvCapacity(r){ return rsvCols(r)*rsvMaxRows(r); }
 function rsvRowsShown(r,n){ const cols=rsvCols(r); return Math.min(rsvMaxRows(r), Math.max(FMIN_ROWS, Math.ceil((n||0)/cols))); }   // 今の枚数で見せる行数（2行〜上限）
-function rsvDisplayHpx(r,n){ const rows=rsvRowsShown(r,n); return FCELL.HEAD + 2*FCELL.PAD + rows*FCELL.H + (rows-1)*FCELL.GAP; }    // 下方向に伸びる表示高さ（px）
+function rsvContentHpx(r,n){ const cols=rsvCols(r); const rows=Math.max(1, Math.ceil((n||0)/cols)); return FCELL.HEAD + 2*FCELL.PAD + rows*FCELL.H + (rows-1)*FCELL.GAP; }   // 終了枠：実枚数ぴったりの高さ
+function rsvDisplayHpx(r,n){   // 表示高さ＝「予約した高さ」と「実際の枚数に必要な高さ」の大きい方（壁下端でクランプ）。常に全部の半紙を枠内に収める
+  const cols=rsvCols(r);
+  const contentRows = Math.max(FMIN_ROWS, Math.ceil((n||0)/cols));
+  const contentH = FCELL.HEAD + 2*FCELL.PAD + contentRows*FCELL.H + (contentRows-1)*FCELL.GAP;
+  const claimedH = (r.rh||0)*WALL_H;
+  const wallH = (1-(r.ry||0))*WALL_H;
+  return Math.min(wallH, Math.max(claimedH, contentH));
+}
 function rsvCellXY(r, i){   // i番目セルの左上（壁px・絶対）。左上から行→列。左寄せ＝延長しても既存がズレない
   const cols=rsvCols(r), col=i%cols, row=Math.floor(i/cols);
   const frameL=(r.rx||0)*WALL_W, frameT=(r.ry||0)*WALL_H;
@@ -4323,16 +4334,18 @@ function renderReservations(){
   const frameNotes = buildFrameNotes();   // fid -> [postId...]（容量表示用）
   let html = "";
   for(const [id,r] of reservations){
-    if(!r || now >= (r.end||0)) continue;
+    if(!r) continue;
     if(!/^[A-Za-z0-9_-]+$/.test(id)) continue;
-    const px = rsvRectPx(r), st = rsvState(r);
+    const cnt = (frameNotes.get(id)||[]).length, st = rsvState(r);
+    if(st==="ended" && cnt===0) continue;   // 0件の終了枠は描かない（掃除対象）
+    const px = rsvRectPx(r), cap = rsvCapacity(r);
     const fsHead = 24, fsBand = 20, fsCorner = 13;   // 固定（ヘッダー高さ＝FCELL.HEADと一致させる）
-    const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2), t3=esc(r.t3||RSV.T3);
+    const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2);
+    const cornerText = (st==="ended") ? `終了 ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚` : esc(r.t3||RSV.T3);
     const canDel = (r.uid===myUid) || admin;
     const delBtn = canDel ? `<button class="rsv-del" data-rid="${id}" type="button" title="${(admin&&r.uid!==myUid)?'運営として削除':'この枠を取り消す'}">×</button>` : "";
     const shareBtn = `<button class="rsv-share" data-rid="${id}" type="button" title="この枠のリンクを共有">共有</button>`;
-    const cnt = (frameNotes.get(id)||[]).length, cap = rsvCapacity(r);
-    const fh = rsvDisplayHpx(r, cnt);   // 下方向に伸びる高さ（2行〜予約上限）
+    const fh = (st==="ended") ? rsvContentHpx(r, cnt) : rsvDisplayHpx(r, cnt);   // 終了枠は実枚数ぴったりに縮small／それ以外は下伸長
     let overlay = "";
     if(st==="reserved"){
       overlay = `<div class="rsv-wait"><div class="rsv-wait-l" style="font-size:${fsBand}px">枠予約済み</div><div class="rsv-wait-t" style="font-size:${fsCorner}px">${fmtClock(r.start)} 開始</div></div>`;
@@ -4346,7 +4359,7 @@ function renderReservations(){
       + `<div class="rsv-head" style="font-size:${fsHead}px">${t1}</div>`
       + `<div class="rsv-band" style="font-size:${fsBand}px">${t2}</div>`
       + `<div class="rsv-body">${overlay}</div>`
-      + `<div class="rsv-corner" style="font-size:${fsCorner}px">${t3}</div>`
+      + `<div class="rsv-corner" style="font-size:${fsCorner}px">${cornerText}</div>`
       + shareBtn + delBtn
       + `</div>`;
   }
@@ -4386,11 +4399,13 @@ function rsvCheckTransitions(){   // 予約→開始 を観測したら通知（
 function rsvCleanupLazy(){
   if(!db) return;
   const now = Date.now();
+  const fn = buildFrameNotes();
   for(const [id,r] of reservations){
     if(!r) continue;
+    if((fn.get(id)||[]).length > 0) continue;   // 1枚でも貼られた枠は終了後も残す（永続）
     const expired = now >= (r.end||0);
     const stale = (now > (r.start||0) + rsvGraceMs(r)) && r.hasPost !== true;
-    if(expired || stale){ set(ref(db, bpath("reservations/"+id)), null).catch(()=>{}); }
+    if(expired || stale){ set(ref(db, bpath("reservations/"+id)), null).catch(()=>{}); }   // 0件の終了/猶予切れ枠だけ消す
   }
 }
 /* ---- 作成 ---- */
