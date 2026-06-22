@@ -2587,7 +2587,24 @@ function worstCover(x,y){
   return worst;
 }
 const COVER_MAX = 0.3;                       // 覆ってよい上限＝3割（＝7割は露出）
-function canPlaceAt(x,y){ return worstCover(x,y) <= COVER_MAX; }
+function ptHitsFrames(x,y,w,h){   // 半紙矩形(壁px)が予約枠(表示矩形)と重なるか
+  const fn = buildFrameNotes();
+  for(const [id,r] of reservations){
+    if(!r) continue;
+    const st = rsvState(r), cnt=(fn.get(id)||[]).length;
+    if(st==="ended" && cnt===0) continue;   // 消える枠は無視
+    const fx=(r.rx||0)*WALL_W, fy=(r.ry||0)*WALL_H, fw=(r.rw||0)*WALL_W;
+    const fh = (st==="ended") ? rsvContentHpx(r,cnt) : rsvDisplayHpx(r,cnt);
+    if(x < fx+fw && x+w > fx && y < fy+fh && y+h > fy) return true;
+  }
+  return false;
+}
+function canPlaceAt(x,y){
+  if(worstCover(x,y) > COVER_MAX) return false;
+  const w=landscape?NOTE_LAND_W:NOTE_W, h=landscape?NOTE_LAND_H:NOTE_H;
+  if(ptHitsFrames(x,y,w,h)) return false;   // お題枠の上には通常の半紙を置かせない
+  return true;
+}
 wallEl.addEventListener("pointermove", e=>{
   if(!placing) return;
   const {x,y} = wallCoords(e.clientX, e.clientY);
@@ -4601,6 +4618,7 @@ async function rsvConfirm(){
   try{
     const id = push(ref(db, bpath("reservations"))).key;
     await set(ref(db, bpath("reservations/"+id)), rec);
+    reservations.set(id, rec); renderReservations(); render();   // 購読の往復を待たず即表示
     toast("お題枠を予約しました");
     rsvClose();
   }catch(e){
