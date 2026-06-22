@@ -4546,32 +4546,33 @@ function scrollToFrac(fx, fy){
   scrollEl.scrollLeft = clamp(px - scrollEl.clientWidth/2, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
   scrollEl.scrollTop  = clamp(py - scrollEl.clientHeight/2, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
 }
-function rsvFindAnother(){
-  if(!rsvDraft) return;
+function rsvSearchFit(){   // 現サイズ→最小(3列×1行)まで縮めつつ「この辺」の空きを探す。見つかれば{rx,ry,rw,rh,shrank}／無ければnull
+  if(!rsvDraft) return null;
   const ori = rsvSelectedOri();
   const ctr = viewCenterFrac();
   let fc = Math.max(3, rsvCols({rw:rsvDraft.rw, rh:rsvDraft.rh, ori}));
   let fr = Math.max(FMIN_ROWS, rsvMaxRows({rw:rsvDraft.rw, rh:rsvDraft.rh, ori}));
-  const startCols=fc, startRows=fr;
-  let placed=null;
-  // 今のサイズ→最低(3列×2行)まで、面積の大きい順に「この辺」の空きを探す。空きに収まるサイズまで自動で縮める
   for(let guard=0; guard<200; guard++){
     const rw = Math.min(RSV.W_MAX, rwForCols({ori}, fc));
     const rh = Math.min(RSV.H_MAX, rhForRows({ori}, fr));
     const spot = rsvFindSpot(rw, rh, ctr.fx, ctr.fy);
-    if(spot){ placed={ rx:spot.rx, ry:spot.ry, rw, rh }; break; }
+    if(spot) return { rx:spot.rx, ry:spot.ry, rw, rh, shrank:(rw<rsvDraft.rw-1e-4)||(rh<rsvDraft.rh-1e-4) };
     if(fc<=3 && fr<=FMIN_ROWS) break;
     if(fc>3 && (fr<=FMIN_ROWS || fc>=fr)) fc--;        // 横長気味なら列を、縦長気味なら行を先に削る
     else if(fr>FMIN_ROWS) fr--;
     else if(fc>3) fc--;
     else break;
   }
-  if(!placed){ toast("いまは空きが見つかりませんでした。少し時間をおいてね"); return; }
-  const shrank = (placed.rw < rsvDraft.rw-1e-4) || (placed.rh < rsvDraft.rh-1e-4);
-  rsvDraft.rw=placed.rw; rsvDraft.rh=placed.rh; rsvDraft.rx=placed.rx; rsvDraft.ry=placed.ry;
+  return null;
+}
+function rsvFindAnother(){
+  if(!rsvDraft) return;
+  const f = rsvSearchFit();
+  if(!f){ toast("いまは空きが見つかりませんでした。少し時間をおいてね"); return; }
+  rsvDraft.rw=f.rw; rsvDraft.rh=f.rh; rsvDraft.rx=f.rx; rsvDraft.ry=f.ry;
   rsvRenderPreview(); rsvRefresh();
   scrollToFrac(rsvDraft.rx+rsvDraft.rw/2, rsvDraft.ry+rsvDraft.rh/2);   // 見つけた所へ
-  if(shrank) toast("空きに収まるサイズに調整したよ（周囲が許せば投稿で広がります）");
+  if(f.shrank) toast("空きに収まるサイズに調整したよ（周囲が許せば投稿で広がります）");
   else toast("空いてる場所に置いたよ");
 }
 function rsvValidity(d){
@@ -4689,10 +4690,9 @@ function rsvOpen(){
   document.querySelectorAll("#rsvOri button").forEach(b=> b.classList.toggle("on", b.dataset.ori==="p"));   // 既定は縦書き
   { const adv=document.getElementById("rsvAdv"); if(adv) adv.open = (window.innerWidth > 560); }            // PCは開く／モバイルは畳む
   const sz = rsvComputeSize(rsvDraft.asp, rsvDraft.t); rsvDraft.rw=sz.rw; rsvDraft.rh=sz.rh;
-  const ctr = viewCenterFrac();
-  const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh, ctr.fx, ctr.fy);
-  if(spot){ rsvDraft.rx=spot.rx; rsvDraft.ry=spot.ry; }
-  else { rsvDraft.rx = clamp(ctr.fx - rsvDraft.rw/2, 0, 1-rsvDraft.rw); rsvDraft.ry = clamp(ctr.fy - rsvDraft.rh/2, 0, 1-rsvDraft.rh); }
+  const fit = rsvSearchFit();   // 開いた瞬間に「空きを探す」＝最初から置ける(緑)状態で出す
+  if(fit){ rsvDraft.rw=fit.rw; rsvDraft.rh=fit.rh; rsvDraft.rx=fit.rx; rsvDraft.ry=fit.ry; }
+  else { const ctr = viewCenterFrac(); rsvDraft.rx = clamp(ctr.fx - rsvDraft.rw/2, 0, 1-rsvDraft.rw); rsvDraft.ry = clamp(ctr.fy - rsvDraft.rh/2, 0, 1-rsvDraft.rh); }
   document.getElementById("rsvT1").value=RSV.T1; document.getElementById("rsvT2").value=RSV.T2; document.getElementById("rsvT3").value=RSV.T3;
   document.getElementById("rsvStart").value="0"; document.getElementById("rsvDur").value="2400000";
   document.getElementById("rsvSize").value = Math.round(rsvDraft.t*100);
@@ -4703,6 +4703,7 @@ function rsvOpen(){
   document.body.classList.add("rsv-open");   // 配置中は板スクロール停止
   if(floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // デスクをしまって壁を見やすく
   rsvRenderPreview(); rsvRefresh();
+  scrollToFrac(rsvDraft.rx + rsvDraft.rw/2, rsvDraft.ry + rsvDraft.rh/2);   // 置けた所を画面に入れる
 }
 function rsvClose(){
   document.getElementById("rsvMask").classList.remove("show");
