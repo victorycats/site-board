@@ -636,6 +636,7 @@
   .mini{font-size:9px;padding:3px 7px;border-radius:5px;font-weight:700}
   .mini.restore{background:#d8e8cf;color:#2f5a23}
   .mini.del{background:#f0cdbf;color:var(--shu-deep)}
+  .mini.move{background:#cfe0ec;color:#26506b}
   .hidden-badge{
     position:absolute;top:6px;left:6px;z-index:2;
     background:var(--shu);color:var(--paper);font-size:9px;font-weight:700;
@@ -2242,7 +2243,7 @@ function render(){
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
-    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span style="flex:1"></span>${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
+    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span style="flex:1"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
     const idtg = admin ? idTag(p.uid) : null;
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     return `
@@ -2523,7 +2524,9 @@ async function commitPlace(nx, ny){
 function startReposition(e, id){
   if(e){ e.stopPropagation(); e.preventDefault(); }   // このタップが壁の確定ハンドラに伝播して即置きされるのを防ぐ
   const p = posts.get(id);
-  if(!p || p.uid !== myUid) return;     // 自分の半紙だけ
+  if(!p) return;
+  if(p.fid){ toast("枠内の半紙は動かせません"); return; }      // 自動整列なので対象外
+  if(p.uid !== myUid && !admin) return;                        // 自分の半紙、または運営なら他人のも可
   repositioningId = id;
   enterPlacing();                       // 配置UIを流用（ピンチズームもそのまま使える）
   const ni = notesEl.querySelector('.note[data-id="'+id+'"] .note-img');
