@@ -147,6 +147,7 @@
   .rsv-title{font-weight:800;color:var(--sumi);font-size:15px;display:flex;align-items:center;gap:8px}
   .rsv-beta{font-size:10px;font-weight:700;color:#fff;background:#8c2414;border-radius:8px;padding:2px 8px}
   .rsv-note{font-size:12px;color:var(--shu);min-height:0}
+  .rsv-note.ng{color:#b3261e;font-weight:700}
   .rsv-note:empty{display:none}
   .rsv-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .rsv-lbl{font-size:12px;color:var(--ink-faint);flex:0 0 auto;min-width:34px}
@@ -1132,7 +1133,7 @@
       <input id="rsvT2" type="text" maxlength="20" placeholder="帯の文字">
       <input id="rsvT3" type="text" maxlength="20" placeholder="右下の文字">
     </div>
-    <div class="rsv-hint">枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。開始から40分だれも描かないと枠は消えます。</div>
+    <div class="rsv-hint" id="rsvHint">枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。</div>
     <div class="rsv-valid" id="rsvValid"></div>
     <label class="rsv-ign"><input type="checkbox" id="rsvIgnore"> 混雑を無視（テスト用）</label>
     <div class="rsv-btns">
@@ -1258,10 +1259,37 @@ function rsvFrameAt(nx,ny,land){   // 投稿中心がどの生存中の枠に入
   }
   return null;
 }
+function rsvPostRate(){   // 直近15分の投稿ペース（枚/分）
+  const now=Date.now(), win=15*60e3; let n=0;
+  for(const [,p] of posts){ if((p.t||0) > now-win) n++; }
+  return n/15;
+}
+function rsvEtaMin(){      // 満員(300)まであと何分か。ペース≈0なら Infinity
+  const left = Math.max(0, BOARD_LIMIT - boardCount), rate = rsvPostRate();
+  return rate < 0.05 ? Infinity : left/rate;
+}
+function rsvComputeCaps(){ // 混雑（満員ETA）に応じた上限をざっくり3段階＋終盤で締切
+  const count = boardCount, eta = rsvEtaMin();
+  if(count >= 250)               return { tier:"終盤",   closed:true,  eta };
+  if(eta > 120 || count < 50)    return { tier:"ゆったり", closed:false, aheadMs:4*3600e3,  durMaxMs:4*3600e3,  areaMax:1/5, maxFrames:2, eta };
+  if(eta < 60)                   return { tier:"混雑",   closed:false, aheadMs:30*60e3,  durMaxMs:30*60e3,  areaMax:1/8, maxFrames:1, eta };
+  return                                { tier:"ふつう", closed:false, aheadMs:90*60e3,  durMaxMs:90*60e3,  areaMax:1/6, maxFrames:2, eta };
+}
+function rsvActiveCaps(){  // テスト時は全開放
+  if((document.getElementById("rsvIgnore")||{}).checked) return { tier:"テスト", closed:false, aheadMs:RSV.AHEAD_MS, durMaxMs:RSV.DUR_MAX_MS, areaMax:RSV.AREA_MAX, maxFrames:RSV.MAX_FRAMES, eta:Infinity, test:true };
+  return rsvComputeCaps();
+}
+function rsvGraceMs(r){    // 消滅猶予：会期に応じて短縮（最大40分／最小5分／会期の半分）
+  const dur=(r.end||0)-(r.start||0);
+  return Math.min(RSV.GRACE_MS, Math.max(5*60e3, Math.floor(dur/2)));
+}
+function rsvFmtDur(ms){ const m=Math.round(ms/60000); return m>=60 ? (m%60? (Math.floor(m/60)+"時間"+(m%60)+"分") : (m/60+"時間")) : (m+"分"); }
 function rsvGateReason(){   // 予約可なら""／不可なら理由
   if(!myUid) return "接続中です。少し待ってね";
-  if(boardCount >= RSV.GATE_COUNT) return "いまは投稿が多めなので、お題枠の予約は受け付けていません";
-  if(rsvLivingList().length >= RSV.MAX_FRAMES) return "枠が上限（"+RSV.MAX_FRAMES+"つ）に達しています";
+  const caps = rsvComputeCaps();
+  if(caps.closed) return "終盤のため、お題枠の予約は締め切りました";
+  const living = rsvLivingList();
+  if(living.length >= caps.maxFrames) return "いまは枠が上限（"+caps.maxFrames+"つ）に達しています";
   if(rsvLivingList().filter(([id,r])=> r.uid===myUid).length >= RSV.MAX_PER_UID) return "予約できる枠は1人1つまでです";
   return "";
 }
@@ -4171,7 +4199,7 @@ function rsvCleanupLazy(){
   for(const [id,r] of reservations){
     if(!r) continue;
     const expired = now >= (r.end||0);
-    const stale = (now > (r.start||0) + RSV.GRACE_MS) && r.hasPost !== true;
+    const stale = (now > (r.start||0) + rsvGraceMs(r)) && r.hasPost !== true;
     if(expired || stale){ set(ref(db, bpath("reservations/"+id)), null).catch(()=>{}); }
   }
 }
@@ -4180,8 +4208,8 @@ let rsvDraft = null;
 let rsvDragging=false, rsvDragOX=0, rsvDragOY=0;   // 枠ドラッグ状態（window move/up で追従＝capture非依存）
 function rsvAreaMin(){ return (document.getElementById("rsvIgnore")||{}).checked ? RSV.AREA_MIN_TEST : RSV.AREA_MIN; }
 function rsvComputeSize(asp, t){
-  const lo = rsvAreaMin();
-  const area = lo + (RSV.AREA_MAX - lo)*clamp(t,0,1);                       // 壁に対する面積比（テスト時は下限を大きく下げる）
+  const lo = rsvAreaMin(), hi = Math.max(rsvActiveCaps().areaMax, lo);
+  const area = lo + (hi - lo)*clamp(t,0,1);                                 // 壁に対する面積比（上限は混雑で縮小／テストで全開）
   const k = asp * (WALL_H/WALL_W);                                          // rw = k*rh（aspは描画ピクセル比 w/h）
   let rh = Math.sqrt(area/k), rw = k*rh;
   if(rw > RSV.W_MAX){ rw = RSV.W_MAX; rh = area/rw; }
@@ -4226,7 +4254,7 @@ function rsvValidity(d){
   if(d.rx<-1e-4||d.ry<-1e-4||d.rx+d.rw>1+1e-4||d.ry+d.rh>1+1e-4) return "枠が壁からはみ出しています";
   const area = d.rw*d.rh;
   if(area < rsvAreaMin()-2e-3) return "枠が小さすぎます";
-  if(area > RSV.AREA_MAX+2e-3) return "枠が大きすぎます";
+  if(area > rsvActiveCaps().areaMax+2e-3) return "枠が大きすぎます";
   if(postsInRect(d.rx,d.ry,d.rw,d.rh)) return "枠の中に既存の半紙があります。空いてる場所へ";
   const ign = (document.getElementById("rsvIgnore")||{}).checked;
   if(!ign){ const g = rsvGateReason(); if(g) return g; }
@@ -4267,6 +4295,34 @@ function rsvResize(){
   rsvRenderPreview(); rsvRefresh();
 }
 function rsvAspectsSet(asp){ document.querySelectorAll("#rsvAspects button").forEach(b=> b.classList.toggle("on", Math.abs(parseFloat(b.dataset.asp)-asp)<0.01)); }
+function rsvUpdateHint(){
+  const el=document.getElementById("rsvHint"); if(!el) return;
+  const dur=parseInt(document.getElementById("rsvDur").value,10)||RSV.DUR_MIN_MS;
+  const grace=Math.min(RSV.GRACE_MS, Math.max(5*60e3, Math.floor(dur/2)));
+  el.textContent="枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。開始から"+Math.round(grace/60000)+"分だれも描かないと枠は消えます。";
+}
+function rsvApplyTimeCaps(){
+  const caps=rsvActiveCaps();
+  const fix=(sel,maxMs)=>{
+    if(!sel) return;
+    [...sel.options].forEach(o=>{ o.disabled = parseInt(o.value,10) > maxMs; });
+    if(sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].disabled){
+      const en=[...sel.options].filter(o=>!o.disabled); if(en.length) sel.value=en[en.length-1].value;
+    }
+  };
+  fix(document.getElementById("rsvStart"), caps.aheadMs);
+  fix(document.getElementById("rsvDur"),   caps.durMaxMs);
+}
+function rsvCapsNote(){
+  const note=document.getElementById("rsvGateNote"); if(!note) return;
+  const ign=(document.getElementById("rsvIgnore")||{}).checked;
+  const g = ign ? "" : rsvGateReason();
+  if(g){ note.textContent="⚠ "+g; note.classList.add("ng"); return; }
+  note.classList.remove("ng");
+  const caps=rsvActiveCaps(), rest=Math.max(0, caps.maxFrames - rsvLivingList().length);
+  const eta=(caps.eta===Infinity||caps.test)?"":"・満員まで約"+Math.round(caps.eta)+"分";
+  note.textContent="いまの上限：開始 最大"+rsvFmtDur(caps.aheadMs)+"先まで／長さ 最大"+rsvFmtDur(caps.durMaxMs)+"／枠 残り"+rest+"（"+caps.tier+"）"+eta;
+}
 function rsvOpen(){
   if(!db){ toast("接続中です。少し待ってね"); return; }
   rsvDraft = { asp:1.5, t:0.55 };
@@ -4275,12 +4331,11 @@ function rsvOpen(){
   const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh, ctr.fx, ctr.fy);
   if(spot){ rsvDraft.rx=spot.rx; rsvDraft.ry=spot.ry; }
   else { rsvDraft.rx = clamp(ctr.fx - rsvDraft.rw/2, 0, 1-rsvDraft.rw); rsvDraft.ry = clamp(ctr.fy - rsvDraft.rh/2, 0, 1-rsvDraft.rh); }
-  const g = rsvGateReason();
   document.getElementById("rsvT1").value=RSV.T1; document.getElementById("rsvT2").value=RSV.T2; document.getElementById("rsvT3").value=RSV.T3;
   document.getElementById("rsvStart").value="0"; document.getElementById("rsvDur").value="2400000";
-  document.getElementById("rsvGateNote").textContent = g ? ("⚠ "+g) : "";
   document.getElementById("rsvSize").value = Math.round(rsvDraft.t*100);
   rsvAspectsSet(rsvDraft.asp);
+  rsvApplyTimeCaps(); rsvUpdateHint(); rsvCapsNote();
   document.getElementById("rsvMask").classList.add("show");
   document.body.classList.add("rsv-open");   // 配置中は板スクロール停止
   if(floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // デスクをしまって壁を見やすく
@@ -4295,8 +4350,9 @@ function rsvClose(){
 async function rsvConfirm(){
   if(!rsvDraft) return;
   const d=rsvDraft; const msg=rsvValidity(d); if(msg){ toast(msg); return; }
-  const startOff = clamp(parseInt(document.getElementById("rsvStart").value,10)||0, 0, RSV.AHEAD_MS);
-  const dur = clamp(parseInt(document.getElementById("rsvDur").value,10)||RSV.DUR_MIN_MS, RSV.DUR_MIN_MS, RSV.DUR_MAX_MS);
+  const caps = rsvActiveCaps();
+  const startOff = clamp(parseInt(document.getElementById("rsvStart").value,10)||0, 0, caps.aheadMs);
+  const dur = clamp(parseInt(document.getElementById("rsvDur").value,10)||RSV.DUR_MIN_MS, RSV.DUR_MIN_MS, caps.durMaxMs);
   const start = Date.now() + startOff, end = start + dur;
   const gv=v=>(v||"").slice(0,20);
   const rec = { uid: myUid, t: Date.now(), start, end,
@@ -4318,7 +4374,8 @@ async function rsvConfirm(){
   if(on("rsvCancel")) on("rsvCancel").addEventListener("click", rsvClose);
   if(on("rsvConfirm")) on("rsvConfirm").addEventListener("click", rsvConfirm);
   if(on("rsvFind")) on("rsvFind").addEventListener("click", rsvFindAnother);
-  if(on("rsvIgnore")) on("rsvIgnore").addEventListener("change", ()=>{ if(rsvDraft) rsvResize(); });
+  if(on("rsvDur")) on("rsvDur").addEventListener("change", ()=>{ rsvUpdateHint(); });
+  if(on("rsvIgnore")) on("rsvIgnore").addEventListener("change", ()=>{ if(rsvDraft){ rsvApplyTimeCaps(); rsvResize(); rsvUpdateHint(); rsvCapsNote(); } });
   setInterval(()=>{ if(reservations.size){ rsvCheckTransitions(); rsvCleanupLazy(); renderReservations(); } }, 15000);   // 状態遷移・開始通知・期限切れの反映
   window.addEventListener("pointermove", e=>{
     if(!rsvDragging || !rsvDraft) return;
