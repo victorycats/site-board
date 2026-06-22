@@ -120,6 +120,9 @@
   .rsv-wait .rsv-wait-l{font-weight:800;letter-spacing:.06em}
   .rsv-wait .rsv-wait-t{opacity:.8}
   .rsv-invite{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9c7f5e;opacity:.6;pointer-events:none;font-family:"Shippori Mincho",serif}
+  .rsv-del{position:absolute;top:6px;right:6px;pointer-events:auto;cursor:pointer;width:30px;height:30px;border-radius:50%;
+    border:none;background:rgba(40,28,16,.66);color:#fff;font-size:18px;line-height:1;font-weight:700;box-shadow:0 2px 7px rgba(0,0,0,.3)}
+  .rsv-del:hover{background:#8c2414}
   .rsv-share{pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;padding:5px 16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
   #rsvPreview{position:absolute;box-sizing:border-box;z-index:56;pointer-events:auto;cursor:grab;touch-action:none;
     border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;flex-direction:column;justify-content:space-between;
@@ -1235,13 +1238,13 @@ const reservations = new Map();        // id -> rsv レコード
 function rsvLivingList(){ const now=Date.now(); return [...reservations.entries()].filter(([id,r])=> r && now < (r.end||0)); }
 function rsvRectPx(r){ return { left:(r.rx||0)*WALL_W, top:(r.ry||0)*WALL_H, w:(r.rw||0)*WALL_W, h:(r.rh||0)*WALL_H }; }
 function rsvState(r){ const now=Date.now(); if(now < (r.start||0)) return "reserved"; if(now < (r.end||0)) return "active"; return "ended"; }
-function postsInRect(rx,ry,rw,rh){
+function postsInRect(rx,ry,rw,rh){   // 枠と半紙の矩形が少しでも重なれば true（縁かぶりも弾く）
   for(const [id,p] of posts){
     if(p.hidden) continue;
-    const lpx = (p.nx!=null?p.nx:0)*(WALL_W-NOTE_W), tpx = (p.ny!=null?p.ny:0)*(WALL_H-NOTE_H);
-    const cx = (lpx + (p.land?NOTE_LAND_W:NOTE_W)/2)/WALL_W;
-    const cy = (tpx + (p.land?NOTE_LAND_H:NOTE_H)/2)/WALL_H;
-    if(cx>=rx && cx<=rx+rw && cy>=ry && cy<=ry+rh) return true;
+    const lpx=(p.nx!=null?p.nx:0)*(WALL_W-NOTE_W), tpx=(p.ny!=null?p.ny:0)*(WALL_H-NOTE_H);
+    const w=(p.land?NOTE_LAND_W:NOTE_W), h=(p.land?NOTE_LAND_H:NOTE_H);
+    const nlx=lpx/WALL_W, nrx=(lpx+w)/WALL_W, nty=tpx/WALL_H, nby=(tpx+h)/WALL_H;
+    if(nlx < rx+rw && nrx > rx && nty < ry+rh && nby > ry) return true;   // AABB重なり判定
   }
   return false;
 }
@@ -2250,6 +2253,7 @@ function switchToBoard(id){
       reservations.clear();
       const v = (s && s.val()) || {};
       Object.keys(v).forEach(k=>{ if(/^[A-Za-z0-9_-]+$/.test(k)) reservations.set(k, v[k]||{}); });
+      rsvCheckTransitions();
       rsvCleanupLazy();
       renderReservations();
     }));
@@ -4117,6 +4121,8 @@ function renderReservations(){
     const fsBand = Math.max(16, Math.round(px.w*0.048));
     const fsCorner = Math.max(12, Math.round(px.w*0.034));
     const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2), t3=esc(r.t3||RSV.T3);
+    const canDel = (r.uid===myUid) || admin;
+    const delBtn = canDel ? `<button class="rsv-del" data-rid="${id}" title="${(admin&&r.uid!==myUid)?'運営として削除':'この枠を取り消す'}">×</button>` : "";
     const overlay = (st==="reserved")
       ? `<div class="rsv-wait"><div class="rsv-wait-l" style="font-size:${fsBand}px">枠予約済み</div><div class="rsv-wait-t" style="font-size:${fsCorner}px">${fmtClock(r.start)} 開始</div><button class="rsv-share" data-rid="${id}" style="font-size:${fsCorner}px">共有</button></div>`
       : (r.hasPost!==true ? `<div class="rsv-invite" style="font-size:${fsBand}px">✎ この枠に描こう</div>` : "");
@@ -4125,10 +4131,12 @@ function renderReservations(){
       + `<div class="rsv-band" style="font-size:${fsBand}px">${t2}</div>`
       + `<div class="rsv-body">${overlay}</div>`
       + `<div class="rsv-corner" style="font-size:${fsCorner}px">${t3}</div>`
+      + delBtn
       + `</div>`;
   }
   host.innerHTML = html;
   host.querySelectorAll(".rsv-share").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvShare(b.dataset.rid); }));
+  host.querySelectorAll(".rsv-del").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvDelete(b.dataset.rid); }));
 }
 async function rsvShare(id){
   const r = reservations.get(id); if(!r) return;
@@ -4139,6 +4147,23 @@ async function rsvShare(id){
   catch(e){ if(e && e.name==="AbortError") return; }
   try{ await navigator.clipboard.writeText(text+" "+url); toast("共有用テキストをコピーしました"); }
   catch(e){ toast("コピーできませんでした"); }
+}
+function rsvDelete(id){
+  const r = reservations.get(id); if(!r || !db) return;
+  const mine = r.uid===myUid;
+  const msg = mine ? "このお題枠を取り消す？（描かれた半紙は残ります）" : "運営としてこの枠を削除する？";
+  if(!confirm(msg)) return;
+  set(ref(db, bpath("reservations/"+id)), null).then(()=> toast("枠を取り消しました")).catch(()=> toast("取り消せませんでした"));
+}
+const rsvLastState = new Map();
+function rsvCheckTransitions(){   // 予約→開始 を観測したら通知（このクライアントが見ている間の遷移だけ）
+  for(const [id,r] of reservations){
+    if(!r) continue;
+    const st = rsvState(r), prev = rsvLastState.get(id);
+    if(prev==="reserved" && st==="active"){ toast("お題「"+(r.t2||RSV.T2)+"」が始まったよ。枠に描いてみてね", 4500); }
+    rsvLastState.set(id, st);
+  }
+  for(const id of [...rsvLastState.keys()]) if(!reservations.has(id)) rsvLastState.delete(id);
 }
 function rsvCleanupLazy(){
   if(!db) return;
@@ -4294,7 +4319,7 @@ async function rsvConfirm(){
   if(on("rsvConfirm")) on("rsvConfirm").addEventListener("click", rsvConfirm);
   if(on("rsvFind")) on("rsvFind").addEventListener("click", rsvFindAnother);
   if(on("rsvIgnore")) on("rsvIgnore").addEventListener("change", ()=>{ if(rsvDraft) rsvResize(); });
-  setInterval(()=>{ if(reservations.size){ rsvCleanupLazy(); renderReservations(); } }, 30000);   // 状態遷移・期限切れの遅延反映
+  setInterval(()=>{ if(reservations.size){ rsvCheckTransitions(); rsvCleanupLazy(); renderReservations(); } }, 15000);   // 状態遷移・開始通知・期限切れの反映
   window.addEventListener("pointermove", e=>{
     if(!rsvDragging || !rsvDraft) return;
     const r=notesEl.getBoundingClientRect();
