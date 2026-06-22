@@ -4425,7 +4425,7 @@ function renderReservations(){
       const full = cnt >= cap, hardFull = full && !rsvCanGrow(r);
       overlay = hardFull
         ? `<div class="rsv-full"><span class="rsv-full-l">満員</span><span class="rsv-cap">${cnt}枚・締切</span></div>`
-        : `<button class="rsv-draw" data-rid="${id}" type="button"><span class="rsv-draw-hint">✎ この枠に描こう</span><span class="rsv-cap">${cnt}枚</span></button>`;
+        : `<button class="rsv-draw" data-rid="${id}" type="button"><span class="rsv-draw-hint">✎ この枠に描こう</span><span class="rsv-cap">${cnt}枚${rsvCanGrow(r)?" ・ 埋まると広がる":""}</span></button>`;
     }
     html += `<div class="rsv-frame ${st}" data-rid="${id}" style="left:${px.left}px;top:${px.top}px;width:${px.w}px;height:${fh}px">`
       + `<div class="rsv-head" style="font-size:${fsHead}px">${t1}</div>`
@@ -4532,11 +4532,31 @@ function scrollToFrac(fx, fy){
 }
 function rsvFindAnother(){
   if(!rsvDraft) return;
-  const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh);
-  if(!spot){ toast("空いてる場所が見つかりませんでした"); return; }
-  rsvDraft.rx=spot.rx; rsvDraft.ry=spot.ry;
+  const ori = rsvSelectedOri();
+  const ctr = viewCenterFrac();
+  let fc = Math.max(3, rsvCols({rw:rsvDraft.rw, rh:rsvDraft.rh, ori}));
+  let fr = Math.max(FMIN_ROWS, rsvMaxRows({rw:rsvDraft.rw, rh:rsvDraft.rh, ori}));
+  const startCols=fc, startRows=fr;
+  let placed=null;
+  // 今のサイズ→最低(3列×2行)まで、面積の大きい順に「この辺」の空きを探す。空きに収まるサイズまで自動で縮める
+  for(let guard=0; guard<200; guard++){
+    const rw = Math.min(RSV.W_MAX, rwForCols({ori}, fc));
+    const rh = Math.min(RSV.H_MAX, rhForRows({ori}, fr));
+    const spot = rsvFindSpot(rw, rh, ctr.fx, ctr.fy);
+    if(spot){ placed={ rx:spot.rx, ry:spot.ry, rw, rh }; break; }
+    if(fc<=3 && fr<=FMIN_ROWS) break;
+    if(fc>3 && (fr<=FMIN_ROWS || fc>=fr)) fc--;        // 横長気味なら列を、縦長気味なら行を先に削る
+    else if(fr>FMIN_ROWS) fr--;
+    else if(fc>3) fc--;
+    else break;
+  }
+  if(!placed){ toast("いまは空きが見つかりませんでした。少し時間をおいてね"); return; }
+  const shrank = (placed.rw < rsvDraft.rw-1e-4) || (placed.rh < rsvDraft.rh-1e-4);
+  rsvDraft.rw=placed.rw; rsvDraft.rh=placed.rh; rsvDraft.rx=placed.rx; rsvDraft.ry=placed.ry;
   rsvRenderPreview(); rsvRefresh();
-  scrollToFrac(rsvDraft.rx+rsvDraft.rw/2, rsvDraft.ry+rsvDraft.rh/2);   // 見つけた所へスクロール
+  scrollToFrac(rsvDraft.rx+rsvDraft.rw/2, rsvDraft.ry+rsvDraft.rh/2);   // 見つけた所へ
+  if(shrank) toast("空きに収まるサイズに調整したよ（枠は投稿で広がります）");
+  else toast("空いてる場所に置いたよ");
 }
 function rsvValidity(d){
   if(d.rx<-1e-4||d.ry<-1e-4||d.rx+d.rw>1+1e-4||d.ry+d.rh>1+1e-4) return "枠が壁からはみ出しています";
@@ -4590,7 +4610,7 @@ function rsvUpdateHint(){
   const dv=document.getElementById("rsvDur").value;
   const dur=(dv==="roll") ? ROLL_BASE_MS : (parseInt(dv,10)||RSV.DUR_MIN_MS);
   const grace=Math.min(RSV.GRACE_MS, Math.max(5*60e3, Math.floor(dur/2)));
-  el.textContent="「空きを探す」をタップして、気に入らなければドラッグで微調整。全体で300枚に達すると枠も含めて終了。開始から"+Math.round(grace/60000)+"分だれも描かないと枠は消えます。";
+  el.textContent="「空きを探す」をタップして、気に入らなければドラッグで微調整。枠は投稿に応じて広がります。開始から"+Math.round(grace/60000)+"分だれも描かないと枠は消えます。";
 }
 function rsvApplyTimeCaps(){
   const caps=rsvActiveCaps();
