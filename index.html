@@ -107,7 +107,7 @@
     padding:3px 11px;border-radius:11px;box-shadow:0 2px 8px rgba(0,0,0,.25);
     font-family:"Shippori Mincho",serif;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
   /* お題枠 */
-  #frames{position:absolute;inset:0;pointer-events:none;z-index:0}
+  #frames{position:absolute;inset:0;pointer-events:none}
   body.rsv-open #wallScroll{touch-action:none}   /* 配置中はタッチでの板スクロールも止める */
   .rsv-frame{position:absolute;box-sizing:border-box;pointer-events:none;display:flex;flex-direction:column;
     background:rgba(255,255,255,.5);border:3px solid #111;border-radius:5px;overflow:hidden;font-family:"Shippori Mincho",serif}
@@ -121,7 +121,7 @@
   .rsv-wait .rsv-wait-t{opacity:.8}
   .rsv-invite{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9c7f5e;opacity:.6;pointer-events:none;font-family:"Shippori Mincho",serif}
   .rsv-share{pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;padding:5px 16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-  #rsvPreview{position:absolute;box-sizing:border-box;z-index:5;pointer-events:auto;cursor:grab;touch-action:none;
+  #rsvPreview{position:absolute;box-sizing:border-box;z-index:56;pointer-events:auto;cursor:grab;touch-action:none;
     border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;flex-direction:column;justify-content:space-between;
     color:#1f5a2a;font-family:"Shippori Mincho",serif;font-weight:700;text-shadow:0 1px 2px rgba(255,255,255,.6)}
   #rsvPreview .rsv-grip{flex:0 0 auto;background:rgba(31,122,51,.92);color:#fff;text-align:center;padding:6px 4px;letter-spacing:.08em;
