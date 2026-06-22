@@ -119,6 +119,7 @@
   .rsv-wait{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:#3a2a18}
   .rsv-wait .rsv-wait-l{font-weight:800;letter-spacing:.06em}
   .rsv-wait .rsv-wait-t{opacity:.8}
+  .rsv-invite{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9c7f5e;opacity:.6;pointer-events:none;font-family:"Shippori Mincho",serif}
   .rsv-share{pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;padding:5px 16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
   #rsvPreview{position:absolute;box-sizing:border-box;z-index:5;pointer-events:auto;cursor:grab;touch-action:none;
     border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;flex-direction:column;justify-content:space-between;
@@ -1226,7 +1227,7 @@ function bpath(sub){ return "boards/" + boardId + "/" + sub; }   // 現在ボー
 const RSV = {
   MAX_FRAMES: 2, MAX_PER_UID: 1, GATE_COUNT: 50,
   AHEAD_MS: 4*3600e3, DUR_MAX_MS: 4*3600e3, DUR_MIN_MS: 10*60e3,
-  AREA_MAX: 1/5, AREA_MIN: 1/12, W_MAX: 0.45, H_MAX: 0.55,
+  AREA_MAX: 1/5, AREA_MIN: 1/12, AREA_MIN_TEST: 0.005, W_MAX: 0.45, H_MAX: 0.55,
   GRACE_MS: 40*60e3,
   T1:"寝る前に描きなさい", T2:"もう何でもいいや適当で", T3:"筆落書きでも委員会"
 };
@@ -1243,6 +1244,16 @@ function postsInRect(rx,ry,rw,rh){
     if(cx>=rx && cx<=rx+rw && cy>=ry && cy<=ry+rh) return true;
   }
   return false;
+}
+function rsvFrameAt(nx,ny,land){   // 投稿中心がどの生存中の枠に入るか（なければnull）
+  const lpx = nx*(WALL_W-NOTE_W), tpx = ny*(WALL_H-NOTE_H);
+  const cx = (lpx+(land?NOTE_LAND_W:NOTE_W)/2)/WALL_W, cy = (tpx+(land?NOTE_LAND_H:NOTE_H)/2)/WALL_H;
+  const now = Date.now();
+  for(const [id,r] of reservations){
+    if(!r || now>=(r.end||0)) continue;
+    if(cx>=r.rx && cx<=r.rx+r.rw && cy>=r.ry && cy<=r.ry+r.rh) return {id,r};
+  }
+  return null;
 }
 function rsvGateReason(){   // 予約可なら""／不可なら理由
   if(!myUid) return "接続中です。少し待ってね";
@@ -2356,6 +2367,8 @@ window.undoGracePost = undoGracePost;
 let committing = false;   // 書き込み中フラグ（同期的に立てて二重確定＝二重投稿を防ぐ）
 async function commitPlace(nx, ny){
   if(committing) return;                                    // 既に確定処理中なら無視（ドロップ連打・タッチ重複対策）
+  const hitR = rsvFrameAt(nx, ny, landscape);               // お題枠の上に落とした？
+  if(hitR && rsvState(hitR.r)==="reserved"){ toast("ここは予約枠です。開始時刻になってから描けます"); return; }   // 開始前は置けない
   committing = true;
   try{
     if(repositioningId){ await repositionPost(nx, ny); }   // 位置直しなら移動だけ
@@ -2386,6 +2399,7 @@ async function repositionPost(nx, ny){
     try{
       await update(ref(db, bpath("posts/"+id)), { nx, ny });   // 位置(nx/ny)だけ更新＝枠も画像もそのまま・クールダウン無関係
       const p = posts.get(id); if(p){ p.nx = nx; p.ny = ny; posts.set(id, p); }
+      try{ const hp = rsvFrameAt(nx, ny, (p&&p.land)); if(hp && rsvState(hp.r)==="active" && hp.r.hasPost!==true){ set(ref(db, bpath("reservations/"+hp.id+"/hasPost")), true).catch(()=>{}); } }catch(_){}
       toast("位置を直しました");
     }catch(e){ console.error(e); toast("位置を直せませんでした"); }
   }
@@ -2560,6 +2574,7 @@ async function createPost(nx, ny){
       } else { throw err; }
     }
     reserved = false;   // 書き込み成功＝枠は確定
+    try{ const hp = rsvFrameAt(nx, ny, meta.land); if(hp && rsvState(hp.r)==="active" && hp.r.hasPost!==true){ set(ref(db, bpath("reservations/"+hp.id+"/hasPost")), true).catch(()=>{}); } }catch(_){}   // お題枠に1枚入った＝40分自動消滅を回避
     if(finalNow){ lastPostAt = Date.now(); LS.set("fg_lastPost", String(lastPostAt)); }
     editingId = id;
     posts.set(id, meta);
@@ -4104,7 +4119,7 @@ function renderReservations(){
     const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2), t3=esc(r.t3||RSV.T3);
     const overlay = (st==="reserved")
       ? `<div class="rsv-wait"><div class="rsv-wait-l" style="font-size:${fsBand}px">枠予約済み</div><div class="rsv-wait-t" style="font-size:${fsCorner}px">${fmtClock(r.start)} 開始</div><button class="rsv-share" data-rid="${id}" style="font-size:${fsCorner}px">共有</button></div>`
-      : "";
+      : (r.hasPost!==true ? `<div class="rsv-invite" style="font-size:${fsBand}px">✎ この枠に描こう</div>` : "");
     html += `<div class="rsv-frame ${st}" data-rid="${id}" style="left:${px.left}px;top:${px.top}px;width:${px.w}px;height:${px.h}px">`
       + `<div class="rsv-head" style="font-size:${fsHead}px">${t1}</div>`
       + `<div class="rsv-band" style="font-size:${fsBand}px">${t2}</div>`
@@ -4137,8 +4152,11 @@ function rsvCleanupLazy(){
 }
 /* ---- 作成 ---- */
 let rsvDraft = null;
+let rsvDragging=false, rsvDragOX=0, rsvDragOY=0;   // 枠ドラッグ状態（window move/up で追従＝capture非依存）
+function rsvAreaMin(){ return (document.getElementById("rsvIgnore")||{}).checked ? RSV.AREA_MIN_TEST : RSV.AREA_MIN; }
 function rsvComputeSize(asp, t){
-  const area = RSV.AREA_MIN + (RSV.AREA_MAX - RSV.AREA_MIN)*clamp(t,0,1);   // 壁に対する面積比
+  const lo = rsvAreaMin();
+  const area = lo + (RSV.AREA_MAX - lo)*clamp(t,0,1);                       // 壁に対する面積比（テスト時は下限を大きく下げる）
   const k = asp * (WALL_H/WALL_W);                                          // rw = k*rh（aspは描画ピクセル比 w/h）
   let rh = Math.sqrt(area/k), rw = k*rh;
   if(rw > RSV.W_MAX){ rw = RSV.W_MAX; rh = area/rw; }
@@ -4182,7 +4200,7 @@ function rsvFindAnother(){
 function rsvValidity(d){
   if(d.rx<-1e-4||d.ry<-1e-4||d.rx+d.rw>1+1e-4||d.ry+d.rh>1+1e-4) return "枠が壁からはみ出しています";
   const area = d.rw*d.rh;
-  if(area < RSV.AREA_MIN-2e-3) return "枠が小さすぎます";
+  if(area < rsvAreaMin()-2e-3) return "枠が小さすぎます";
   if(area > RSV.AREA_MAX+2e-3) return "枠が大きすぎます";
   if(postsInRect(d.rx,d.ry,d.rw,d.rh)) return "枠の中に既存の半紙があります。空いてる場所へ";
   const ign = (document.getElementById("rsvIgnore")||{}).checked;
@@ -4198,25 +4216,14 @@ function rsvRenderPreview(){
   el.style.fontSize=Math.max(16,Math.round(d.rw*WALL_W*0.05))+"px";
 }
 function rsvAttachDrag(el){
-  let dragging=false, ox=0, oy=0;
   el.addEventListener("pointerdown", e=>{
     if(!rsvDraft) return;
-    e.stopPropagation();   // 板パンへ伝播させない
-    dragging=true; el.classList.add("drag"); try{el.setPointerCapture(e.pointerId);}catch(_){}
+    e.stopPropagation(); e.preventDefault();   // 板パンへ伝播させない
+    rsvDragging=true; el.classList.add("drag");
     const r=notesEl.getBoundingClientRect();
-    ox = (e.clientX-r.left)/zoom - rsvDraft.rx*WALL_W;
-    oy = (e.clientY-r.top)/zoom - rsvDraft.ry*WALL_H;
-    e.preventDefault();
+    rsvDragOX = (e.clientX-r.left)/zoom - rsvDraft.rx*WALL_W;
+    rsvDragOY = (e.clientY-r.top)/zoom - rsvDraft.ry*WALL_H;
   });
-  el.addEventListener("pointermove", e=>{
-    if(!dragging||!rsvDraft) return;
-    const r=notesEl.getBoundingClientRect();
-    rsvDraft.rx = clamp(((e.clientX-r.left)/zoom - ox)/WALL_W, 0, 1-rsvDraft.rw);
-    rsvDraft.ry = clamp(((e.clientY-r.top)/zoom - oy)/WALL_H, 0, 1-rsvDraft.rh);
-    rsvRenderPreview(); rsvRefresh();
-  });
-  const end=e=>{ dragging=false; el.classList.remove("drag"); try{el.releasePointerCapture(e.pointerId);}catch(_){} };
-  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
 }
 function rsvRefresh(){
   if(!rsvDraft) return;
@@ -4286,8 +4293,18 @@ async function rsvConfirm(){
   if(on("rsvCancel")) on("rsvCancel").addEventListener("click", rsvClose);
   if(on("rsvConfirm")) on("rsvConfirm").addEventListener("click", rsvConfirm);
   if(on("rsvFind")) on("rsvFind").addEventListener("click", rsvFindAnother);
-  if(on("rsvIgnore")) on("rsvIgnore").addEventListener("change", ()=>{ if(rsvDraft) rsvRefresh(); });
+  if(on("rsvIgnore")) on("rsvIgnore").addEventListener("change", ()=>{ if(rsvDraft) rsvResize(); });
   setInterval(()=>{ if(reservations.size){ rsvCleanupLazy(); renderReservations(); } }, 30000);   // 状態遷移・期限切れの遅延反映
+  window.addEventListener("pointermove", e=>{
+    if(!rsvDragging || !rsvDraft) return;
+    const r=notesEl.getBoundingClientRect();
+    rsvDraft.rx = clamp(((e.clientX-r.left)/zoom - rsvDragOX)/WALL_W, 0, 1-rsvDraft.rw);
+    rsvDraft.ry = clamp(((e.clientY-r.top)/zoom - rsvDragOY)/WALL_H, 0, 1-rsvDraft.rh);
+    rsvRenderPreview(); rsvRefresh();
+  });
+  const rsvEndDrag=()=>{ if(!rsvDragging) return; rsvDragging=false; const el=document.getElementById("rsvPreview"); if(el) el.classList.remove("drag"); };
+  window.addEventListener("pointerup", rsvEndDrag);
+  window.addEventListener("pointercancel", rsvEndDrag);
 })();
 
 window.addEventListener("resize", ()=>{ if(typeof fitStatusTicker==="function") fitStatusTicker(); });
