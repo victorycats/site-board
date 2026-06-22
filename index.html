@@ -119,20 +119,14 @@
   .rsv-wait .rsv-wait-l{font-weight:800;letter-spacing:.06em}
   .rsv-wait .rsv-wait-t{opacity:.8}
   .rsv-share{pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:#8c2414;color:#fff;font-weight:700;font-family:inherit;padding:5px 16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-  #rsvPreview{position:absolute;box-sizing:border-box;z-index:5;pointer-events:none;touch-action:none;
-    border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;align-items:center;justify-content:center;overflow:visible;
+  #rsvPreview{position:absolute;box-sizing:border-box;z-index:5;pointer-events:auto;cursor:grab;touch-action:none;
+    border:3px dashed #1f7a33;background:rgba(60,160,80,.16);border-radius:5px;display:flex;flex-direction:column;justify-content:space-between;
     color:#1f5a2a;font-family:"Shippori Mincho",serif;font-weight:700;text-shadow:0 1px 2px rgba(255,255,255,.6)}
+  #rsvPreview .rsv-grip{flex:0 0 auto;background:rgba(31,122,51,.92);color:#fff;text-align:center;padding:6px 4px;letter-spacing:.08em;
+    font-size:inherit;text-shadow:none;border-radius:3px;margin:3px}
   #rsvPreview.bad{border-color:#b3261e;background:rgba(179,38,30,.16);color:#7c1d18}
-  .rsv-preview-label{pointer-events:none;padding-top:16px}
-  .rsv-preview-handle{position:absolute;left:50%;top:0;transform:translate(-50%,-55%);min-width:158px;
-    display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 14px;border-radius:999px;
-    background:#1f7a33;color:#fff;border:2px solid #fff;box-shadow:0 3px 12px rgba(0,0,0,.28);
-    font-size:13px;line-height:1;letter-spacing:.02em;text-shadow:none;cursor:grab;pointer-events:auto;user-select:none;touch-action:none}
-  #rsvPreview.bad .rsv-preview-handle{background:#b3261e}
-  #rsvPreview.drag .rsv-preview-handle{cursor:grabbing}
-  .rsv-auto{flex:0 0 auto;padding:7px 10px;border-radius:8px;border:1px solid rgba(31,122,51,.45);
-    background:#f5fff7;color:#1f7a33;font-family:inherit;font-weight:700;cursor:pointer}
-  .rsv-auto:hover{background:#e9f8ed}
+  #rsvPreview.bad .rsv-grip{background:rgba(179,38,30,.92)}
+  #rsvPreview.drag{cursor:grabbing}
   .btn-rsv{margin-top:8px;width:100%;background:rgba(60,42,24,.06);color:#5b4636;border:1px dashed rgba(90,70,54,.5);
     border-radius:9px;padding:8px 10px;font-family:inherit;font-size:13px;cursor:pointer}
   .btn-rsv:hover{background:rgba(60,42,24,.1)}
@@ -162,6 +156,10 @@
   .rsv-valid{font-size:12px;font-weight:700;min-height:16px}
   .rsv-valid.ok{color:#1f7a33}
   .rsv-valid.ng{color:#b3261e}
+  .rsv-find{flex:0 0 auto;padding:6px 12px;border-radius:8px;border:1px solid var(--paper-edge);background:#fffdf7;font-family:inherit;cursor:pointer;color:var(--sumi);white-space:nowrap}
+  .rsv-find:hover{background:#fff}
+  .rsv-ign{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-faint)}
+  .rsv-ign input{width:16px;height:16px}
   .rsv-btns{display:flex;gap:8px;margin-top:2px}
   .rsv-btns button{flex:1;padding:10px;border-radius:9px;font-family:inherit;font-weight:700;cursor:pointer;border:1px solid var(--paper-edge)}
   .rsv-cancel{background:#fffdf7;color:var(--ink-faint)}
@@ -1101,7 +1099,7 @@
     <div class="rsv-row">
       <span class="rsv-lbl">大きさ</span>
       <input type="range" id="rsvSize" min="0" max="100" value="55">
-      <button class="rsv-auto" id="rsvAutoPlace" type="button">空き場所を探す</button>
+      <button type="button" id="rsvFind" class="rsv-find">空き探す</button>
     </div>
     <div class="rsv-row">
       <span class="rsv-lbl">開始</span>
@@ -1129,8 +1127,9 @@
       <input id="rsvT2" type="text" maxlength="20" placeholder="帯の文字">
       <input id="rsvT3" type="text" maxlength="20" placeholder="右下の文字">
     </div>
-    <div class="rsv-hint">枠の上のつまみをドラッグして移動できます。全体で300枚に達すると枠も含めて終了します。開始から40分だれも描かないと枠は消えます。</div>
+    <div class="rsv-hint">枠をドラッグして空いてる場所へ。全体で300枚に達すると枠も含めて終了します。開始から40分だれも描かないと枠は消えます。</div>
     <div class="rsv-valid" id="rsvValid"></div>
+    <label class="rsv-ign"><input type="checkbox" id="rsvIgnore"> 混雑を無視（テスト用）</label>
     <div class="rsv-btns">
       <button class="rsv-cancel" id="rsvCancel" type="button">やめる</button>
       <button class="rsv-ok" id="rsvConfirm" type="button">この内容で予約</button>
@@ -1244,20 +1243,9 @@ function postsInRect(rx,ry,rw,rh){
   }
   return false;
 }
-function rectsOverlap(a,b){
-  return a.rx < b.rx+b.rw && a.rx+a.rw > b.rx && a.ry < b.ry+b.rh && a.ry+a.rh > b.ry;
-}
-function reservationsInRect(rx,ry,rw,rh){
-  const now = Date.now(), a = { rx, ry, rw, rh };
-  for(const [id,r] of reservations){
-    if(!r || now >= (r.end||0)) continue;
-    if(rectsOverlap(a, { rx:+r.rx||0, ry:+r.ry||0, rw:+r.rw||0, rh:+r.rh||0 })) return true;
-  }
-  return false;
-}
 function rsvGateReason(){   // 予約可なら""／不可なら理由
   if(!myUid) return "接続中です。少し待ってね";
-  if(boardCount >= RSV.GATE_COUNT) return "現在の混み具合では予約できません";
+  if(boardCount >= RSV.GATE_COUNT) return "いまは投稿が多めなので、お題枠の予約は受け付けていません";
   if(rsvLivingList().length >= RSV.MAX_FRAMES) return "枠が上限（"+RSV.MAX_FRAMES+"つ）に達しています";
   if(rsvLivingList().filter(([id,r])=> r.uid===myUid).length >= RSV.MAX_PER_UID) return "予約できる枠は1人1つまでです";
   return "";
@@ -4160,73 +4148,72 @@ function viewCenterFrac(){
   const cx = (window.innerWidth/2 - r.left)/zoom, cy = (window.innerHeight/2 - r.top)/zoom;
   return { fx: clamp(cx/WALL_W,0,1), fy: clamp(cy/WALL_H,0,1) };
 }
+// グリッド走査で「既存半紙と重ならない空き」を探す。nearが指定されればそれに最も近い空きを返す
+function rsvFindSpot(rw, rh, nearFx, nearFy){
+  const step=0.04, cands=[];
+  for(let y=0; y<=1-rh+1e-9; y+=step){
+    for(let x=0; x<=1-rw+1e-9; x+=step){
+      const rx=Math.min(x,1-rw), ry=Math.min(y,1-rh);
+      if(!postsInRect(rx,ry,rw,rh)) cands.push({rx,ry});
+    }
+  }
+  if(!cands.length) return null;
+  if(nearFx!=null){
+    cands.sort((a,b)=> ((a.rx+rw/2-nearFx)**2+(a.ry+rh/2-nearFy)**2) - ((b.rx+rw/2-nearFx)**2+(b.ry+rh/2-nearFy)**2));
+    return cands[0];
+  }
+  return cands[Math.floor(Math.random()*cands.length)];
+}
+function scrollToFrac(fx, fy){
+  const px = (GUT_X + fx*WALL_W) * zoom, py = (GUT_Y + fy*WALL_H) * zoom;
+  scrollEl.scrollLeft = clamp(px - scrollEl.clientWidth/2, 0, Math.max(0, FULL_W*zoom - scrollEl.clientWidth));
+  scrollEl.scrollTop  = clamp(py - scrollEl.clientHeight/2, 0, Math.max(0, FULL_H*zoom - scrollEl.clientHeight));
+}
+function rsvFindAnother(){
+  if(!rsvDraft) return;
+  const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh);
+  if(!spot){ toast("空いてる場所が見つかりませんでした"); return; }
+  rsvDraft.rx=spot.rx; rsvDraft.ry=spot.ry;
+  rsvRenderPreview(); rsvRefresh();
+  scrollToFrac(rsvDraft.rx+rsvDraft.rw/2, rsvDraft.ry+rsvDraft.rh/2);   // 見つけた所へスクロール
+}
 function rsvValidity(d){
   if(d.rx<-1e-4||d.ry<-1e-4||d.rx+d.rw>1+1e-4||d.ry+d.rh>1+1e-4) return "枠が壁からはみ出しています";
   const area = d.rw*d.rh;
   if(area < RSV.AREA_MIN-2e-3) return "枠が小さすぎます";
   if(area > RSV.AREA_MAX+2e-3) return "枠が大きすぎます";
   if(postsInRect(d.rx,d.ry,d.rw,d.rh)) return "枠の中に既存の半紙があります。空いてる場所へ";
-  if(reservationsInRect(d.rx,d.ry,d.rw,d.rh)) return "ほかの予約枠と重なっています";
-  const g = rsvGateReason(); if(g) return g;
+  const ign = (document.getElementById("rsvIgnore")||{}).checked;
+  if(!ign){ const g = rsvGateReason(); if(g) return g; }
   return "";
 }
 function rsvRenderPreview(){
   let el = document.getElementById("rsvPreview");
-  if(!el){
-    el=document.createElement("div"); el.id="rsvPreview";
-    el.innerHTML='<div class="rsv-preview-handle">ここをドラッグ</div><div class="rsv-preview-label">予約枠</div>';
-    document.getElementById("frames").appendChild(el); rsvAttachDrag(el);
-  }
+  if(!el){ el=document.createElement("div"); el.id="rsvPreview"; el.innerHTML='<div class="rsv-grip top">⠿ ドラッグで移動</div><div class="rsv-grip bot">⠿ ドラッグで移動</div>'; document.getElementById("frames").appendChild(el); rsvAttachDrag(el); }
   const d=rsvDraft;
   el.style.left=(d.rx*WALL_W)+"px"; el.style.top=(d.ry*WALL_H)+"px";
   el.style.width=(d.rw*WALL_W)+"px"; el.style.height=(d.rh*WALL_H)+"px";
-  const fs = Math.max(16,Math.round(d.rw*WALL_W*0.05));
-  el.style.fontSize=fs+"px";
-  const h=el.querySelector(".rsv-preview-handle"); if(h) h.style.fontSize=Math.max(12,Math.min(14,Math.round(fs*.58)))+"px";
+  el.style.fontSize=Math.max(16,Math.round(d.rw*WALL_W*0.05))+"px";
 }
 function rsvAttachDrag(el){
-  const grip = el.querySelector(".rsv-preview-handle") || el;
   let dragging=false, ox=0, oy=0;
-  grip.addEventListener("pointerdown", e=>{
+  el.addEventListener("pointerdown", e=>{
     if(!rsvDraft) return;
-    dragging=true; el.classList.add("drag"); try{grip.setPointerCapture(e.pointerId);}catch(_){}
+    dragging=true; el.classList.add("drag"); try{el.setPointerCapture(e.pointerId);}catch(_){}
     const r=notesEl.getBoundingClientRect();
     ox = (e.clientX-r.left)/zoom - rsvDraft.rx*WALL_W;
     oy = (e.clientY-r.top)/zoom - rsvDraft.ry*WALL_H;
     e.preventDefault();
   });
-  grip.addEventListener("pointermove", e=>{
+  el.addEventListener("pointermove", e=>{
     if(!dragging||!rsvDraft) return;
     const r=notesEl.getBoundingClientRect();
     rsvDraft.rx = clamp(((e.clientX-r.left)/zoom - ox)/WALL_W, 0, 1-rsvDraft.rw);
     rsvDraft.ry = clamp(((e.clientY-r.top)/zoom - oy)/WALL_H, 0, 1-rsvDraft.rh);
     rsvRenderPreview(); rsvRefresh();
   });
-  const end=e=>{ dragging=false; el.classList.remove("drag"); try{grip.releasePointerCapture(e.pointerId);}catch(_){} };
-  grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
-}
-function rsvAutoPlace(showToast=true){
-  if(!rsvDraft) return false;
-  const g = rsvGateReason();
-  if(g){ rsvRefresh(); if(showToast) toast(g); return false; }
-  const w=rsvDraft.rw, h=rsvDraft.rh, ctr=viewCenterFrac();
-  const cols=30, rows=14;
-  let best=null, bestScore=Infinity;
-  for(let yi=0; yi<=rows; yi++){
-    const ry = (1-h) * yi / rows;
-    for(let xi=0; xi<=cols; xi++){
-      const rx = (1-w) * xi / cols;
-      if(postsInRect(rx,ry,w,h) || reservationsInRect(rx,ry,w,h)) continue;
-      const cx=rx+w/2, cy=ry+h/2;
-      const score = Math.pow(cx-ctr.fx,2) + Math.pow(cy-ctr.fy,2);
-      if(score < bestScore){ bestScore=score; best={rx,ry}; }
-    }
-  }
-  if(!best){ rsvRefresh(); if(showToast) toast("空き場所が見つかりませんでした"); return false; }
-  rsvDraft.rx = best.rx; rsvDraft.ry = best.ry;
-  rsvRenderPreview(); rsvRefresh();
-  if(showToast) toast("空いてる場所へ移動しました");
-  return true;
+  const end=e=>{ dragging=false; el.classList.remove("drag"); try{el.releasePointerCapture(e.pointerId);}catch(_){} };
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
 }
 function rsvRefresh(){
   if(!rsvDraft) return;
@@ -4250,8 +4237,9 @@ function rsvOpen(){
   rsvDraft = { asp:1.5, t:0.55 };
   const sz = rsvComputeSize(rsvDraft.asp, rsvDraft.t); rsvDraft.rw=sz.rw; rsvDraft.rh=sz.rh;
   const ctr = viewCenterFrac();
-  rsvDraft.rx = clamp(ctr.fx - rsvDraft.rw/2, 0, 1-rsvDraft.rw);
-  rsvDraft.ry = clamp(ctr.fy - rsvDraft.rh/2, 0, 1-rsvDraft.rh);
+  const spot = rsvFindSpot(rsvDraft.rw, rsvDraft.rh, ctr.fx, ctr.fy);
+  if(spot){ rsvDraft.rx=spot.rx; rsvDraft.ry=spot.ry; }
+  else { rsvDraft.rx = clamp(ctr.fx - rsvDraft.rw/2, 0, 1-rsvDraft.rw); rsvDraft.ry = clamp(ctr.fy - rsvDraft.rh/2, 0, 1-rsvDraft.rh); }
   const g = rsvGateReason();
   document.getElementById("rsvT1").value=RSV.T1; document.getElementById("rsvT2").value=RSV.T2; document.getElementById("rsvT3").value=RSV.T3;
   document.getElementById("rsvStart").value="0"; document.getElementById("rsvDur").value="2400000";
@@ -4260,7 +4248,7 @@ function rsvOpen(){
   rsvAspectsSet(rsvDraft.asp);
   document.getElementById("rsvMask").classList.add("show");
   if(floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // デスクをしまって壁を見やすく
-  rsvRenderPreview(); rsvRefresh(); rsvAutoPlace(false);
+  rsvRenderPreview(); rsvRefresh();
 }
 function rsvClose(){
   document.getElementById("rsvMask").classList.remove("show");
@@ -4290,9 +4278,10 @@ async function rsvConfirm(){
   if(on("rsvOpen")) on("rsvOpen").addEventListener("click", rsvOpen);
   if(on("rsvSize")) on("rsvSize").addEventListener("input", e=>{ if(rsvDraft){ rsvDraft.t=(parseInt(e.target.value,10)||0)/100; rsvResize(); } });
   document.querySelectorAll("#rsvAspects button").forEach(b=> b.addEventListener("click", ()=>{ if(!rsvDraft) return; rsvDraft.asp=parseFloat(b.dataset.asp)||1; rsvAspectsSet(rsvDraft.asp); rsvResize(); }));
-  if(on("rsvAutoPlace")) on("rsvAutoPlace").addEventListener("click", ()=>rsvAutoPlace(true));
   if(on("rsvCancel")) on("rsvCancel").addEventListener("click", rsvClose);
   if(on("rsvConfirm")) on("rsvConfirm").addEventListener("click", rsvConfirm);
+  if(on("rsvFind")) on("rsvFind").addEventListener("click", rsvFindAnother);
+  if(on("rsvIgnore")) on("rsvIgnore").addEventListener("change", ()=>{ if(rsvDraft) rsvRefresh(); });
   setInterval(()=>{ if(reservations.size){ rsvCleanupLazy(); renderReservations(); } }, 30000);   // 状態遷移・期限切れの遅延反映
 })();
 
