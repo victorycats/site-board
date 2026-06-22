@@ -4355,6 +4355,7 @@ function rsvFocusFrame(fid){   // #f= ディープリンク：その枠へ寄せ
 function renderReservations(){
   const host = document.getElementById("frames");
   if(!host) return;
+  const keepPreview = document.getElementById("rsvPreview");   // モーダル中のプレビューは退避して後で戻す
   const now = Date.now();
   const frameNotes = buildFrameNotes();   // fid -> [postId...]（容量表示用）
   let html = "";
@@ -4391,6 +4392,7 @@ function renderReservations(){
       + `</div>`;
   }
   host.innerHTML = html;
+  if(keepPreview) host.appendChild(keepPreview);   // 予約モーダル中のプレビュー枠は消さずに戻す（編集中も出続ける）
   host.querySelectorAll(".rsv-draw").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvDrawInto(b.dataset.rid); }));
   host.querySelectorAll(".rsv-share").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvShare(b.dataset.rid); }));
   host.querySelectorAll(".rsv-del").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvDelete(b.dataset.rid); }));
