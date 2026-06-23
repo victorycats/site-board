@@ -2499,6 +2499,7 @@ function enterPlacing(){
   scrollEl.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 function cancelPlacing(){
+  if(repositioningId) console.warn("[cancelPlacing] repositioningId が消える！呼び出し元↓", new Error().stack);   // ←調査用ログ（後で消す）
   placing = false;
   placeDragging = false;
   repositioningId = null;   // 位置直しの中断
@@ -2569,6 +2570,7 @@ async function commitPlace(nx, ny){
   } finally { committing = false; }
 }
 function startReposition(e, id){
+  console.log("[startReposition] id=", id);   // ←調査用ログ（後で消す）
   if(e){ e.stopPropagation(); e.preventDefault(); }   // このタップが壁の確定ハンドラに伝播して即置きされるのを防ぐ
   const p = posts.get(id);
   if(!p) return;
