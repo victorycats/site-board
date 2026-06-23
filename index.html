@@ -2174,8 +2174,8 @@ function ensureImagesInView(){
   posts.forEach((p,id)=>{
     if(p.hidden && !admin) return;
     if(imgState.get(id)==="loaded" || imgState.get(id)==="loading") return;
-    const cx = nxOf(p,id)*(WALL_W-NOTE_W) + NOTE_W/2;
-    const cy = nyOf(p,id)*(WALL_H-NOTE_H) + NOTE_H/2;
+    const cx = nxOf(p,id)*(WALL_W-NOTE_W) + (p.land?NOTE_LAND_W:NOTE_W)/2;
+    const cy = nyOf(p,id)*(WALL_H-NOTE_H) + (p.land?NOTE_LAND_H:NOTE_H)/2;
     if(cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1) loadImage(id);
   });
 }
@@ -2272,8 +2272,9 @@ function render(){
     const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span class="ab-spacer"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
     const idtg = admin ? idTag(p.uid) : null;
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
+    const landCls = (fp ? (oriOf(fp.r)==="l") : !!p.land) ? ' land' : '';   // 枠内は枠の向きに従う（半紙のp.landとズレていても枠に揃える）
     return `
-    <div class="note${mine}${rotoring}${fresh}${flippedCls}${p.land?' land':''}${fp?' in-frame':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:${fp?'none':`rotate(${ang}deg)`}${zr}">
+    <div class="note${mine}${rotoring}${fresh}${flippedCls}${landCls}${fp?' in-frame':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:${fp?'none':`rotate(${ang}deg)`}${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
@@ -2617,21 +2618,22 @@ function wallCoords(clientX, clientY){
   return {x, y};
 }
 /* 重なり制御：下の半紙の画像部分が最低7割は露出する位置にだけ置ける（覆ってよいのは3割まで） */
-function noteImgRect(x,y){ const m=6, w=NOTE_W-2*m; return {x:x+m, y:y+m, w, h:w*1.5}; }
+function noteImgRect(x,y,land){ const m=6; const W=(land?NOTE_LAND_W:NOTE_W), H=(land?NOTE_LAND_H:NOTE_H); return {x:x+m, y:y+m, w:W-2*m, h:H-2*m}; }   // 半紙の向きに応じた画像矩形（縦104×196 / 横160×150）
 function rectInter(a,b){
   const ix = Math.max(0, Math.min(a.x+a.w,b.x+b.w) - Math.max(a.x,b.x));
   const iy = Math.max(0, Math.min(a.y+a.h,b.y+b.h) - Math.max(a.y,b.y));
   return ix*iy;
 }
 function worstCover(x,y){
-  const nr = {x, y, w:NOTE_W, h:NOTE_H};   // 新しい半紙が覆う全体の矩形
+  const W=(landscape?NOTE_LAND_W:NOTE_W), H=(landscape?NOTE_LAND_H:NOTE_H);
+  const nr = {x, y, w:W, h:H};   // 新しい半紙が覆う全体の矩形（今のキャンバス向き）
   let worst = 0;
   posts.forEach((p,id)=>{
     if(id === repositioningId) return;   // 位置直し中の本人は重なり判定から除外
     if(p.hidden && !admin) return;
-    const ex = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W);
+    const ex = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W);   // 位置正規化の分母は描画(render)と同じ(WALL_W-NOTE_W)で統一
     const ey = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
-    const ir = noteImgRect(ex,ey);
+    const ir = noteImgRect(ex,ey,p.land);   // 既存半紙の向きで画像矩形（サイズだけ向きに追従）
     const cov = rectInter(nr, ir)/(ir.w*ir.h);   // 下の画像がどれだけ隠れるか
     if(cov>worst) worst = cov;
   });
@@ -2759,8 +2761,8 @@ async function createPost(nx, ny, fid){
   const angle = fid ? 0 : (finalNow ? (Math.random()<0.5?-4:4) : rndAngle());  // 枠内は直立。モバイルは左右4°のみ
   const img = pendingImg;
   const meta = { name, t: Date.now(), sou:0, del:0, hidden:false, nx, ny, angle, uid: myUid, dev: deviceTag() };  // 端末区分(dev)付き。ルール未許可なら下で自動的にdev無し再試行するので投稿は止まらない
-  if(fid) meta.fid = fid;            // 枠内投稿（自動整列）
-  if(landscape) meta.land = true;    // 横向きで描いたら向き情報を付与（枠内も枠の向きに一致）
+  if(fid){ meta.fid = fid; const fr=reservations.get(fid); if(fr && oriOf(fr)==="l") meta.land = true; else delete meta.land; }   // 枠内投稿：向きは枠のoriに必ず一致させる（データを枠と整合）
+  else if(landscape) meta.land = true;    // 通常の浮遊半紙：今のキャンバス向き
   postBtn.disabled = true;
   let reserved = false;
   try{
@@ -3031,15 +3033,17 @@ document.addEventListener("keydown", e=>{ if(e.key==="Escape" && rotorEl.classLi
 function isCovered(id){
   const p = posts.get(id); if(!p) return false;
   const z = zOverride.get(id) || 0;
+  const aw=(p.land?NOTE_LAND_W:NOTE_W), ah=(p.land?NOTE_LAND_H:NOTE_H);
   const ax = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W), ay = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
   for(const [oid,op] of posts){
     if(oid===id || (op.hidden && !admin)) continue;
     const oz = zOverride.get(oid) || 0;
     const above = (oz>z) || (oz===z && (op.t||0) > (p.t||0));   // 上に表示されている方
     if(!above) continue;
+    const ow=(op.land?NOTE_LAND_W:NOTE_W), oh=(op.land?NOTE_LAND_H:NOTE_H);
     const ox = clamp(nxOf(op,oid),0,1)*(WALL_W-NOTE_W), oy = clamp(nyOf(op,oid),0,1)*(WALL_H-NOTE_H);
-    const ix = Math.min(ax+NOTE_W,ox+NOTE_W)-Math.max(ax,ox);
-    const iy = Math.min(ay+NOTE_H,oy+NOTE_H)-Math.max(ay,oy);
+    const ix = Math.min(ax+aw,ox+ow)-Math.max(ax,ox);
+    const iy = Math.min(ay+ah,oy+oh)-Math.max(ay,oy);
     if(ix>0 && iy>0) return true;
   }
   return false;
@@ -3327,8 +3331,8 @@ async function archiveAndAdvance(auto){
       const x = clamp(nxOf(p,p.id),0,1)*(WALL_W-NOTE_W);
       const y = clamp(nyOf(p,p.id),0,1)*(WALL_H-NOTE_H);
       const land = !!p.land;
-      const w = land ? NOTE_LAND_W : NOTE_W;          // 横向きは3:2の箱（縦詰まり修正）／縦向きは2:3
-      const h = land ? NOTE_LAND_W*2/3 : NOTE_W*1.5;
+      const w = land ? NOTE_LAND_W : NOTE_W;          // 実寸に統一（横160×150 / 縦104×196）＝表示と一致
+      const h = land ? NOTE_LAND_H : NOTE_H;
       g.save();
       g.translate(x + w/2, y + h/2);
       g.rotate((p.angle||0)*Math.PI/180);
@@ -3403,7 +3407,7 @@ async function composeBoardCanvas(list, imgsMap){
     const y = clamp(+p.ny||0,0,1)*(WALL_H-NOTE_H);
     const land = !!p.land;
     const w = land ? NOTE_LAND_W : NOTE_W;
-    const h = land ? NOTE_LAND_W*2/3 : NOTE_W*1.5;
+    const h = land ? NOTE_LAND_H : NOTE_H;
     g.save(); g.translate(x+w/2, y+h/2); g.rotate((p.angle||0)*Math.PI/180); g.drawImage(im,-w/2,-h/2,w,h); g.restore();
     drawn++;
   }
