@@ -2257,7 +2257,7 @@ function render(){
     const delCls = delDone.has(p.id) ? "del-btn done" : "del-btn";
     const hiddenBadge = p.hidden ? '<span class="hidden-badge">非表示</span>' : '';
     const isMyGrace = (p.id===graceNoteId && p.uid===myUid);   // 貼った直後の自分の半紙
-    const souBtn = isMyGrace ? '' : `<button class="${souCls}" onclick="vote('sou','${p.id}')">そうだね<span class="n"> ${p.sou||0}</span></button>`;
+    const souBtn = isMyGrace ? '' : `<button class="${souCls}" onclick="vote('sou','${p.id}')"${souDone.has(p.id)?' title="もう一度押すと取り消せます"':''}>そうだね<span class="n"> ${p.sou||0}</span></button>`;
     const delBtn = isMyGrace ? '' : `<button class="${delCls}" onclick="vote('del','${p.id}')">del</button>`;
     const repoBtn = (isMyGrace && !repositioningId && !fp)
       ? `<button class="repo-btn" onclick="startReposition(event,'${p.id}')">位置を直す</button>` : '';
@@ -3012,17 +3012,23 @@ function isCovered(id){
 }
 async function vote(type, id){
   if(!db) return;
-  if(id !== activeNoteId && isCovered(id)){   // 覆われている半紙だけ、まず前に出す（誤操作防止）
-    raiseNote(id); setActive(id);
-    return;
-  }
-  setActive(id);   // 覆われていない半紙はそのまま投票（選択だけ反映）
   if(type==="sou"){
-    if(souDone.has(id)){ toast("もう押したよ"); return; }
-    souDone.add(id); saveVotes();
+    setActive(id);   // 選択表示だけ反映（覆われていても前面には出さない＝即カウント優先）
+    if(souDone.has(id)){   // 二度目＝自分のそうだねを取り消す（カウントダウン）
+      souDone.delete(id); saveVotes();
+      try{ await runTransaction(ref(db, bpath("posts/"+id+"/sou")), v => Math.max(0,(v||0)-1)); if((posts.get(id)||{}).uid===myUid) mySouSeen.set(id, Math.max(0,(mySouSeen.get(id)||0)-1)); render(); toast("そうだねを取り消したよ"); }
+      catch(e){ souDone.add(id); saveVotes(); toast("失敗しました"); }
+      return;
+    }
+    souDone.add(id); saveVotes();   // フォーカス（覆われているか）に関係なく即カウントアップ
     try{ await runTransaction(ref(db, bpath("posts/"+id+"/sou")), v => (v||0)+1); justVoted = id; if((posts.get(id)||{}).uid===myUid) mySouSeen.set(id, (mySouSeen.get(id)||0)+1); render(); toast("そうだね！"); }
     catch(e){ souDone.delete(id); saveVotes(); toast("失敗しました"); }
   } else {
+    if(id !== activeNoteId && isCovered(id)){   // 削除依頼は誤操作防止のため、覆われていたら先に前面へ
+      raiseNote(id); setActive(id);
+      return;
+    }
+    setActive(id);
     if(delDone.has(id)){ toast("通報済み"); return; }
     if(!confirm("この投稿を削除依頼（del）しますか？")) return;
     delDone.add(id); saveVotes();
