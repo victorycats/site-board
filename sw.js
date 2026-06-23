@@ -1,7 +1,7 @@
 /* ふたば(偽)お習字 PWA service worker
    方針：常時オンライン前提。アプリの「殻」だけ軽くキャッシュして起動を安定させる。
    Firebase/Supabase/フォント/CDN など外部通信は一切横取りせず素通し（リアルタイム性を損なわない）。*/
-const CACHE = "oshuji-shell-v3";
+const CACHE = "oshuji-shell-v4";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e=>{

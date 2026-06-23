@@ -2052,6 +2052,9 @@ const LS = {
 
 const posts = new Map();    // id -> {name,t,sou,del,hidden,nx,ny,angle}（画像は別パス）
 window._debugPosts = posts; window._debugReservations = reservations;   // 調査用：コンソールから window._debugPosts 等で参照可（恒久対応ではない）
+window._dbgCanPlaceAt = (x,y)=>canPlaceAt(x,y);
+window._dbgState = ()=>({placing, repositioningId, committing, landscape});
+window._dbgPtHitsFrames = (x,y)=>ptHitsFrames(x,y, landscape?NOTE_LAND_W:NOTE_W, landscape?NOTE_LAND_H:NOTE_H);
 let postsLoaded = false;    // 初回ロード完了（完了まで「まだ誰も〜」を出さない）
 function loadIdSet(key){ try{ const v = LS.get(key); return new Set(v ? JSON.parse(v) : []); }catch(e){ return new Set(); } }
 const souDone = loadIdSet("fg_sou");   // 端末ごと：同じ半紙へのそうだねは1回だけ（リロードでも維持）
@@ -2541,6 +2544,7 @@ let committing = false;   // 書き込み中フラグ（同期的に立てて二
 async function commitPlace(nx, ny){
   if(committing) return;                                    // 既に確定処理中なら無視（ドロップ連打・タッチ重複対策）
   const hitR = rsvFrameAt(nx, ny, landscape);               // お題枠の上に落とした？
+  console.log("[commitPlace] repositioningId=", repositioningId, "hitR=", hitR? (rsvState(hitR.r)+"/oriMatch="+hitR.oriMatch) : null);   // ←調査用ログ（後で消す）
   if(hitR){
     const st = rsvState(hitR.r);
     if(st==="reserved"){ toast("ここは予約枠です。開始時刻になってから描けます"); return; }
@@ -2587,6 +2591,7 @@ async function repositionPost(nx, ny){
   const id = repositioningId;
   const xpx = clamp(nx,0,1)*(WALL_W-NOTE_W), ypx = clamp(ny,0,1)*(WALL_H-NOTE_H);   // ドロップ先が置ける場所か最終チェック（枠の上・覆いすぎを弾く。repositioningIdが生きてる間に呼ぶ＝枠上は不可・自分は除外）
   const okHere = canPlaceAt(xpx, ypx);
+  console.log("[repositionPost] id=", id, "nx,ny=", nx.toFixed(3), ny.toFixed(3), "canPlaceAt=", okHere, "ptHitsFrames=", ptHitsFrames(xpx,ypx, landscape?NOTE_LAND_W:NOTE_W, landscape?NOTE_LAND_H:NOTE_H));   // ←調査用ログ（後で消す）
   if(!okHere){
     toast("ここには置けません（お題枠の上などは不可）");
     placing = false; placeDragging = false;
