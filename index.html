@@ -130,6 +130,8 @@
   .rsv-del{position:absolute;top:6px;right:6px;pointer-events:auto;cursor:pointer;width:26px;height:26px;border-radius:50%;
     border:none;background:#3a2a18;color:#fff;font-size:16px;line-height:1;font-weight:700;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
   .rsv-del:hover{background:#8c2414}
+  .rsv-endnow{position:absolute;top:6px;right:38px;pointer-events:auto;cursor:pointer;border:none;border-radius:999px;background:rgba(58,42,24,.85);color:#fff;font-weight:700;font-family:inherit;font-size:11px;line-height:1;padding:6px 10px;box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.35);white-space:nowrap}
+  .rsv-endnow:hover{background:#3a2a18}
   .rsv-draw{position:absolute;inset:0;border:none;background:transparent;cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;padding-bottom:8px;color:#9c7f5e;font-weight:700;font-family:"Shippori Mincho",serif}
   .rsv-draw .rsv-draw-hint{font-size:15px}
   .rsv-draw .rsv-cap{font-size:12px;opacity:.85}
@@ -4503,6 +4505,7 @@ function renderReservations(){
       : esc(r.t3||RSV.T3);
     const canDel = (r.uid===myUid) || admin;
     const delBtn = canDel ? `<button class="rsv-del" data-rid="${id}" type="button" title="${(admin&&r.uid!==myUid)?'運営として削除':'この枠を取り消す'}">×</button>` : "";
+    const endNowBtn = (canDel && st==="active") ? `<button class="rsv-endnow" data-rid="${id}" type="button" title="投稿は残したまま今すぐ終了状態にする">今すぐ終了</button>` : "";
     const shareBtn = `<button class="rsv-share" data-rid="${id}" type="button" title="この枠のリンクを共有">共有</button>`;
     const fh = (st==="ended") ? rsvContentHpx(r, cnt) : rsvDisplayHpx(r, cnt);   // 終了枠は実枚数ぴったりに縮small／それ以外は下伸長
     const fw = (st==="ended") ? rsvEndedWpx(r, cnt) : px.w;                       // 終了枠は横も実枚数まで詰める（最低2枚分）
@@ -4520,7 +4523,7 @@ function renderReservations(){
       + `<div class="rsv-band" style="font-size:${fsBand}px" title="${t2}">${t2}</div>`
       + `<div class="rsv-body">${overlay}</div>`
       + `<div class="rsv-corner" style="font-size:${fsCorner}px" title="${cornerText}">${cornerText}</div>`
-      + shareBtn + delBtn
+      + shareBtn + endNowBtn + delBtn
       + `</div>`;
   }
   host.innerHTML = html;
@@ -4528,6 +4531,7 @@ function renderReservations(){
   host.querySelectorAll(".rsv-draw").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvDrawInto(b.dataset.rid); }));
   host.querySelectorAll(".rsv-share").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvShare(b.dataset.rid); }));
   host.querySelectorAll(".rsv-del").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvDelete(b.dataset.rid); }));
+  host.querySelectorAll(".rsv-endnow").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); rsvEndNow(b.dataset.rid); }));
   if(!deepFrameDone && location.hash.indexOf("f=")===1){ const fid=location.hash.slice(3); if(reservations.has(fid)){ deepFrameDone=true; setTimeout(()=>rsvFocusFrame(fid), 350); } }
 }
 async function rsvShare(id){
@@ -4546,6 +4550,15 @@ function rsvDelete(id){
   const msg = mine ? "このお題枠を取り消す？（描かれた半紙は残ります）" : "運営としてこの枠を削除する？";
   if(!confirm(msg)) return;
   set(ref(db, bpath("reservations/"+id)), null).then(()=> toast("枠を取り消しました")).catch(()=> toast("取り消せませんでした"));
+}
+function rsvEndNow(id){   // 終了時刻を待たず今すぐ終了状態にする（投稿は残したまま・実枚数ぴったりに縮む）
+  const r = reservations.get(id); if(!r || !db) return;
+  if(!confirm("この枠を今すぐ終了状態にする？（描かれた半紙は残ります）")) return;
+  const now = Date.now();
+  const end = Math.max(now, (r.start||0)+1);   // startより前にはしない
+  set(ref(db, bpath("reservations/"+id+"/end")), end)
+    .then(()=>{ r.end = end; renderReservations(); render(); toast("枠を終了にしました"); })
+    .catch(()=> toast("終了にできませんでした"));
 }
 const rsvLastState = new Map();
 function rsvCheckTransitions(){   // 予約→開始 を観測したら通知（このクライアントが見ている間の遷移だけ）
