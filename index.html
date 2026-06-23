@@ -4615,7 +4615,9 @@ function rsvFindSpot(rw, rh, nearFx, nearFy){
   for(let y=0; y<=1-rh+1e-9; y+=step){
     for(let x=0; x<=1-rw+1e-9; x+=step){
       const rx=Math.min(x,1-rw), ry=Math.min(y,1-rh);
-      if(!postsInRect(rx,ry,rw,rh)) cands.push({rx,ry});
+      if(postsInRect(rx,ry,rw,rh)) continue;
+      if(rectHitsOtherFrames(rx,ry,rw,rh, null)) continue;   // 既存のお題枠領域も避ける（重なる枠は作らない）
+      cands.push({rx,ry});
     }
   }
   if(!cands.length) return null;
@@ -4665,6 +4667,7 @@ function rsvValidity(d){
   const _ori = rsvSelectedOri();
   if(d.rw < rsvMinW(_ori)-1e-4 || d.rh < rsvMinH(_ori)-1e-4) return "枠が小さすぎます（最低 半紙3枚分）";
   if(area > rsvActiveCaps().areaMax+2e-3) return "枠が大きすぎます";
+  if(rectHitsOtherFrames(d.rx,d.ry,d.rw,d.rh, null)) return "他のお題枠と重なっています。空いてる場所へ";   // 既存枠の確保領域と重ねさせない（枠内半紙は1点扱いなのでpostsInRectでは検知できない）
   if(postsInRect(d.rx,d.ry,d.rw,d.rh)) return "枠の中に既存の半紙があります。空いてる場所へ";
   const g = rsvGateReason(); if(g) return g;
   return "";
