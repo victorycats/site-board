@@ -2584,12 +2584,21 @@ function startReposition(e, id){
 window.startReposition = startReposition;
 async function repositionPost(nx, ny){
   const id = repositioningId;
+  const xpx = clamp(nx,0,1)*(WALL_W-NOTE_W), ypx = clamp(ny,0,1)*(WALL_H-NOTE_H);   // ドロップ先が置ける場所か最終チェック（枠の上・覆いすぎを弾く。repositioningIdが生きてる間に呼ぶ＝枠上は不可・自分は除外）
+  const okHere = canPlaceAt(xpx, ypx);
+  if(!okHere){
+    toast("ここには置けません（お題枠の上などは不可）");
+    placing = false; placeDragging = false;
+    ghostEl.classList.remove("show"); wallEl.classList.remove("placing"); scrollEl.classList.remove("placing-lock");
+    postBtn.textContent = "貼 る"; setMsg(""); setDeskCollapsed(deskPrevCollapsed);
+    render();   // 位置直しモードは維持（もう一度別の場所へ動かせる）
+    return;
+  }
   repositioningId = null;
   if(db && id){
     try{
       await update(ref(db, bpath("posts/"+id)), { nx, ny });   // 位置(nx/ny)だけ更新＝枠も画像もそのまま・クールダウン無関係
       const p = posts.get(id); if(p){ p.nx = nx; p.ny = ny; posts.set(id, p); }
-      try{ const hp = rsvFrameAt(nx, ny, (p&&p.land)); if(hp && rsvState(hp.r)==="active" && hp.r.hasPost!==true){ set(ref(db, bpath("reservations/"+hp.id+"/hasPost")), true).catch(()=>{}); } }catch(_){}
       toast("位置を直しました");
     }catch(e){ console.error(e); toast("位置を直せませんでした"); }
   }
