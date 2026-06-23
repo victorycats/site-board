@@ -1288,7 +1288,7 @@ const RSV = {
   T1:"寝る前に描きなさい", T2:"もう何でもいいや適当で", T3:"筆落書きでも委員会"
 };
 const reservations = new Map();        // id -> rsv レコード
-const FGAP=16, FPAD=18, FHEAD=72;   // 枠内グリッドの余白（壁px）
+const FGAP=16, FPAD=18, FHEAD=72, FFOOT=22;   // 枠内グリッドの余白（壁px）。FFOOT＝下端の時刻表示用スペース
 const FMIN_ROWS = 1;   // 最小は横3×縦1＝半紙3枚分のスペース
 function cellW(ori){ return ori==="l" ? NOTE_LAND_W : NOTE_W; }   // 縦=104 / 横=160
 function cellH(ori){ return ori==="l" ? NOTE_LAND_H : NOTE_H; }   // 縦=196 / 横=150
@@ -1298,14 +1298,14 @@ function rsvMinH(ori){ const H=cellH(ori); return (FHEAD + 2*FPAD + FMIN_ROWS*H 
 function rsvCols(r){ const W=cellW(oriOf(r)); const innerW=(r.rw||0)*WALL_W - 2*FPAD; return Math.max(1, Math.floor((innerW + FGAP)/(W + FGAP) + 1e-6)); }   // +epsilon: rw保存時のtoFixed丸めで境界がわずかに不足し列数を1個損する事故を防止
 function rsvMaxRows(r){ const H=cellH(oriOf(r)); const avail=(r.rh||0)*WALL_H - FHEAD - 2*FPAD; return Math.max(FMIN_ROWS, Math.floor((avail + FGAP)/(H + FGAP) + 1e-6)); }
 function rsvCapacity(r){ return rsvCols(r)*rsvMaxRows(r); }
-function rsvContentHpx(r,n){ const H=cellH(oriOf(r)); const cols=rsvCols(r); const rows=Math.max(1, Math.ceil((n||0)/cols)); return FHEAD + 2*FPAD + rows*H + (rows-1)*FGAP; }   // 終了枠：実枚数ぴったり
+function rsvContentHpx(r,n){ const H=cellH(oriOf(r)); const cols=rsvCols(r); const rows=Math.max(1, Math.ceil((n||0)/cols)); return FHEAD + 2*FPAD + rows*H + (rows-1)*FGAP + FFOOT; }   // 終了枠：実枚数ぴったり＋下端の時刻表示用スペース
 function rsvEndedCols(r,n){ const cols=rsvCols(r); const rows=Math.max(1, Math.ceil((n||0)/cols)); return (rows===1) ? Math.max(2, Math.min(cols, n||0)) : cols; }   // 1行なら実枚数（最低2）まで横も詰める
 function rsvEndedWpx(r,n){ const W=cellW(oriOf(r)); const c=rsvEndedCols(r,n); return 2*FPAD + c*W + (c-1)*FGAP; }
-function rsvDisplayHpx(r,n){   // 表示高さ＝「予約した高さ」と「実際の枚数に必要な高さ」の大きい方（壁下端でクランプ）
+function rsvDisplayHpx(r,n){   // 表示高さ＝「予約した高さ」と「実際の枚数に必要な高さ」の大きい方（壁下端でクランプ）。下端に時刻表示用のスペースを確保
   const H=cellH(oriOf(r)), cols=rsvCols(r);
   const contentRows = Math.max(FMIN_ROWS, Math.ceil((n||0)/cols));
-  const contentH = FHEAD + 2*FPAD + contentRows*H + (contentRows-1)*FGAP;
-  const claimedH = (r.rh||0)*WALL_H, wallH = (1-(r.ry||0))*WALL_H;
+  const contentH = FHEAD + 2*FPAD + contentRows*H + (contentRows-1)*FGAP + FFOOT;
+  const claimedH = (r.rh||0)*WALL_H + FFOOT, wallH = (1-(r.ry||0))*WALL_H;
   return Math.min(wallH, Math.max(claimedH, contentH));
 }
 function rsvCellXY(r, i){   // i番目セルの左上（壁px・絶対）。左上から行→列。左寄せ＝延長しても既存がズレない
@@ -5036,9 +5036,11 @@ document.addEventListener("visibilitychange", ()=>{
 function startBoard(){ if(authStarted) return; authStarted = true; listen(); wakeOnline(); }
 if(auth && !IS_LOCAL){
   onAuthStateChanged(auth, user=>{
+    const wasAdmin = admin;
     myUid = user ? user.uid : null;
     admin = !!(user && !user.isAnonymous && user.uid === ADMIN_UID);   // 本人UIDのみ運営
     if(!user){ signInAnonymously(auth).catch(e=>{ console.error(e); showAuthError(); }); return; }
+    if(admin && !wasAdmin && floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // 運営モード突入＝描くより管理が主役、半紙パネルは自動で最小化
     startBoard();          // 認証できた時だけ購読を開始（ルールが auth!=null を要求）
     render(); updateGearLabel();
   });
