@@ -121,7 +121,7 @@
   .rsv-frame .rsv-head{flex:0 0 auto;height:38px;line-height:38px;text-align:center;color:#111;font-weight:700;padding:0 48px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .rsv-frame .rsv-band{flex:0 0 auto;height:34px;line-height:34px;background:#111;color:#fff;text-align:center;font-weight:700;padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .rsv-frame .rsv-body{flex:1 1 auto;position:relative;min-height:0}
-  .rsv-frame .rsv-corner{position:absolute;right:8px;bottom:6px;color:#111;font-weight:700;opacity:.5;pointer-events:none}
+  .rsv-frame .rsv-corner{position:absolute;right:8px;bottom:6px;left:8px;color:#111;font-weight:700;opacity:.5;pointer-events:none;text-align:right;line-height:1.35;overflow-wrap:break-word}
   .rsv-wait{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:#3a2a18}
   .rsv-wait .rsv-wait-l{font-weight:800;letter-spacing:.06em}
   .rsv-wait .rsv-wait-t{opacity:.8}
@@ -1421,6 +1421,7 @@ function rsvGateReason(){   // 予約可なら""／不可なら理由
   return "";
 }
 function fmtClock(ms){ const d=new Date(ms||0), p=n=>String(n).padStart(2,"0"); return p(d.getHours())+":"+p(d.getMinutes()); }
+function fmtMD(ms){ const d=new Date(ms||0); return (d.getMonth()+1)+"/"+d.getDate(); }
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -2047,6 +2048,7 @@ const LS = {
 };
 
 const posts = new Map();    // id -> {name,t,sou,del,hidden,nx,ny,angle}（画像は別パス）
+window._debugPosts = posts; window._debugReservations = reservations;   // 調査用：コンソールから window._debugPosts 等で参照可（恒久対応ではない）
 let postsLoaded = false;    // 初回ロード完了（完了まで「まだ誰も〜」を出さない）
 function loadIdSet(key){ try{ const v = LS.get(key); return new Set(v ? JSON.parse(v) : []); }catch(e){ return new Set(); } }
 const souDone = loadIdSet("fg_sou");   // 端末ごと：同じ半紙へのそうだねは1回だけ（リロードでも維持）
@@ -4256,6 +4258,7 @@ function confirmClear(msg, onYes){
 }
 if(deskOrientBtn) deskOrientBtn.addEventListener("click", e=>{
   e.stopPropagation();
+  if(pendingFid && reservations.has(pendingFid)){ toast("この枠は向きが固定です（"+(oriOf(reservations.get(pendingFid))==="l"?"横書き":"縦書き")+"）"); return; }   // 枠内は向き固定
   const collapsed = floatDesk.classList.contains("collapsed");
   // 展開時＝向きトグル。畳み時＝向きを変えて開く（横ボタンは「別の向きで広げる」）
   const apply = ()=>{ setLandscape(!landscape, true, true); if(collapsed) setDeskCollapsed(false); };
@@ -4427,8 +4430,10 @@ function renderReservations(){
     const px = rsvRectPx(r), cap = rsvCapacity(r);
     const fsHead = 24, fsBand = 20, fsCorner = 13;   // 固定（ヘッダー高さ＝FCELL.HEADと一致させる）
     const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2);
-    const cornerText = (st==="ended") ? `終了 ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚`
-      : (st==="active") ? `〜${fmtClock(r.end)} まで`
+    const sameDay = fmtMD(r.start)===fmtMD(now);
+    const dPrefix = sameDay ? "" : (fmtMD(r.start)+" ");
+    const cornerText = (st==="ended") ? `${dPrefix}終了 ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚`
+      : (st==="active") ? `${sameDay?"":fmtMD(r.end)+" "}〜${fmtClock(r.end)} まで`
       : esc(r.t3||RSV.T3);
     const canDel = (r.uid===myUid) || admin;
     const delBtn = canDel ? `<button class="rsv-del" data-rid="${id}" type="button" title="${(admin&&r.uid!==myUid)?'運営として削除':'この枠を取り消す'}">×</button>` : "";
@@ -4445,10 +4450,10 @@ function renderReservations(){
         : `<button class="rsv-draw" data-rid="${id}" type="button"><span class="rsv-draw-hint">✎ この枠に描こう</span><span class="rsv-cap">${cnt}枚${rsvCanGrow(r)?" ・ 埋まると広がる":""}</span></button>`;
     }
     html += `<div class="rsv-frame ${st}" data-rid="${id}" style="left:${px.left}px;top:${px.top}px;width:${fw}px;height:${fh}px">`
-      + `<div class="rsv-head" style="font-size:${fsHead}px">${t1}</div>`
-      + `<div class="rsv-band" style="font-size:${fsBand}px">${t2}</div>`
+      + `<div class="rsv-head" style="font-size:${fsHead}px" title="${t1}">${t1}</div>`
+      + `<div class="rsv-band" style="font-size:${fsBand}px" title="${t2}">${t2}</div>`
       + `<div class="rsv-body">${overlay}</div>`
-      + `<div class="rsv-corner" style="font-size:${fsCorner}px">${cornerText}</div>`
+      + `<div class="rsv-corner" style="font-size:${fsCorner}px" title="${cornerText}">${cornerText}</div>`
       + shareBtn + delBtn
       + `</div>`;
   }
