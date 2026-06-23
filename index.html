@@ -641,13 +641,14 @@
   .note.sel .acts button, .note.mine .acts button{opacity:1}
   .note.sel{outline:2px solid rgba(181,52,31,.55);outline-offset:2px;border-radius:3px}
   .admin-line{
-    display:flex;align-items:center;gap:4px;margin-top:6px;flex-wrap:wrap;
+    display:flex;align-items:center;gap:3px;margin-top:6px;flex-wrap:nowrap;   /* 1行固定（折り返しで縦に積まれない）*/
     font-size:9px;color:var(--ink-faint);
     border-top:1px dashed rgba(140,110,60,.3);padding-top:5px;
   }
-  .admin-line .stat{background:#e8dcbb;border-radius:4px;padding:2px 5px}
+  .admin-line .stat{background:#e8dcbb;border-radius:4px;padding:2px 4px;white-space:nowrap;flex:0 0 auto}
   .admin-line .stat.warn{background:#f0cdbf;color:var(--shu-deep)}
-  .mini{font-size:9px;padding:3px 7px;border-radius:5px;font-weight:700}
+  .admin-line .ab-spacer{flex:1 1 auto;min-width:0}
+  .mini{font-size:9px;padding:3px 6px;border-radius:5px;font-weight:700;line-height:1;height:18px;flex:0 0 auto;white-space:nowrap}   /* 高さ揃え＋折り返さない */
   .mini.restore{background:#d8e8cf;color:#2f5a23}
   .mini.del{background:#f0cdbf;color:var(--shu-deep)}
   .mini.move{background:#cfe0ec;color:#26506b}
@@ -2268,7 +2269,7 @@ function render(){
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
-    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span style="flex:1"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
+    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span class="ab-spacer"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
     const idtg = admin ? idTag(p.uid) : null;
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     return `
@@ -4499,8 +4500,7 @@ function renderReservations(){
     const fsHead = 24, fsBand = 20, fsCorner = 13;   // 固定（ヘッダー高さ＝FCELL.HEADと一致させる）
     const t1=esc(r.t1||RSV.T1), t2=esc(r.t2||RSV.T2);
     const sameDay = fmtMD(r.start)===fmtMD(now);
-    const dPrefix = sameDay ? "" : (fmtMD(r.start)+" ");
-    const cornerText = (st==="ended") ? `${dPrefix}終了 ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚`
+    const cornerText = (st==="ended") ? `${fmtMD(r.start)} ${fmtClock(r.start)}–${fmtClock(r.end)}・${cnt}枚`   // 終了枠は常に開催日を明記
       : (st==="active") ? `${sameDay?"":fmtMD(r.end)+" "}〜${fmtClock(r.end)} まで`
       : esc(r.t3||RSV.T3);
     const canDel = (r.uid===myUid) || admin;
