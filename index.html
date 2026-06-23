@@ -652,6 +652,8 @@
   .mini.restore{background:#d8e8cf;color:#2f5a23}
   .mini.del{background:#f0cdbf;color:var(--shu-deep)}
   .mini.move{background:#cfe0ec;color:#26506b}
+  .note.place-bad{outline:3px solid rgba(200,40,30,.9);outline-offset:-1px;filter:saturate(1.2)}
+  .note.place-bad .imgwrap{opacity:.55}
   .hidden-badge{
     position:absolute;top:6px;left:6px;z-index:2;
     background:var(--shu);color:var(--paper);font-size:9px;font-weight:700;
@@ -2051,10 +2053,7 @@ const LS = {
 };
 
 const posts = new Map();    // id -> {name,t,sou,del,hidden,nx,ny,angle}（画像は別パス）
-window._debugPosts = posts; window._debugReservations = reservations;   // 調査用：コンソールから window._debugPosts 等で参照可（恒久対応ではない）
-window._dbgCanPlaceAt = (x,y)=>canPlaceAt(x,y);
-window._dbgState = ()=>({placing, repositioningId, committing, landscape});
-window._dbgPtHitsFrames = (x,y)=>ptHitsFrames(x,y, landscape?NOTE_LAND_W:NOTE_W, landscape?NOTE_LAND_H:NOTE_H);
+window._debugPosts = posts; window._debugReservations = reservations;   // 調査用：コンソールから window._debugPosts 等で参照可
 let postsLoaded = false;    // 初回ロード完了（完了まで「まだ誰も〜」を出さない）
 function loadIdSet(key){ try{ const v = LS.get(key); return new Set(v ? JSON.parse(v) : []); }catch(e){ return new Set(); } }
 const souDone = loadIdSet("fg_sou");   // 端末ごと：同じ半紙へのそうだねは1回だけ（リロードでも維持）
@@ -2499,7 +2498,6 @@ function enterPlacing(){
   scrollEl.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 function cancelPlacing(){
-  if(repositioningId) console.warn("[cancelPlacing] repositioningId が消える！呼び出し元↓", new Error().stack);   // ←調査用ログ（後で消す）
   placing = false;
   placeDragging = false;
   repositioningId = null;   // 位置直しの中断
@@ -2545,7 +2543,6 @@ let committing = false;   // 書き込み中フラグ（同期的に立てて二
 async function commitPlace(nx, ny){
   if(committing) return;                                    // 既に確定処理中なら無視（ドロップ連打・タッチ重複対策）
   const hitR = rsvFrameAt(nx, ny, landscape);               // お題枠の上に落とした？
-  console.log("[commitPlace] repositioningId=", repositioningId, "hitR=", hitR? (rsvState(hitR.r)+"/oriMatch="+hitR.oriMatch) : null);   // ←調査用ログ（後で消す）
   if(hitR){
     const st = rsvState(hitR.r);
     if(st==="reserved"){ toast("ここは予約枠です。開始時刻になってから描けます"); return; }
@@ -2570,7 +2567,6 @@ async function commitPlace(nx, ny){
   } finally { committing = false; }
 }
 function startReposition(e, id){
-  console.log("[startReposition] id=", id);   // ←調査用ログ（後で消す）
   if(e){ e.stopPropagation(); e.preventDefault(); }   // このタップが壁の確定ハンドラに伝播して即置きされるのを防ぐ
   const p = posts.get(id);
   if(!p) return;
@@ -2593,7 +2589,6 @@ async function repositionPost(nx, ny){
   const id = repositioningId;
   const xpx = clamp(nx,0,1)*(WALL_W-NOTE_W), ypx = clamp(ny,0,1)*(WALL_H-NOTE_H);   // ドロップ先が置ける場所か最終チェック（枠の上・覆いすぎを弾く。repositioningIdが生きてる間に呼ぶ＝枠上は不可・自分は除外）
   const okHere = canPlaceAt(xpx, ypx);
-  console.log("[repositionPost] id=", id, "nx,ny=", nx.toFixed(3), ny.toFixed(3), "canPlaceAt=", okHere, "ptHitsFrames=", ptHitsFrames(xpx,ypx, landscape?NOTE_LAND_W:NOTE_W, landscape?NOTE_LAND_H:NOTE_H));   // ←調査用ログ（後で消す）
   if(!okHere){
     toast("ここには置けません（お題枠の上などは不可）");
     placing = false; placeDragging = false;
@@ -2637,6 +2632,7 @@ function worstCover(x,y){
   let worst = 0;
   posts.forEach((p,id)=>{
     if(id === repositioningId) return;   // 位置直し中の本人は重なり判定から除外
+    if(rotorMoving && id === rotorId) return;   // 回転ダイヤルで移動中の本人も除外（自分の元位置で弾かれない）
     if(p.hidden && !admin) return;
     const ex = clamp(nxOf(p,id),0,1)*(WALL_W-NOTE_W);   // 位置正規化の分母は描画(render)と同じ(WALL_W-NOTE_W)で統一
     const ey = clamp(nyOf(p,id),0,1)*(WALL_H-NOTE_H);
@@ -2664,7 +2660,7 @@ function canPlaceAt(x,y){
   if(worstCover(x,y) > COVER_MAX) return false;
   const w=landscape?NOTE_LAND_W:NOTE_W, h=landscape?NOTE_LAND_H:NOTE_H;
   if(ptHitsFrames(x,y,w,h)){
-    if(repositioningId) return false;   // 位置直しは枠への自動配置対象外
+    if(repositioningId || rotorMoving) return false;   // 位置直し・回転ダイヤル移動は枠への自動配置対象外（枠の上には置けない）
     const nx = (WALL_W-NOTE_W) ? x/(WALL_W-NOTE_W) : 0, ny = (WALL_H-NOTE_H) ? y/(WALL_H-NOTE_H) : 0;
     const hitR = rsvFrameAt(nx, ny, landscape);
     if(hitR && rsvState(hitR.r)==="active" && hitR.oriMatch) return true;   // 向きが合う開催中の枠なら置ける（自動整列される）
@@ -2874,6 +2870,7 @@ function setNoteTransform(id, rot){
 const rotorEl = document.getElementById("rotor");
 let rotorId = null, rotorR = 0, rotorArc = 0, rotorAngle = 0, rotorOpenedAt = 0, rotorDragging = false;
 let rotorMoving = false; const rotorMoveOff = {x:0,y:0};   // 回転状態を保ったまま半紙そのものを掴んで移動
+let rotorMovePrev = null;   // ドラッグ開始時の位置（置けない場所で離したら戻す）
 const ROTOR_MAX = 20;                        // 静止時の傾き上限（上向き・反転とも±20°）
 function rotorCenter(){
   const p = posts.get(rotorId); if(!p) return null;
@@ -2953,9 +2950,27 @@ function rotorRelease(){
 // 回転状態を保ったまま、半紙そのものをドラッグして移動
 function rotorMoveStart(e){
   const c = rotorCenter(); if(!c) return;
+  const p = posts.get(rotorId);
+  rotorMovePrev = p ? { nx:p.nx, ny:p.ny } : null;   // 開始位置を控える（置けない場所なら戻す）
   rotorMoving = true;
   rotorMoveOff.x = e.clientX - c.cx;          // ポインタと半紙中心のズレを保持
   rotorMoveOff.y = e.clientY - c.cy;
+}
+function rotorMovePlaceable(p){   // 回転ダイヤル移動中の半紙が、今の位置に置けるか（枠の上・覆いすぎを弾く。対象の向きで判定）
+  const land = !!p.land;
+  const xpx = clamp(p.nx,0,1)*(WALL_W-NOTE_W), ypx = clamp(p.ny,0,1)*(WALL_H-NOTE_H);
+  if(ptHitsFrames(xpx, ypx, land?NOTE_LAND_W:NOTE_W, land?NOTE_LAND_H:NOTE_H)) return false;   // 枠の上は不可（移動中は自動整列しない）
+  // 覆い判定：自分以外との重なりが3割超なら不可
+  const nr = {x:xpx, y:ypx, w:(land?NOTE_LAND_W:NOTE_W), h:(land?NOTE_LAND_H:NOTE_H)};
+  let worst=0;
+  posts.forEach((op,oid)=>{
+    if(oid===rotorId || (op.hidden && !admin)) return;
+    const ex = clamp(nxOf(op,oid),0,1)*(WALL_W-NOTE_W), ey = clamp(nyOf(op,oid),0,1)*(WALL_H-NOTE_H);
+    const ir = noteImgRect(ex,ey,op.land);
+    const cov = rectInter(nr, ir)/(ir.w*ir.h);
+    if(cov>worst) worst=cov;
+  });
+  return worst <= COVER_MAX;
 }
 function rotorMoveDrag(e){
   const p = posts.get(rotorId); if(!p) return;
@@ -2965,13 +2980,25 @@ function rotorMoveDrag(e){
   p.nx = clamp((cx - (p.land?NOTE_LAND_W:NOTE_W)/2)/(WALL_W-NOTE_W), 0, 1);
   p.ny = clamp((cy - (p.land?NOTE_LAND_H:NOTE_H)/2)/(WALL_H-NOTE_H), 0, 1);
   const el = rotorNoteEl();
-  if(el){ el.style.left = (clamp(p.nx,0,1)*(WALL_W-NOTE_W))+"px"; el.style.top = (clamp(p.ny,0,1)*(WALL_H-NOTE_H))+"px"; }
+  if(el){
+    el.style.left = (clamp(p.nx,0,1)*(WALL_W-NOTE_W))+"px"; el.style.top = (clamp(p.ny,0,1)*(WALL_H-NOTE_H))+"px";
+    el.classList.toggle("place-bad", !rotorMovePlaceable(p));   // 置けない場所は赤く
+  }
   positionRotor();                            // ダイヤルも半紙に追従
 }
 function rotorMoveEnd(){
   rotorMoving = false;
   const p = posts.get(rotorId);
-  if(p && db) update(ref(db, bpath("posts/"+rotorId)), { nx:p.nx, ny:p.ny }).catch(()=>{});   // 位置を保存
+  const el = rotorNoteEl(); if(el) el.classList.remove("place-bad");
+  if(!p) return;
+  if(!rotorMovePlaceable(p)){   // 置けない場所で離した→開始位置に戻す
+    if(rotorMovePrev){ p.nx = rotorMovePrev.nx; p.ny = rotorMovePrev.ny; }
+    if(el){ el.style.left = (clamp(p.nx,0,1)*(WALL_W-NOTE_W))+"px"; el.style.top = (clamp(p.ny,0,1)*(WALL_H-NOTE_H))+"px"; }
+    positionRotor();
+    toast("ここには置けません（お題枠の上などは不可）");
+    return;
+  }
+  if(db) update(ref(db, bpath("posts/"+rotorId)), { nx:p.nx, ny:p.ny }).catch(()=>{});   // 位置を保存
 }
 function openRotor(id, angle){
   rotorId = id;
