@@ -490,6 +490,7 @@
   }
   .float-desk.land .seal-stamp{width:auto;height:27%;right:4%;bottom:6%}   /* 横向きは短辺(高さ)基準でサイズ＝でかすぎ防止 */
   .seal-stamp img{width:100%;height:100%;display:block}
+  body.touch .stage.desk-open .corner-cluster{display:none}   /* タッチ端末：半紙を開いている間は右下クラスタ（めぐり・マップ・ズーム・通知）を常に隠す（縦横どちらでも同時表示しない・描画に集中） */
   @media(max-width:560px){
     /* 半紙を開いている間は、右下クラスタ（めぐり・マップ・ズーム・通知）を隠す（描画に集中） */
     .stage.desk-open .corner-cluster{display:none}
@@ -2415,7 +2416,8 @@ function switchToBoard(id){
       boardCount = (s && s.val()) || 0;
       setActiveCount();
       maybeNotifyRemaining();
-      maybeAutoArchive();   // 運営タブのみ：満員で自動保存→新ボード
+      maybeAutoArchive();   // 運営タブがあれば：満員で自動保存（画像化）→新ボード
+      maybeAutoAdvance();   // 運営タブが無くても：満員なら誰かが新ボードへ進める（画像化はpendingに記録、後で運営が処理）
     }));
     // お題枠予約（板ローカル）
     boardSubs.push(onValue(ref(db, bpath("reservations")), s=>{
@@ -3551,6 +3553,41 @@ async function reoutputBoard(id, btn){
   if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
 })();
 
+// 運営が管理ページを開いた時：運営不在で自動切替されて未画像化のボードを拾って画像化＆保存
+let pendingArchiveRunning = false;
+async function processPendingArchives(){
+  if(!admin || pendingArchiveRunning || !db) return;
+  pendingArchiveRunning = true;
+  try{
+    const snap = await get(ref(db, "meta/pendingArchive"));
+    const v = snap && snap.val();
+    if(!v){ return; }
+    const ids = Object.keys(v).filter(k=> v[k]===true && /^\d+$/.test(k)).map(Number).sort((a,b)=>a-b);
+    if(!ids.length) return;
+    toast("未保存のボード"+ids.length+"枚を画像化します…", 4000);
+    for(const id of ids){
+      try{
+        const [ps, is] = await Promise.all([ get(ref(db,"boards/"+id+"/posts")), get(ref(db,"boards/"+id+"/imgs")) ]);
+        const pv = ps.val()||{}, imgs = is.val()||{};
+        const list = Object.entries(pv).map(([pid,p])=> Object.assign({id:pid}, p)).filter(p=> typeof p.id==="string");
+        const stamp = new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+        if(list.length && supa && !SUPA_ANON.startsWith("（")){
+          const { cv } = await composeBoardCanvas(list, imgs);
+          const blob = await new Promise(res=> cv.toBlob(res, "image/jpeg", 0.85));
+          if(blob){
+            const apath = "archives/board-"+id+"-"+stamp+".jpg";
+            await supa.storage.from(SUPA_BUCKET).upload(apath, blob, { contentType:"image/jpeg", upsert:false });
+            await set(ref(db, "meta/resetLog/"+id), { at:new Date().toISOString(), clean:apath, auto:true });
+          }
+        }
+        await remove(ref(db, "meta/pendingArchive/"+id));   // 処理済み（データが無くても消す）
+      }catch(e){ console.error("pendingArchive 処理失敗 board="+id, e); }   // 1枚失敗しても次へ。残れば次回また試行
+    }
+    toast("ボードの画像化が完了しました", 3500);
+  }catch(e){ console.error(e); }
+  finally{ pendingArchiveRunning = false; }
+}
+
 // 運営タブだけ：満員を検知したら自動で保存→新ボード（複数タブでも1つだけ実行）
 let autoArchiving = false;
 async function maybeAutoArchive(){
@@ -3565,6 +3602,39 @@ async function maybeAutoArchive(){
     }
   }catch(e){ console.error(e); }
   finally{ autoArchiving = false; }
+}
+// 運営タブが無くても：満員なら一般ユーザーの誰か1人が新ボードへ進める（画像化はせず pendingArchive に記録）
+let autoAdvancing = false, advanceTimer = null;
+async function maybeAutoAdvance(){
+  if(autoAdvancing || boardId == null) return;
+  if(remaining() > 0){ if(advanceTimer){ clearTimeout(advanceTimer); advanceTimer = null; } return; }
+  if(admin) return;                       // 運営タブは maybeAutoArchive 側で処理（画像化込み）
+  if(advanceTimer) return;                // すでに待機中
+  // 運営が画像化込みで処理する猶予を与え、一定時間後もまだ満員（＝運営不在）なら切替だけ実行
+  advanceTimer = setTimeout(async ()=>{
+    advanceTimer = null;
+    if(boardId == null || remaining() > 0) return;     // 既に誰かが進めた
+    if(autoAdvancing) return;
+    // 運営が画像化処理中（archiving旗）なら、その運営に任せて切替しない（board二重進行を防ぐ）
+    try{ const ar = await get(ref(db, bpath("archiving"))); if(ar && ar.val()===true) return; }catch(_){}
+    autoAdvancing = true;
+    const myBoard = boardId;
+    try{
+      const claim = await runTransaction(ref(db, bpath("advancing")), c => c ? undefined : true);  // 旗を立てた1人だけ実行
+      if(claim.committed && claim.snapshot.val() === true){
+        // 念のため満員を再確認してから進める
+        const cs = await get(ref(db, bpath("count")));
+        if(((cs && cs.val())||0) >= BOARD_LIMIT){
+          await set(ref(db, "meta/pendingArchive/"+myBoard), true);   // 「このボードは未画像化」と記録（後で運営が処理）
+          await set(ref(db, "meta/board"), myBoard + 1);              // 全クライアントが meta/board 監視で自動移行
+          toast("満員のため新しいボードへ切り替えました", 4000);
+        } else {
+          remove(ref(db, bpath("advancing"))).catch(()=>{});          // もう満員でない→旗を戻す
+        }
+      }
+    }catch(e){ console.error(e); }
+    finally{ autoAdvancing = false; }
+  }, 8000);   // 8秒猶予（運営タブが居れば先に画像化込みで切り替わる）
 }
 
 const IS_LOCAL = (location.protocol === "file:");   // ローカルで直接開いた状態
@@ -4343,6 +4413,20 @@ function setLandscape(on, persist, clear){
 }
 const isTouchDev = window.matchMedia && matchMedia("(pointer: coarse)").matches;
 if(isTouchDev) document.body.classList.add("touch");        // タッチ端末（向きは手動「横」ボタンで切替）
+// PWA（ホーム画面から起動）では、端末の自動回転で勝手に横になるのを防ぐ。画面の物理回転だけをロック（手動「横」ボタンのキャンバス切替には影響しない）
+(function lockPortraitIfPWA(){
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  if(!standalone) return;   // ブラウザのタブでは何もしない（端末側の判断に任せる）
+  const tryLock = ()=>{
+    try{
+      if(screen.orientation && typeof screen.orientation.lock === "function"){
+        screen.orientation.lock("portrait").catch(()=>{});   // Android系PWAで有効。iOSは未対応のため黙って失敗（実害なし）
+      }
+    }catch(_){}
+  };
+  tryLock();
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) tryLock(); });   // 復帰時に再ロック（ロックが外れる端末対策）
+})();
 setLandscape(LS.get("fg_orient")==="land", false);          // 前回選んだ向きを復元（PC・タッチ共通／端末の回転には依存しない）
 // 半紙に色が乗っているか（PAPER以外の画素があるか）をざっくり判定。間引きスキャンで軽量
 function canvasHasInk(){
@@ -5088,6 +5172,7 @@ if(auth && !IS_LOCAL){
     admin = !!(user && !user.isAnonymous && user.uid === ADMIN_UID);   // 本人UIDのみ運営
     if(!user){ signInAnonymously(auth).catch(e=>{ console.error(e); showAuthError(); }); return; }
     if(admin && !wasAdmin && floatDesk && !floatDesk.classList.contains("collapsed")) setDeskCollapsed(true);   // 運営モード突入＝描くより管理が主役、半紙パネルは自動で最小化
+    if(admin && !wasAdmin) setTimeout(processPendingArchives, 1500);   // 運営が開いたら、運営不在で自動切替された未画像化ボードをまとめて保存
     startBoard();          // 認証できた時だけ購読を開始（ルールが auth!=null を要求）
     render(); updateGearLabel();
   });
