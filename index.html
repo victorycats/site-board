@@ -3347,8 +3347,14 @@ function ensureHtml2Canvas(){
 async function buildFullLookCanvas(){
   const h2c = await ensureHtml2Canvas();
   try{ await document.fonts.ready; }catch(_){}
+  // 書き出し前：遅延読込ゲート（ズーム/表示範囲）を無視して、全半紙の画像srcを実DOMへ流し込む＝cloneで欠けないように
+  posts.forEach((p,id)=>{ if(!p.hidden) setNoteImg(id); });
+  try{   // 実DOMのnote-imgをデコードまで待つ（HTTPキャッシュを温め、html2canvasで確実に描画）
+    const imgs = [...notesEl.querySelectorAll(".note-img")].filter(im=> im.src);
+    await Promise.all(imgs.map(im=> (im.decode ? im.decode().catch(()=>{}) : Promise.resolve())));
+  }catch(_){}
   const cap = document.createElement("div");
-  cap.style.cssText = `position:fixed;left:-99999px;top:0;width:${WALL_W}px;height:${WALL_H}px;overflow:hidden`;
+  cap.style.cssText = `position:fixed;left:-99999px;top:0;width:${FULL_W}px;height:${FULL_H}px;overflow:hidden`;   // 壁＋ガター全域（右・下が切れないよう FULL で撮る）
   const wallClone = wallEl.cloneNode(true);              // 背景＋半紙一式を複製
   wallClone.removeAttribute("id");
   wallClone.style.transform = "none";                   // ズーム解除＝等倍
@@ -3366,7 +3372,7 @@ async function buildFullLookCanvas(){
   }
   document.body.appendChild(cap);
   try{
-    return await h2c(cap, { useCORS:true, backgroundColor:null, width:WALL_W, height:WALL_H, scale:1, logging:false, imageTimeout:20000 });
+    return await h2c(cap, { useCORS:true, backgroundColor:null, width:FULL_W, height:FULL_H, scale:1, logging:false, imageTimeout:20000 });
   } finally { cap.remove(); }
 }
 async function archiveAndAdvance(auto){
