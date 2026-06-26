@@ -3354,7 +3354,7 @@ async function buildFullLookCanvas(){
   // content-visibility:auto / contain-intrinsic-size を一時的に全面無効化（!importantでhtml2canvasの計算スタイルごと上書き＝下部グレー化の根治）
   const exfix = document.createElement("style");
   exfix.id = "__exportFix";
-  exfix.textContent = ".note,.note.land{content-visibility:visible !important;contain:none !important;contain-intrinsic-size:none !important}";
+  exfix.textContent = ".note,.note.land{content-visibility:visible !important;contain:none !important;contain-intrinsic-size:none !important;box-shadow:none !important}";
   document.head.appendChild(exfix);
   try{
     // 書き出し前：遅延読込ゲート（ズーム/表示範囲）を無視して、全半紙の画像srcを実DOMへ流し込む＝cloneで欠けないように
@@ -3372,7 +3372,7 @@ async function buildFullLookCanvas(){
     // 来場者が見たまま：隠し半紙だけ外す。そうだね/delは残す（画面と同じ）。uid・管理行は来場者ビューでは元から出ていない
     wallClone.querySelectorAll(".note.is-hidden").forEach(n=> n.remove());
     wallClone.querySelectorAll(".admin-line, .who-uid").forEach(n=> n.remove());
-    wallClone.querySelectorAll(".note").forEach(n=>{ n.style.contentVisibility="visible"; n.style.contain="none"; n.style.containIntrinsicSize="none"; });   // content-visibility由来の下部グレー化を防ぐ
+    wallClone.querySelectorAll(".note").forEach(n=>{ n.style.contentVisibility="visible"; n.style.contain="none"; n.style.containIntrinsicSize="none"; n.style.boxShadow="none"; });   // content-visibility＋box-shadow由来の下部グレー化を防ぐ
     wallClone.querySelectorAll(".acts button, .sou-btn, .del-btn").forEach(b=> b.style.opacity="1");   // 非選択の淡色化(.45)を解除＝画面と同じ濃さで出す
     wallClone.querySelectorAll(".who").forEach(n=> n.style.display="block");              // 名前を表示（is-adminのCSS非表示を打ち消す）
     cap.appendChild(wallClone);
