@@ -2233,6 +2233,7 @@ function renderAdminBar(){
     '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
     '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
     '<button class="ab-act" type="button" onclick="openHistory()">履歴</button>'+
+    '<button class="ab-act" type="button" onclick="exportFullLookNow()">見たまま確認DL</button>'+
     '<button class="ab-act" type="button" onclick="archiveAndAdvance()">保存して新ボード</button>'+
     '<button class="ab-act ab-exit" type="button" onclick="exitAdmin()">終了</button>';
   bar.hidden = false;
@@ -3456,6 +3457,29 @@ async function archiveAndAdvance(auto){
   }catch(e){ console.error(e); toast("保存に失敗しました"); return false; }
 }
 window.archiveAndAdvance = archiveAndAdvance;
+
+// 確認用：板を切り替えずに、現ボードを「見たまま」画像化してDLするだけ（DB書き込み・板送りなし）
+async function exportFullLookNow(){
+  if(!db || !admin){ toast("運営のみ"); return; }
+  toast("見たまま画像を作成中…", 4000);
+  try{
+    // 旧base64だけ先読み（Supabase画像はURLから直接読む）。buildFullLookCanvas側でも全件強制ロードする
+    const list = [...posts.entries()].map(([id,p])=>({id,...p})).filter(p=> typeof p.id==="string");
+    await Promise.all(list.map(async p=>{
+      if(isImgData(imgCache.get(p.id)) || isSafePath(p.imgPath)) return;
+      try{ const s = await get(ref(db, bpath("imgs/"+p.id))); const d = s && s.val(); if(isImgData(d)) imgCache.set(p.id, d); }catch(e){}
+    }));
+    render();
+    const full = await buildFullLookCanvas();
+    if(!full){ toast("作成に失敗しました"); return; }
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+    const url = full.toDataURL("image/jpeg", 0.85);
+    const a = document.createElement("a"); a.href=url; a.download="oshuji-board-"+(boardId||1)+"-"+stamp+"-full.jpg";
+    document.body.appendChild(a); a.click(); a.remove();
+    toast("見たまま画像をDLしました（板は切り替えていません）", 4000);
+  }catch(e){ console.error(e); toast("作成に失敗しました"); }
+}
+window.exportFullLookNow = exportFullLookNow;
 
 // 任意ボードのpostsから板画像を再合成（横向き修正済みロジック。再出力で使用）
 async function composeBoardCanvas(list, imgsMap){
