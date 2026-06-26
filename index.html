@@ -154,6 +154,14 @@
   #rsvPreview.bad{border-color:#b3261e;background:rgba(179,38,30,.16);color:#7c1d18}
   #rsvPreview.bad .rsv-grip{background:rgba(179,38,30,.92)}
   #rsvPreview.drag{cursor:grabbing}
+  /* 予約中の右上ミニマップ（モバイルのみ・壁全体のどこに置くか把握用） */
+  .rsv-map{display:none;position:fixed;top:calc(10px + env(safe-area-inset-top));right:10px;z-index:62;
+    width:132px;background:linear-gradient(155deg,#f3ecdc,#e7ddc6);
+    border:1px solid rgba(90,70,40,.5);border-radius:9px;overflow:hidden;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);pointer-events:auto;touch-action:none}
+  .rsv-map canvas{display:block;width:100%;height:auto;aspect-ratio:6000/2200;cursor:pointer}
+  .rsv-map .rsv-map-cap{font-size:10px;font-weight:700;color:#5b4636;text-align:center;padding:3px 4px;background:rgba(255,253,247,.72);border-top:1px solid rgba(90,70,40,.25);pointer-events:none}
+  @media(max-width:560px){ .rsv-mask.show .rsv-map{display:block} }
   .btn-rsv{margin-top:8px;width:100%;background:rgba(60,42,24,.06);color:#5b4636;border:1px dashed rgba(90,70,54,.5);
     border-radius:9px;padding:8px 10px;font-family:inherit;font-size:13px;cursor:pointer}
   .btn-rsv:hover{background:rgba(60,42,24,.1)}
@@ -1137,6 +1145,10 @@
 </div>
 
 <div class="rsv-mask" id="rsvMask">
+  <div class="rsv-map" id="rsvMap" aria-hidden="true">
+    <canvas id="rsvMapCanvas"></canvas>
+    <div class="rsv-map-cap">タップで枠を移動</div>
+  </div>
   <div class="rsv-card">
     <div class="rsv-title"><span class="rsv-grab" aria-hidden="true">⠿</span>お題枠を予約<span class="rsv-beta">試験運用</span></div>
     <div class="rsv-note" id="rsvGateNote"></div>
@@ -3905,12 +3917,12 @@ function updateFreshUI(){
     else { l1.textContent = "半紙"; l2.textContent = "めぐり"; mb.classList.remove("unread"); }
   }
 }
-function drawMinimap(){
-  if(!miniCanvas) return;
-  const mmW = miniCanvas.clientWidth, mmH = miniCanvas.clientHeight;
+function renderMiniTo(cv, drawDraft){
+  if(!cv) return;
+  const mmW = cv.clientWidth, mmH = cv.clientHeight;
   if(!mmW || !mmH) return;
-  if(miniCanvas.width !== Math.round(mmW*DPR)){ miniCanvas.width = Math.round(mmW*DPR); miniCanvas.height = Math.round(mmH*DPR); }
-  const g = miniCanvas.getContext("2d");
+  if(cv.width !== Math.round(mmW*DPR)){ cv.width = Math.round(mmW*DPR); cv.height = Math.round(mmH*DPR); }
+  const g = cv.getContext("2d");
   g.setTransform(DPR,0,0,DPR,0,0);
   g.clearRect(0,0,mmW,mmH);
   const sx = mmW/WALL_W, sy = mmH/WALL_H;
@@ -3968,6 +3980,24 @@ function drawMinimap(){
   const vh = Math.min(mmH, (scrollEl.clientHeight/(WALL_H*zoom))*mmH);
   g.strokeStyle = "#b5341f"; g.lineWidth = 1.5;
   g.strokeRect(vx+0.5, vy+0.5, Math.max(3,vw-1), Math.max(3,vh-1));
+  if(drawDraft && rsvDraft){   // 予約マップ：いま置こうとしている枠（緑＝置ける／赤＝重なり）
+    const d=rsvDraft, bad=!!rsvValidity(d);
+    const dx=d.rx*WALL_W*sx, dy=d.ry*WALL_H*sy, dw=Math.max(3,d.rw*WALL_W*sx), dh=Math.max(3,d.rh*WALL_H*sy);
+    g.save();
+    g.fillStyle   = bad ? "rgba(179,38,30,.28)" : "rgba(31,122,51,.30)";
+    g.strokeStyle = bad ? "rgba(179,38,30,.95)" : "rgba(31,122,51,.95)";
+    g.shadowColor = bad ? "rgba(179,38,30,.9)"  : "rgba(31,122,51,.9)";
+    g.shadowBlur=8; g.lineWidth=2;
+    g.fillRect(dx,dy,dw,dh);
+    g.strokeRect(dx+0.5,dy+0.5,Math.max(3,dw-1),Math.max(3,dh-1));
+    g.restore();
+  }
+}
+const rsvMapCanvas = document.getElementById("rsvMapCanvas");
+function rsvMapOpen(){ return !!rsvMapCanvas && document.body.classList.contains("rsv-open"); }
+function drawMinimap(){
+  renderMiniTo(miniCanvas, false);
+  if(rsvMapOpen()) renderMiniTo(rsvMapCanvas, true);   // 予約中は右上マップも同時更新（スクロール・明滅・データ更新に追従）
 }
 function miniJump(clientX, clientY){
   stopNavHint();   // 見る動線を選択（点滅を止める）
@@ -3981,6 +4011,22 @@ let miniDown=false;
 miniCanvas.addEventListener("pointerdown", e=>{ miniDown=true; miniJump(e.clientX,e.clientY); e.preventDefault(); });
 miniCanvas.addEventListener("pointermove", e=>{ if(miniDown){ miniJump(e.clientX,e.clientY); e.preventDefault(); } });
 window.addEventListener("pointerup", ()=>{ miniDown=false; });
+
+let rsvMapDown=false;
+function rsvMapPlace(clientX, clientY){   // 右上マップのタップ点を枠の中心にして移動（壁ドラッグと同じ緑赤判定）
+  if(!rsvDraft || !rsvMapCanvas) return;
+  const r = rsvMapCanvas.getBoundingClientRect(); if(!r.width || !r.height) return;
+  const fx = clamp((clientX-r.left)/r.width, 0, 1), fy = clamp((clientY-r.top)/r.height, 0, 1);
+  rsvDraft.rx = clamp(fx - rsvDraft.rw/2, 0, 1-rsvDraft.rw);
+  rsvDraft.ry = clamp(fy - rsvDraft.rh/2, 0, 1-rsvDraft.rh);
+  rsvRenderPreview(); rsvRefresh();
+  scrollToFrac(rsvDraft.rx+rsvDraft.rw/2, rsvDraft.ry+rsvDraft.rh/2);   // 本体の表示もそこへ寄せる
+}
+if(rsvMapCanvas){
+  rsvMapCanvas.addEventListener("pointerdown", e=>{ rsvMapDown=true; rsvMapPlace(e.clientX,e.clientY); e.preventDefault(); e.stopPropagation(); });
+  rsvMapCanvas.addEventListener("pointermove", e=>{ if(rsvMapDown){ rsvMapPlace(e.clientX,e.clientY); e.preventDefault(); e.stopPropagation(); } });
+  window.addEventListener("pointerup", ()=>{ rsvMapDown=false; });
+}
 
 let mmRaf=0;
 scrollEl.addEventListener("scroll", ()=>{ if(panRAF) return; if(!mmRaf) mmRaf=requestAnimationFrame(()=>{ mmRaf=0; drawMinimap(); }); scheduleLazy(); });   // 自動パン中(panRAF)は毎フレーム再描画しない＝着地時にまとめて
@@ -4842,6 +4888,7 @@ function rsvRefresh(){
   const v=document.getElementById("rsvValid");
   if(v){ v.textContent = msg || "ここに予約できます"; v.className = "rsv-valid "+(msg?"ng":"ok"); }
   const ok=document.getElementById("rsvConfirm"); if(ok) ok.disabled = !!msg;
+  if(rsvMapOpen()) renderMiniTo(rsvMapCanvas, true);   // 枠の移動・リサイズを右上マップへ即反映
 }
 function rsvResize(){
   const cx = rsvDraft.rx + rsvDraft.rw/2, cy = rsvDraft.ry + rsvDraft.rh/2;
