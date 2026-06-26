@@ -548,6 +548,17 @@
       repeating-linear-gradient(90deg, rgba(90,70,40,.045) 0 1px, transparent 1px 28px),
       linear-gradient(155deg,#f3ecdc,#e7ddc6);
   }
+  /* パーティションボード：WALLを横N枚のパネルに分割。各パネルにフレーム＋継ぎ目の溝＋軽い凹み */
+  .wall-panel{position:absolute;pointer-events:none}            /* コンテナは透明。中に .pp を並べる */
+  .pp{
+    position:absolute;top:0;bottom:0;box-sizing:border-box;border-radius:3px;
+    border:1px solid rgba(90,70,40,.24);
+    background:linear-gradient(155deg, rgba(255,253,247,.46), rgba(255,250,238,.24));
+    box-shadow: inset 0 0 0 3px rgba(255,255,255,.16), inset 0 0 34px rgba(80,60,30,.10), inset 0 3px 8px rgba(80,60,30,.08);
+  }
+  .pp::before{content:"";position:absolute;inset:5px;border:1px solid rgba(90,70,40,.12);border-radius:2px}  /* 内側キーライン（書き出しでも出る額縁感） */
+  .pp-foot{position:absolute;top:100%;width:13px;height:18px;background:linear-gradient(#bcae8d,#8c7c5c);border-radius:0 0 2px 2px;opacity:.5}
+  .pp-foot.l{left:13%} .pp-foot.r{right:13%}
   .wall.placing{cursor:copy}
   .wall.placing #notes{pointer-events:none}
   .wall::after{
@@ -2059,6 +2070,7 @@ const NOTE_LAND_W = 160, NOTE_LAND_H = 150;   // 横向き半紙の実寸（CSS 
 const WALL_W = 6000, WALL_H = 2200;
 const GUT_X = 220, GUT_Y = 300;                      // 壁の外側スクロール余白（ガター）。端の半紙も画面中央へ寄せられる
 const FULL_W = WALL_W + GUT_X*2, FULL_H = WALL_H + GUT_Y*2;   // スクロール領域（壁＋ガター）の総寸
+const PANEL_COUNT = 6, PANEL_SEAM = 10, PANEL_FEET = true;    // パーティション：横に並べる枚数・継ぎ目の溝(px)・脚の有無
 const ZOOM_MAX = 4;
 let zoomMin = 0.5;   // 画面サイズに応じて「全体が収まる倍率」に更新
 let pinching = false;   // ピンチ中は重い処理（ミニマップ再描画・遅延読込）を後回しにして滑らかに
@@ -3354,7 +3366,7 @@ async function buildFullLookCanvas(){
   // content-visibility:auto / contain-intrinsic-size を一時的に全面無効化（!importantでhtml2canvasの計算スタイルごと上書き＝下部グレー化の根治）
   const exfix = document.createElement("style");
   exfix.id = "__exportFix";
-  exfix.textContent = ".note,.note.land{content-visibility:visible !important;contain:none !important;contain-intrinsic-size:none !important;box-shadow:none !important}";
+  exfix.textContent = ".note,.note.land{content-visibility:visible !important;contain:none !important;contain-intrinsic-size:none !important;box-shadow:none !important}#wallPanel,.pp,.pp-foot{box-shadow:none !important}";
   document.head.appendChild(exfix);
   try{
     // 書き出し前：遅延読込ゲート（ズーム/表示範囲）を無視して、全半紙の画像srcを実DOMへ流し込む＝cloneで欠けないように
@@ -3606,10 +3618,16 @@ async function reoutputBoard(id, btn){
   const label = btn ? btn.textContent : "";
   if(btn){ btn.textContent="出力中…"; btn.disabled=true; }
   try{
-    const [ps, is] = await Promise.all([ get(ref(db,"boards/"+id+"/posts")), get(ref(db,"boards/"+id+"/imgs")) ]);
-    const pv = ps.val()||{}, imgs = is.val()||{};
+    const ps = await get(ref(db,"boards/"+id+"/posts"));     // postsはノード単位で読める
+    const pv = ps.val()||{};
     const list = Object.entries(pv).map(([pid,p])=> Object.assign({id:pid}, p)).filter(p=> typeof p.id==="string");
     if(!list.length){ toast("板"+id+"に半紙データがありません"); return; }
+    // imgsノードの一括読みはルール上不可（.readは$pid単位）。base64の半紙だけ個別に読む（imgPath勢は不要）
+    const imgs = {};
+    const need = list.filter(p=> !isSafePath(p.imgPath));
+    await Promise.all(need.map(async p=>{
+      try{ const s = await get(ref(db,"boards/"+id+"/imgs/"+p.id)); const d = s.val(); if(isImgData(d)) imgs[p.id]=d; }catch(e){}
+    }));
     const { cv, drawn, skipped } = await composeBoardCanvas(list, imgs);
     const url = cv.toDataURL("image/jpeg", 0.85);
     const a = document.createElement("a"); a.href=url; a.download="oshuji-board-"+id+"-reoutput.jpg"; document.body.appendChild(a); a.click(); a.remove();
@@ -3729,6 +3747,19 @@ function applyZoom(){
     ghostEl.style.transform = "translate("+GUT_X+"px,"+GUT_Y+"px)";   // ゴーストも同じだけずらす（半紙と整列）
     const framesEl = document.getElementById("frames");              // お題枠も半紙と同じ座標系へ（ガター分ずらす）＝表示と判定を一致させる
     if(framesEl){ framesEl.style.inset="auto"; framesEl.style.left=GUT_X+"px"; framesEl.style.top=GUT_Y+"px"; framesEl.style.width=WALL_W+"px"; framesEl.style.height=WALL_H+"px"; }
+    if(!document.getElementById("wallPanel")){                        // パーティション：WALLを横N枚のパネルに分割（フレーム＋継ぎ目＋脚）。フレーム・半紙より背面
+      const wp = document.createElement("div");
+      wp.id = "wallPanel"; wp.className = "wall-panel";
+      wp.style.left=GUT_X+"px"; wp.style.top=GUT_Y+"px"; wp.style.width=WALL_W+"px"; wp.style.height=WALL_H+"px";
+      const pw = WALL_W/PANEL_COUNT;
+      for(let i=0;i<PANEL_COUNT;i++){
+        const pp = document.createElement("div"); pp.className="pp";
+        pp.style.left=(i*pw + PANEL_SEAM/2)+"px"; pp.style.width=(pw - PANEL_SEAM)+"px";
+        if(PANEL_FEET) pp.innerHTML='<span class="pp-foot l"></span><span class="pp-foot r"></span>';
+        wp.appendChild(pp);
+      }
+      wallEl.insertBefore(wp, wallEl.firstChild);
+    }
   }
   const zr = document.getElementById("zoomRange");
   const zv = document.getElementById("zoomVal");
