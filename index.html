@@ -2243,6 +2243,7 @@ function renderAdminBar(){
   }
 }
 
+let EXPORT_VISITOR = false;   // 見たまま書き出し中だけtrue：運営ログイン中でもノートを来場者ビュー（そうだね/del付き・uid無し）で描く
 let _renderScheduled = false;
 function requestRender(){            // 連続呼び出しを次フレームに1回へ集約（初期ロードの O(N²) を解消）
   if(_renderScheduled) return;
@@ -2300,7 +2301,7 @@ function render(){
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
     const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span class="ab-spacer"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
-    const idtg = admin ? idTag(p.uid) : null;
+    const idtg = (admin && !EXPORT_VISITOR) ? idTag(p.uid) : null;
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     const landCls = (fp ? (oriOf(fp.r)==="l") : !!p.land) ? ' land' : '';   // 枠内は枠の向きに従う（半紙のp.landとズレていても枠に揃える）
     return `
@@ -2308,9 +2309,9 @@ function render(){
       <span class="tape" style="--r:${tapeColor()}deg"></span>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
-      ${ admin ? `<div class="who-uid" title="同一性タグ ${idtg.code}（個人特定不可）"><span class="uid-dot" style="background:hsl(${idtg.hue} 62% 55%)"></span><span class="uid-code">${idtg.code}</span></div>` : '' }
+      ${ (admin && !EXPORT_VISITOR) ? `<div class="who-uid" title="同一性タグ ${idtg.code}（個人特定不可）"><span class="uid-dot" style="background:hsl(${idtg.hue} 62% 55%)"></span><span class="uid-code">${idtg.code}</span></div>` : '' }
       <div class="acts">
-        ${ admin ? adminActs : `${souBtn}${delBtn}${repoBtn}${undoBtn}` }
+        ${ (admin && !EXPORT_VISITOR) ? adminActs : `${souBtn}${delBtn}${repoBtn}${undoBtn}` }
       </div>
     </div>`;
   }).join("");
@@ -3348,33 +3349,41 @@ function ensureHtml2Canvas(){
 async function buildFullLookCanvas(){
   const h2c = await ensureHtml2Canvas();
   try{ await document.fonts.ready; }catch(_){}
-  // 書き出し前：遅延読込ゲート（ズーム/表示範囲）を無視して、全半紙の画像srcを実DOMへ流し込む＝cloneで欠けないように
-  posts.forEach((p,id)=>{ if(!p.hidden) setNoteImg(id); });
-  try{   // 実DOMのnote-imgをデコードまで待つ（HTTPキャッシュを温め、html2canvasで確実に描画）
-    const imgs = [...notesEl.querySelectorAll(".note-img")].filter(im=> im.src);
-    await Promise.all(imgs.map(im=> (im.decode ? im.decode().catch(()=>{}) : Promise.resolve())));
-  }catch(_){}
-  const cap = document.createElement("div");
-  cap.style.cssText = `position:fixed;left:-99999px;top:0;width:${FULL_W}px;height:${FULL_H}px;overflow:hidden`;   // 壁＋ガター全域（右・下が切れないよう FULL で撮る）
-  const wallClone = wallEl.cloneNode(true);              // 背景＋半紙一式を複製
-  wallClone.removeAttribute("id");
-  wallClone.style.transform = "none";                   // ズーム解除＝等倍
-  wallClone.style.left = "0"; wallClone.style.top = "0";
-  // 来場者が見たまま＝管理者向けを除去：隠し半紙を外し、ボタン類(.acts)と管理行(.admin-line＝そうだね/del数・復活/削除)を消す（絵・名前・枠・テープ・判子は残す）
-  wallClone.querySelectorAll(".note.is-hidden").forEach(n=> n.remove());
-  wallClone.querySelectorAll(".acts, .admin-line, .who-uid").forEach(n=> n.remove());   // 管理ビュー要素を除去
-  wallClone.querySelectorAll(".who").forEach(n=> n.style.display="block");              // 名前を表示（運営ビューのuid非表示を打ち消す）
-  cap.appendChild(wallClone);
-  const header = document.querySelector(".float-header"); // 左下ロゴ
-  if(header){
-    const logo = header.cloneNode(true);
-    logo.style.cssText += ";position:absolute;left:24px;bottom:24px;right:auto;top:auto;opacity:1";
-    cap.appendChild(logo);
-  }
-  document.body.appendChild(cap);
+  EXPORT_VISITOR = true;            // 運営ログイン中でも「来場者が見たまま」で描き直す（そうだね/del付き・uid無し）
+  try{ render(); }catch(_){}
   try{
-    return await h2c(cap, { useCORS:true, backgroundColor:null, width:FULL_W, height:FULL_H, scale:1, logging:false, imageTimeout:20000 });
-  } finally { cap.remove(); }
+    // 書き出し前：遅延読込ゲート（ズーム/表示範囲）を無視して、全半紙の画像srcを実DOMへ流し込む＝cloneで欠けないように
+    posts.forEach((p,id)=>{ if(!p.hidden) setNoteImg(id); });
+    try{   // 実DOMのnote-imgをデコードまで待つ（HTTPキャッシュを温め、html2canvasで確実に描画）
+      const imgs = [...notesEl.querySelectorAll(".note-img")].filter(im=> im.src);
+      await Promise.all(imgs.map(im=> (im.decode ? im.decode().catch(()=>{}) : Promise.resolve())));
+    }catch(_){}
+    const cap = document.createElement("div");
+    cap.style.cssText = `position:fixed;left:-99999px;top:0;width:${FULL_W}px;height:${FULL_H}px;overflow:hidden`;   // 壁＋ガター全域（右・下が切れないよう FULL で撮る）
+    const wallClone = wallEl.cloneNode(true);              // 背景＋半紙一式を複製
+    wallClone.removeAttribute("id");
+    wallClone.style.transform = "none";                   // ズーム解除＝等倍
+    wallClone.style.left = "0"; wallClone.style.top = "0";
+    // 来場者が見たまま：隠し半紙だけ外す。そうだね/delは残す（画面と同じ）。uid・管理行は来場者ビューでは元から出ていない
+    wallClone.querySelectorAll(".note.is-hidden").forEach(n=> n.remove());
+    wallClone.querySelectorAll(".admin-line, .who-uid").forEach(n=> n.remove());
+    wallClone.querySelectorAll(".note").forEach(n=>{ n.style.contentVisibility="visible"; n.style.containIntrinsicSize="auto"; });   // content-visibility由来の下部グレー化を防ぐ
+    wallClone.querySelectorAll(".acts button, .sou-btn, .del-btn").forEach(b=> b.style.opacity="1");   // 非選択の淡色化(.45)を解除＝画面と同じ濃さで出す
+    wallClone.querySelectorAll(".who").forEach(n=> n.style.display="block");              // 名前を表示（is-adminのCSS非表示を打ち消す）
+    cap.appendChild(wallClone);
+    const header = document.querySelector(".float-header"); // 左下ロゴ
+    if(header){
+      const logo = header.cloneNode(true);
+      logo.style.cssText += ";position:absolute;left:24px;bottom:24px;right:auto;top:auto;opacity:1";
+      cap.appendChild(logo);
+    }
+    document.body.appendChild(cap);
+    try{
+      return await h2c(cap, { useCORS:true, backgroundColor:null, width:FULL_W, height:FULL_H, scale:1, logging:false, imageTimeout:20000 });
+    } finally { cap.remove(); }
+  } finally {
+    EXPORT_VISITOR = false; try{ render(); }catch(_){}   // 運営ビューへ戻す
+  }
 }
 async function archiveAndAdvance(auto){
   if(!db || !admin){ if(!auto) toast("運営のみ"); return false; }
