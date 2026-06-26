@@ -1648,6 +1648,16 @@ function taperTail(){
   }
 }
 // 本筆：速度連動の太さ＋速い時のかすれ（毛束を割って隙間＝かすれ。不透明のままなので重なりが濃くならない）
+// 本筆の基準太さ：共通sizeをそのまま使うと中盤以降が太くなりすぎるので、本筆だけ圧縮したカーブにする
+function fudeBaseW(){
+  const cw = (pad.getBoundingClientRect().width) || 248;   // 描画エリア幅(CSS px)
+  const minPx = 2, maxPx = cw*0.16;                        // 本筆の上限は描画幅の約16%（共通の40%より大幅に細く）
+  // size(px) を 0..1 に正規化してから緩いカーブに乗せ直す（3→4段の飛躍をならす）
+  const cwMax = cw*0.40;                                   // 共通sizeFromPosの最大px
+  const t = clamp((size - 2) / Math.max(1, (cwMax - 2)), 0, 1);
+  const e = Math.pow(t, 1.35);                             // 中盤をなだらかに（1.7より緩い）
+  return (minPx + (maxPx - minPx) * e) * DPR;
+}
 function fudeMove(p){
   const now = performance.now();
   const dx = p.x-last.x, dy = p.y-last.y;
@@ -1656,7 +1666,7 @@ function fudeMove(p){
   const v = (dist/DPR)/dt;                              // CSS px/ms
   velEMA = (velEMA==null) ? v : velEMA*0.6 + v*0.4;     // 速度を平滑（カクつき防止）
   const fast = clamp((velEMA-0.2)/2.2, 0, 1);           // 0=ゆっくり .. 1=速い
-  const base = size*DPR;
+  const base = fudeBaseW();                             // 本筆は太さカーブを圧縮（中盤以降が太くなりすぎない）
   strokeLen += dist;
   const head = Math.min(1, strokeLen/(base*2.0));       // 入り：細→本体まで立ち上げ
   const targetW = base*(0.10+0.90*head)*(1 - 0.55*fast);// 速いほど細い（溜めると太い）
@@ -1676,14 +1686,18 @@ function fudeMove(p){
       ctx.beginPath(); ctx.moveTo(last.x+ox,last.y+oy); ctx.lineTo(p.x+ox,p.y+oy); ctx.stroke();
     }
   }
-  if(dist>0.5){ lastDir = { x:dx/dist, y:dy/dist }; }
+  if(dist>0.5){
+    const ndx=dx/dist, ndy=dy/dist;
+    if(lastDir){ const sx=lastDir.x*0.7+ndx*0.3, sy=lastDir.y*0.7+ndy*0.3, sl=Math.hypot(sx,sy)||1; lastDir={x:sx/sl,y:sy/sl}; }  // 方向を平滑化＝はらいが直前の微ブレで上下に跳ねない
+    else lastDir = { x:ndx, y:ndy };
+  }
   last = p; lastTime = now; lastWidth = w;
 }
 // 本筆の抜き：運筆方向へ延長して0へ細める＝きれいな先細りの点に（毛を扇状に割らない＝はらいが螺旋にならない）
 function fudeTail(){
   if(!last || !lastDir || lastWidth<=0.6) return;
   const steps = 8;
-  const len = Math.min(lastWidth*2.0, size*DPR*1.6);
+  const len = Math.min(lastWidth*2.0, fudeBaseW()*1.6);
   const ux=lastDir.x, uy=lastDir.y;
   ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
   let x=last.x, y=last.y, w0=lastWidth;
