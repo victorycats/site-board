@@ -1558,7 +1558,7 @@ function start(e){
     velEMA = null; fudeStrands = [];
     const nh = 5;
     for(let i=0;i<nh;i++) fudeStrands.push({ off:(i/(nh-1)-0.5), w:0.15+Math.random()*0.10 });   // 5本の毛、太さ少しランダム
-    lastWidth = Math.max(1, size*0.10)*DPR;                // 入りはごく細い種点から
+    lastWidth = Math.max(1, fudeBaseW()*0.10);            // 入りはごく細い種点から（本体と同じ圧縮太さ基準＝入りに過大な玉が残らない）
     dot(last, lastWidth); return;
   }
   if(brushType==="nijimi"){                                // にじみ筆：柔らか縁＋遅いほど太く溜まる＋入り/はらい
