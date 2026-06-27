@@ -2792,6 +2792,7 @@ document.addEventListener("keydown", e=>{
     case "g": case "G": { e.preventDefault(); const b=document.getElementById("fillBtn"); if(b) b.click(); break; }   // 塗りつぶし
     case ";": { e.preventDefault(); const b=document.getElementById("bigBtn"); if(b) b.click(); break; }              // 拡大（表示1.5倍）
     case "n": case "N": { e.preventDefault(); const el=document.getElementById("who"); if(el){ el.focus(); if(el.select) el.select(); } break; }   // 名前欄へフォーカス
+    case "Delete": { e.preventDefault(); const b=document.getElementById("clear"); if(b) b.click(); break; }   // 消（全部消して白紙に戻す）
     case "1": case "2": case "3": case "4": case "5": case "6": case "7":
       e.preventDefault(); pickSwatch(parseInt(e.key,10)-1); break;           // パレット左からN番目
   }
