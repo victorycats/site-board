@@ -2253,6 +2253,7 @@ let seenT = 0;                  // 永続しおり：これまで見た最新の
 let seenT0 = 0;                 // 今セッションの未読基準（読み込み時のしおりを固定）。新規投稿は常にこれより新しい＝未読
 const viewedIds = new Set();    // 今セッションで見た半紙id（バッジ/白から外す）
 let repositioningId = null; // 位置直し中の半紙ID（ドロップでnx/nyだけ更新）
+const movedFrom = new Map();   // 運営が動かした半紙の「移動直前の位置」(id -> {nx,ny})。元位置に戻す用
 const renderedIds = new Set(); // 既に表示済みの半紙（登場アニメの再生抑制用）
 let zCounter = 100;
 const zOverride = new Map();    // id -> z（クリックで上げた半紙）
@@ -2453,7 +2454,7 @@ function render(){
     const mine = (p.id===editingId) ? " mine" : "";
     const rotoring = mine ? " rotoring" : "";   // 回転中はテープを隠す（確定後に生える）
     const fresh = !renderedIds.has(p.id) ? "" : " no-anim";  // 既存はアニメ無し（ビクつき防止）
-    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span class="ab-spacer"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
+    const adminActs = admin ? `<span class="stat ${ (p.del||0)>=DEL_THRESHOLD ? 'warn':'' }">del ${p.del||0}</span><span class="ab-spacer"></span>${ !fp ? `<button class="mini move" onclick="startReposition(event,'${p.id}')">動かす</button>` : '' }${ (!fp && movedFrom.has(p.id)) ? `<button class="mini" onclick="restoreNotePos('${p.id}')">元位置</button>` : '' }${ p.hidden ? `<button class="mini restore" onclick="adminRestore('${p.id}')">復活</button>` : '' }<button class="mini del" onclick="adminDelete('${p.id}')">削除</button>` : '';
     const idtg = (admin && !EXPORT_VISITOR) ? idTag(p.uid) : null;
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     const landCls = (fp ? (oriOf(fp.r)==="l") : !!p.land) ? ' land' : '';   // 枠内は枠の向きに従う（半紙のp.landとズレていても枠に揃える）
@@ -2561,7 +2562,7 @@ function switchToBoard(id){
   // ローカル状態をまっさらに
   posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
   zOverride.clear(); activeNoteId = null; editingId = null;
-  graceNoteId = null; repositioningId = null;   // ボードが変わったら位置直しもリセット
+  graceNoteId = null; repositioningId = null; movedFrom.clear();   // ボードが変わったら位置直しも移動履歴もリセット
   freshNotes.clear(); seenNoteIds.clear(); flashArmed = false;   // 点滅もリセット。初期ロード分は光らせない
   loadSeenT();                                                   // このボードのしおりを読み込み（セッションの未読基準を固定）
   shuffleOrder = []; shuffleIdx = -1; meguriStarted = false; meguriRecent = [];     // 未読なし巡回のシャッフルとめぐり開始フラグ・直近キューも作り直す
@@ -2778,8 +2779,23 @@ function startReposition(e, id){
   setMsg('<div class="placing-hint"><span>新しい位置へドラッグして離す（2本指でズーム）</span><span class="cancel" onclick="cancelPlacing()">やめる</span></div>');
 }
 window.startReposition = startReposition;
+async function restoreNotePos(id){   // 運営：直前に動かした半紙を元の位置へ戻す
+  if(!admin) return;
+  const o = movedFrom.get(id); if(!o) return;
+  if(!db){ return; }
+  try{
+    await update(ref(db, bpath("posts/"+id)), { nx:o.nx, ny:o.ny });
+    const p = posts.get(id); if(p){ p.nx=o.nx; p.ny=o.ny; posts.set(id,p); }
+    movedFrom.delete(id);
+    toast("元の位置に戻しました");
+    render();
+  }catch(e){ console.error(e); toast("元に戻せませんでした"); }
+}
+window.restoreNotePos = restoreNotePos;
 async function repositionPost(nx, ny){
   const id = repositioningId;
+  const p0 = id ? posts.get(id) : null;                                  // 移動前の位置（戻す用に控える）
+  const prevNx = p0 ? nxOf(p0,id) : null, prevNy = p0 ? nyOf(p0,id) : null;
   const xpx = clamp(nx,0,1)*(WALL_W-NOTE_W), ypx = clamp(ny,0,1)*(WALL_H-NOTE_H);   // ドロップ先が置ける場所か最終チェック（枠の上・覆いすぎを弾く。repositioningIdが生きてる間に呼ぶ＝枠上は不可・自分は除外）
   const okHere = canPlaceAt(xpx, ypx);
   if(!okHere){
@@ -2795,6 +2811,7 @@ async function repositionPost(nx, ny){
     try{
       await update(ref(db, bpath("posts/"+id)), { nx, ny });   // 位置(nx/ny)だけ更新＝枠も画像もそのまま・クールダウン無関係
       const p = posts.get(id); if(p){ p.nx = nx; p.ny = ny; posts.set(id, p); }
+      if(admin && prevNx!=null && (prevNx!==nx || prevNy!==ny)) movedFrom.set(id, { nx:prevNx, ny:prevNy });   // 運営の移動は「元位置に戻す」を出せるよう記録
       toast("位置を直しました");
     }catch(e){ console.error(e); toast("位置を直せませんでした"); }
   }
@@ -3784,11 +3801,17 @@ async function exportFullLookNow(){
 window.exportFullLookNow = exportFullLookNow;
 
 // 任意ボードのpostsから板画像を再合成（横向き修正済みロジック。再出力で使用）
-async function composeBoardCanvas(list, imgsMap){
+async function composeBoardCanvas(list, imgsMap, framesMap){
   const cv = document.createElement("canvas"); cv.width = WALL_W; cv.height = WALL_H;
   const g = cv.getContext("2d");
   g.fillStyle = "#ece3cd"; g.fillRect(0,0,WALL_W,WALL_H);
   const loadImg = src => new Promise(res=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
+  framesMap = framesMap || {};
+  // 枠内の並び（t昇順）→ idx。ライブの buildFrameNotes と同じ順序でセルへ割り当てる
+  const frameIdx = {}; { const groups = {};
+    for(const p of list){ if(p.fid && framesMap[p.fid]) (groups[p.fid] = groups[p.fid] || []).push(p); }
+    for(const fid in groups){ groups[fid].sort((a,b)=>(a.t||0)-(b.t||0)); groups[fid].forEach((p,i)=>{ frameIdx[p.id]=i; }); }
+  }
   let drawn=0, skipped=0;
   for(const p of list){
     let src = null;
@@ -3797,12 +3820,19 @@ async function composeBoardCanvas(list, imgsMap){
     else if(isImgData(p.img)) src = p.img;
     if(!src){ skipped++; continue; }
     const im = await loadImg(src); if(!im){ skipped++; continue; }
-    const x = clamp(+p.nx||0,0,1)*(WALL_W-NOTE_W);
-    const y = clamp(+p.ny||0,0,1)*(WALL_H-NOTE_H);
-    const land = !!p.land;
+    const fr = (p.fid && framesMap[p.fid]) ? framesMap[p.fid] : null;
+    const land = fr ? (oriOf(fr)==="l") : !!p.land;        // 枠内は枠の向きに従う
     const w = land ? NOTE_LAND_W : NOTE_W;
-    const h = land ? NOTE_LAND_H : NOTE_H;
-    g.save(); g.translate(x+w/2, y+h/2); g.rotate((p.angle||0)*Math.PI/180); g.drawImage(im,-w/2,-h/2,w,h); g.restore();
+    const ar = (im.naturalWidth>0) ? (im.naturalHeight/im.naturalWidth) : (land ? (2/3) : (3/2));   // 元画像の比率を保持（横3:2/縦2:3が潰れない）
+    const h = w * ar;
+    if(fr){
+      const c = rsvCellXY(fr, frameIdx[p.id]||0);          // 枠内：グリッド整列・直立（ライブと同じ）
+      g.drawImage(im, c.left, c.top, w, h);
+    } else {
+      const x = clamp(+p.nx||0,0,1)*(WALL_W-NOTE_W);        // フリー：保存座標（ライブ同様NOTE_W/H基準）＋回転
+      const y = clamp(+p.ny||0,0,1)*(WALL_H-NOTE_H);
+      g.save(); g.translate(x+w/2, y+h/2); g.rotate((p.angle||0)*Math.PI/180); g.drawImage(im,-w/2,-h/2,w,h); g.restore();
+    }
     drawn++;
   }
   return { cv, drawn, skipped };
@@ -3905,7 +3935,11 @@ async function reoutputBoard(id, btn){
     await Promise.all(need.map(async p=>{
       try{ const s = await get(ref(db,"boards/"+id+"/imgs/"+p.id)); const d = s.val(); if(isImgData(d)) imgs[p.id]=d; }catch(e){}
     }));
-    const { cv, drawn, skipped } = await composeBoardCanvas(list, imgs);
+    let frames = {};                                        // 枠（予約）も取得：枠内半紙をグリッド整列して描くため
+    try{ const rs = await get(ref(db,"boards/"+id+"/reservations")); const rv = rs.val()||{};
+      for(const rid in rv){ const r=rv[rid]; if(r && typeof r==="object") frames[rid]=r; }
+    }catch(e){}
+    const { cv, drawn, skipped } = await composeBoardCanvas(list, imgs, frames);
     const url = cv.toDataURL("image/jpeg", 0.85);
     const a = document.createElement("a"); a.href=url; a.download="oshuji-board-"+id+"-reoutput.jpg"; document.body.appendChild(a); a.click(); a.remove();
     toast("板"+id+"を再出力（"+drawn+"枚"+(skipped?"・"+skipped+"枚は画像取得失敗":"")+"）", 4000);
