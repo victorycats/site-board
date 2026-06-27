@@ -576,7 +576,15 @@
   /* つかいかた／？を開くボタン（ヘッダー脇・タップ用） */
   .help-open{margin-left:8px;width:19px;height:19px;border-radius:50%;border:1.5px solid var(--sumi);background:rgba(255,253,247,.92);color:var(--sumi);font-weight:800;font-size:12px;line-height:1;cursor:pointer;padding:0;vertical-align:middle;pointer-events:auto;box-shadow:0 1px 0 rgba(0,0,0,.18)}
   .help-open:hover{background:#fff;filter:brightness(1.02)}
-  /* 画像位置しばりモーダル */
+  /* 運営ガイド */
+  .guide-card{max-width:560px}
+  .guide-view{text-align:left;max-height:58vh;overflow:auto;padding:2px 2px 4px}
+  .guide-edit{width:100%;min-height:46vh;resize:vertical;padding:9px;border:1px solid rgba(90,70,40,.35);border-radius:8px;font-size:12.5px;font-family:"Shippori Mincho",serif;line-height:1.55;box-sizing:border-box}
+  .ag-h2{font-weight:800;color:var(--shu);font-size:14px;margin:14px 0 4px;border-bottom:1px solid rgba(90,70,40,.2);padding-bottom:2px}
+  .ag-h3{font-weight:700;font-size:12.5px;margin:10px 0 2px}
+  .ag-li{font-size:12.5px;line-height:1.55;margin:2px 0;padding-left:1em;text-indent:-1em}
+  .ag-p{font-size:12.5px;line-height:1.6;margin:3px 0}
+  .ag-sp{height:6px}
   .geo-row{margin:7px 0;font-size:13px}
   .geo-row label{display:flex;align-items:center;gap:8px;cursor:pointer}
   .geo-near{margin:6px 0 2px;padding:9px;border:1px solid rgba(90,70,40,.25);border-radius:8px;background:rgba(0,0,0,.03)}
@@ -1154,6 +1162,20 @@
   </div>
 </div>
 
+<div class="login-mask" id="guideMask">
+  <div class="login-card guide-card">
+    <div class="login-title">運営ガイド（引き継ぎメモ）</div>
+    <div id="guideView" class="guide-view"></div>
+    <textarea id="guideEdit" class="guide-edit" maxlength="8000" style="display:none"></textarea>
+    <div class="login-btns">
+      <button class="login-cancel" id="guideClose">閉じる</button>
+      <button class="login-ok" id="guideEditBtn">編集</button>
+      <button class="login-ok" id="guideSaveBtn" style="display:none">保存</button>
+      <button class="login-cancel" id="guideCancelBtn" style="display:none">やめる</button>
+    </div>
+  </div>
+</div>
+
 <div class="login-mask" id="imgGeoMask">
   <div class="login-card">
     <div class="login-title">画像投稿の設定</div>
@@ -1355,14 +1377,50 @@ let lastPostAt = (function(){ try{ return +localStorage.getItem("fg_lastPost")||
 
 /* ---------- ボード切替（満杯で保存→新ボード） ---------- */
 const BOARD_LIMIT = 300;          // この枚数でボード満杯（サーバ側ルールと一致させること）
-const WARN_REMAIN = [60, 10];     // 残りこの枚数で運営へ通知（make.com 経由）
-const NOTIFY_WEBHOOK = "https://hook.us2.make.com/k68lp6o4rnvp7hkh8eag5osdd1rqq1lk";  // 残り60/10をPOST
 let boardId = null;               // 現在のボード番号（meta/board）
 let imgPostOn = true;             // 画像投稿の可否（meta/imgPost。未設定はON。運営がトグル）
 let imgGeo = { mode:"off", lat:null, lng:null, radius:200 };   // 画像の位置しばり（meta/imgGeo）。off=なし／any=GPS必須／near=指定地点からradius以内
 const IMG_WARN_DEFAULT = "エロ・グロ・法律違反はダメです。\n投稿は運営がいつでも削除します。\n\nこれでよければ写真を選んでください。";
 let imgWarn = IMG_WARN_DEFAULT;   // 画像投稿前に出す警告文（meta/imgWarn。運営が編集）
 function imgWarnText(){ return (imgWarn && imgWarn.trim()) ? imgWarn : IMG_WARN_DEFAULT; }
+const ADMIN_GUIDE_DEFAULT = `ふたば(偽)お習字 — 運営モードの使い方メモ
+引き継ぎ・共有用。運営なら誰でもこの画面で編集できます（保存すると全運営に反映）。
+
+## 運営バーのボタン
+- 画像設定：写真投稿の受付ON/OFF、位置しばり（GPS）、投稿前の警告文の編集。
+- 色設定：みんなが使える中間色パレットの編集。
+- 名前：空欄投稿に使うランダムネームの追加。
+- 履歴：過去の板の一覧。クリーンDL／見たままDL／再出力ができる。投稿者ランキングのタグを押すと、その人の半紙を順に表示。
+- 見たままDL：今の板を画面の見たまま画像化してDL（板送りはしない）。
+- 保存して新ボード：今の板を保存して、新しい空の板へ進める。
+- 終了：運営モードを抜ける。
+
+## 半紙について
+- 1枚ごとに少しクールダウンがある。わいせつ・グロ・せいじ・法律違反はNGで、運営はいつでも削除できる。
+- 運営は半紙を「動かす」で移動でき、「元位置」で直前の位置に戻せる。枠内の半紙は自動整列なので動かせない。
+
+## 板送りの自動化（満員＝300枚）
+満員になると、その板を画像保存して、みんなを新しい空の板へ移す。これを自動でやる。
+同時に全端末が満員に気づくので、データベースの「旗」で最初の1人だけが作業する（二重進行を防止）。
+
+### 運営タブが開いているとき
+1. 満員を検知。
+2. 運営端末が archiving の旗を立てる（1人だけ）。
+3. 板を画像化（クリーン版＋見たまま版）してSupabaseへ保存し、履歴に記録。
+4. 板番号を+1。全端末は板番号を見ているので、新しい板へ自動で切り替わる。
+→ 画像保存まで込みできれいに板送りされる。
+
+### 運営タブが居ないとき（保険）
+1. 満員を検知して8秒待つ（その間に運営が現れたら上の流れに任せる）。
+2. まだ満員なら、来場者の誰か1人が advancing の旗を立てる。
+3. 「この板は未画像化」と付箋（pendingArchive）を残し、板番号を+1。切り替えだけ先に行う。
+4. 後で運営が履歴を開いたとき、付箋の残る板をまとめて画像化・保存する。
+→ 運営不在でも場は止まらず、画像はあとから回収。
+
+## 補足
+- 板の切り替えは「板番号（meta/board）」が変わると全端末が一斉に新しい板を読み込む仕組み。
+- 旗を立てたあとも本当に満員か再確認してから進める。失敗したら旗を戻して再試行。`;
+let adminGuide = ADMIN_GUIDE_DEFAULT;   // 運営ガイド（meta/adminGuide。運営が編集・共有）
 let boardCount = 0;               // 現在ボードの累積投稿数（boards/{id}/count）
 let boardSubs = [];               // 現在ボードの購読解除関数
 function bpath(sub){ return "boards/" + boardId + "/" + sub; }   // 現在ボードのパス
@@ -2381,6 +2439,7 @@ function renderAdminBar(){
     '<span class="ab-title">運営モード</span>'+
     '<span class="ab-meta">板'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
     '<span class="ab-sep"></span>'+
+    '<button class="ab-act" type="button" onclick="openGuide()">運営ガイド</button>'+
     '<button class="ab-act" type="button" onclick="openImgGeo()">画像設定'+((!imgPostOn||imgGeo.mode!=="off")?' ●':'')+'</button>'+
     '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
     '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
@@ -2543,6 +2602,12 @@ function listen(){
     const v = snap && snap.val();
     imgWarn = (typeof v==="string" && v.trim()) ? v : IMG_WARN_DEFAULT;
   });
+  onValue(ref(db, "meta/adminGuide"), snap=>{   // 運営ガイド（未設定はデフォルト文）
+    const v = snap && snap.val();
+    adminGuide = (typeof v==="string" && v.trim()) ? v : ADMIN_GUIDE_DEFAULT;
+    const gv = document.getElementById("guideView");
+    if(gv && guideMask && guideMask.classList.contains("show") && gv.style.display!=="none") gv.innerHTML = renderGuide(adminGuide);
+  });
   // 色パレット（中間色をカンマ区切り文字列で共有）。未設定=デフォルト4色、空文字=中間色なし
   onValue(ref(db, "meta/palette"), snap=>{
     const s = snap ? snap.val() : null;
@@ -2607,7 +2672,6 @@ function switchToBoard(id){
     boardSubs.push(onValue(ref(db, bpath("count")), s=>{
       boardCount = (s && s.val()) || 0;
       setActiveCount();
-      maybeNotifyRemaining();
       maybeAutoArchive();   // 運営タブがあれば：満員で自動保存（画像化）→新ボード
       maybeAutoAdvance();   // 運営タブが無くても：満員なら誰かが新ボードへ進める（画像化はpendingに記録、後で運営が処理）
     }));
@@ -2650,31 +2714,6 @@ function fitStatusTicker(){
     inner.style.removeProperty("--sshift");
   }
 }
-// 残り60・残り10を最初に観測した1人だけが運営へ通知（make.com）。フラグで重複防止
-async function maybeNotifyRemaining(){
-  if(!db || boardId == null) return;
-  for(const w of WARN_REMAIN){
-    if(remaining() <= w){
-      const flagRef = ref(db, bpath("notified/r"+w));
-      try{
-        const res = await runTransaction(flagRef, cur => cur ? undefined : true);  // 既にtrueなら中止
-        if(res.committed && res.snapshot.val() === true){
-          notifyOwner(w);
-        }
-      }catch(e){}
-    }
-  }
-}
-function notifyOwner(remain){
-  try{
-    fetch(NOTIFY_WEBHOOK, {
-      method:"POST", mode:"no-cors",
-      headers:{ "Content-Type":"text/plain;charset=UTF-8" },   // text/plain でCORSプリフライト回避
-      body: JSON.stringify({ board:boardId, remaining:remain, count:boardCount, limit:BOARD_LIMIT, at:new Date().toISOString() })
-    }).catch(()=>{});
-  }catch(e){}
-}
-
 /* ---------- placement (位置決め) ---------- */
 function enterPlacing(){
   placing = true;
@@ -2975,7 +3014,7 @@ function toggleKbdHelp(force){
       +   '<p><b>② 道具</b><br>ペン先（本筆・丸筆・平筆・にじみ）／色／太さを選べます。「塗」で塗りつぶし、「消」で全消し、「戻」でひとつ戻す、「拡」で表示だけ大きく。</p>'
       +   '<p><b>③ 板を見てまわる</b><br>ドラッグで移動、ズームと右下のミニマップで全体を行き来。「半紙めぐり」(◀▶) で一枚ずつ見られます。めぐり中に半紙をクリック／タップすると、その一枚を最大までズーム。気に入ったら「そうだね」。</p>'
       +   '<p><b>④ お題枠</b><br>「お題枠を予約」でテーマ付きの枠を作れます。枠の中に描かれた半紙は自動で整列します。</p>'
-      +   '<p class="kbd-note">※ 連続投稿には少し間隔（クールダウン）があります。エロ・グロ・法律違反はNG、運営がいつでも削除します。</p>'
+      +   '<p class="kbd-note">※ 連続投稿には少し間隔（クールダウン）があります。わいせつ・グロ・せいじ・法律違反はだめ</p>'
       + '</div>'
       + '<div class="kbd-sec">キーボードショートカット（半紙を開いている時）</div>'
       + '<div class="kbd-row"><kbd>[</kbd><kbd>]</kbd><span>線を 細く / 太く</span></div>'
@@ -3612,6 +3651,60 @@ function geoUseHere(){
   if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
 }
 window.openImgGeo = openImgGeo;
+// ===== 運営ガイド（meta/adminGuide：運営が編集・共有） =====
+const guideMask = document.getElementById("guideMask");
+function renderGuide(text){   // 安全な簡易整形（## 見出し / ### 小見出し / - 箇条書き）。HTMLはエスケープ
+  const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return String(text||"").split("\n").map(line=>{
+    const t = line.replace(/\s+$/,"");
+    if(/^###\s+/.test(t)) return '<div class="ag-h3">'+esc(t.replace(/^###\s+/,""))+'</div>';
+    if(/^##\s+/.test(t))  return '<div class="ag-h2">'+esc(t.replace(/^##\s+/,""))+'</div>';
+    if(/^-\s+/.test(t))   return '<div class="ag-li">・'+esc(t.replace(/^-\s+/,""))+'</div>';
+    if(t==="")            return '<div class="ag-sp"></div>';
+    return '<div class="ag-p">'+esc(t)+'</div>';
+  }).join("");
+}
+function guideShowRead(){
+  document.getElementById("guideView").style.display="";
+  document.getElementById("guideEdit").style.display="none";
+  document.getElementById("guideEditBtn").style.display="";
+  document.getElementById("guideSaveBtn").style.display="none";
+  document.getElementById("guideCancelBtn").style.display="none";
+}
+function openGuide(){
+  if(!admin) return;
+  document.getElementById("guideView").innerHTML = renderGuide(adminGuide);
+  guideShowRead();
+  guideMask.classList.add("show");
+}
+function guideEditMode(){
+  document.getElementById("guideEdit").value = adminGuide;
+  document.getElementById("guideView").style.display="none";
+  document.getElementById("guideEdit").style.display="";
+  document.getElementById("guideEditBtn").style.display="none";
+  document.getElementById("guideSaveBtn").style.display="";
+  document.getElementById("guideCancelBtn").style.display="";
+}
+async function saveGuide(){
+  if(!admin || !db) return;
+  const txt = (document.getElementById("guideEdit").value||"").slice(0,8000);
+  const val = txt.trim() ? txt : ADMIN_GUIDE_DEFAULT;
+  try{
+    await set(ref(db,"meta/adminGuide"), val);
+    adminGuide = val;
+    document.getElementById("guideView").innerHTML = renderGuide(adminGuide);
+    guideShowRead();
+    toast("運営ガイドを保存しました");
+  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/adminGuide の許可が必要です）"); }
+}
+{ const m=guideMask;
+  const c=document.getElementById("guideClose"); if(c) c.addEventListener("click", ()=> m.classList.remove("show"));
+  const eb=document.getElementById("guideEditBtn"); if(eb) eb.addEventListener("click", guideEditMode);
+  const sb=document.getElementById("guideSaveBtn"); if(sb) sb.addEventListener("click", saveGuide);
+  const cb=document.getElementById("guideCancelBtn"); if(cb) cb.addEventListener("click", guideShowRead);
+  if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
+}
+window.openGuide = openGuide;
 
 async function adminRestore(id){
   if(!db || !admin) return;
