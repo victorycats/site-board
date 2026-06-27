@@ -576,6 +576,14 @@
   /* つかいかた／？を開くボタン（ヘッダー脇・タップ用） */
   .help-open{margin-left:8px;width:19px;height:19px;border-radius:50%;border:1.5px solid var(--sumi);background:rgba(255,253,247,.92);color:var(--sumi);font-weight:800;font-size:12px;line-height:1;cursor:pointer;padding:0;vertical-align:middle;pointer-events:auto;box-shadow:0 1px 0 rgba(0,0,0,.18)}
   .help-open:hover{background:#fff;filter:brightness(1.02)}
+  /* 画像位置しばりモーダル */
+  .geo-row{margin:7px 0;font-size:13px}
+  .geo-row label{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .geo-near{margin:6px 0 2px;padding:9px;border:1px solid rgba(90,70,40,.25);border-radius:8px;background:rgba(0,0,0,.03)}
+  .geo-near.dim{opacity:.4;pointer-events:none}
+  .geo-line{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
+  .geo-line input[type=number]{flex:1;min-width:0;padding:6px;border:1px solid rgba(90,70,40,.35);border-radius:6px;font-size:13px}
+  .geo-line span{color:var(--ink-faint);white-space:nowrap}
   .wall.placing{cursor:copy}
   .wall.placing #notes{pointer-events:none}
   .wall::after{
@@ -1144,6 +1152,24 @@
   </div>
 </div>
 
+<div class="login-mask" id="imgGeoMask">
+  <div class="login-card">
+    <div class="login-title">画像投稿の位置しばり</div>
+    <div class="pal-fixed" style="line-height:1.6">荒らし・無分別投稿対策。写真のGPS情報（撮影位置）で投稿を制限します。<b>GPSの無い写真（スクショ・共有画像・位置オフで撮影）は弾かれます。</b>端末やブラウザによっては正規の写真でも位置が消えることがあるので、本番前に実機で確認してください。判定は端末側なので、完全な強制ではなく抑止です。</div>
+    <div class="geo-row"><label><input type="radio" name="geoMode" value="off">しばりなし（だれでも画像OK）</label></div>
+    <div class="geo-row"><label><input type="radio" name="geoMode" value="any">GPS情報のある写真のみ</label></div>
+    <div class="geo-row"><label><input type="radio" name="geoMode" value="near">指定地点の近くで撮った写真のみ</label></div>
+    <div id="geoNearBox" class="geo-near">
+      <div class="geo-line"><span>中心</span><input id="geoLat" type="number" step="any" placeholder="緯度"><input id="geoLng" type="number" step="any" placeholder="経度"><button type="button" class="pal-add" id="geoHere">現在地</button></div>
+      <div class="geo-line"><span>半径</span><input id="geoRadius" type="number" min="10" step="10" placeholder="メートル"><span>m 以内</span></div>
+    </div>
+    <div class="login-btns">
+      <button class="login-cancel" id="geoCancel">キャンセル</button>
+      <button class="login-ok" id="geoSave">保存</button>
+    </div>
+  </div>
+</div>
+
 <div class="login-mask" id="nameMask">
   <div class="login-card">
     <div class="login-title">ランダムネーム追加</div>
@@ -1322,6 +1348,7 @@ const WARN_REMAIN = [60, 10];     // 残りこの枚数で運営へ通知（make
 const NOTIFY_WEBHOOK = "https://hook.us2.make.com/k68lp6o4rnvp7hkh8eag5osdd1rqq1lk";  // 残り60/10をPOST
 let boardId = null;               // 現在のボード番号（meta/board）
 let imgPostOn = true;             // 画像投稿の可否（meta/imgPost。未設定はON。運営がトグル）
+let imgGeo = { mode:"off", lat:null, lng:null, radius:200 };   // 画像の位置しばり（meta/imgGeo）。off=なし／any=GPS必須／near=指定地点からradius以内
 let boardCount = 0;               // 現在ボードの累積投稿数（boards/{id}/count）
 let boardSubs = [];               // 現在ボードの購読解除関数
 function bpath(sub){ return "boards/" + boardId + "/" + sub; }   // 現在ボードのパス
@@ -2051,10 +2078,69 @@ function drawPhotoCover(img){
   ctx.drawImage(img, sx,sy,sw,sh, 0,0, cw,ch);                   // はみ出しを切って全面に
   scheduleDraftSave();
 }
+// ===== 画像の位置しばり：写真のEXIF GPSを読む（JPEGのみ・canvasに描く前の元fileから） =====
+function haversineM(la1,lo1,la2,lo2){
+  const R=6371000, toR=x=>x*Math.PI/180;
+  const dla=toR(la2-la1), dlo=toR(lo2-lo1);
+  const a=Math.sin(dla/2)**2 + Math.cos(toR(la1))*Math.cos(toR(la2))*Math.sin(dlo/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));
+}
+function readExifGps(file){   // {lat,lng} か null（GPS無し/JPEG以外/解析不可）
+  return new Promise(resolve=>{
+    const r = new FileReader();
+    r.onload = ()=>{ try{ resolve(parseJpegGps(new DataView(r.result))); }catch(e){ resolve(null); } };
+    r.onerror = ()=> resolve(null);
+    r.readAsArrayBuffer(file.slice(0, 256*1024));   // EXIFは先頭付近。先頭256KBで十分
+  });
+}
+function parseJpegGps(view){
+  if(view.byteLength<4 || view.getUint16(0)!==0xFFD8) return null;   // JPEGのみ
+  let off = 2;
+  while(off+4 <= view.byteLength){
+    const marker = view.getUint16(off); if((marker&0xFF00)!==0xFF00) break;
+    const size = view.getUint16(off+2);
+    if(marker===0xFFE1 && off+10<=view.byteLength && view.getUint32(off+4)===0x45786966 && view.getUint16(off+8)===0x0000){
+      return parseExifTiffGps(view, off+10);   // "Exif\0\0" の直後がTIFFヘッダ
+    }
+    if(size<2) break; off += 2 + size;
+  }
+  return null;
+}
+function parseExifTiffGps(view, base){
+  if(base+8>view.byteLength) return null;
+  const le = (view.getUint16(base)===0x4949);   // II=little / MM=big
+  const r16=a=>view.getUint16(a,le), r32=a=>view.getUint32(a,le);
+  if(view.getUint16(base+2,le)!==0x002A) return null;
+  const ifd0 = base + r32(base+4); if(ifd0+2>view.byteLength) return null;
+  let gpsIfd = 0; const n0 = r16(ifd0);
+  for(let i=0;i<n0;i++){ const e=ifd0+2+i*12; if(e+12>view.byteLength) break; if(r16(e)===0x8825){ gpsIfd = base + r32(e+8); break; } }
+  if(!gpsIfd || gpsIfd+2>view.byteLength) return null;
+  const n = r16(gpsIfd); let latRef="N", lngRef="E", lat=null, lng=null;
+  const triplet = a => [0,1,2].map(k=>{ const num=r32(a+k*8), den=r32(a+k*8+4); return den ? num/den : 0; });
+  for(let i=0;i<n;i++){
+    const e = gpsIfd+2+i*12; if(e+12>view.byteLength) break;
+    const tag=r16(e);
+    if(tag===1) latRef = String.fromCharCode(view.getUint8(e+8));
+    else if(tag===3) lngRef = String.fromCharCode(view.getUint8(e+8));
+    else if(tag===2){ const o=base+r32(e+8); if(o+24<=view.byteLength){ const d=triplet(o); lat=d[0]+d[1]/60+d[2]/3600; } }
+    else if(tag===4){ const o=base+r32(e+8); if(o+24<=view.byteLength){ const d=triplet(o); lng=d[0]+d[1]/60+d[2]/3600; } }
+  }
+  if(lat==null||lng==null) return null;
+  if(latRef==="S") lat=-lat; if(lngRef==="W") lng=-lng;
+  return { lat, lng };
+}
 photoInput.addEventListener("change", async (e)=>{
   const file = e.target.files && e.target.files[0];
   e.target.value = "";                              // 同じ写真を選び直せるように
   if(!file) return;
+  if(imgGeo.mode!=="off"){                          // 位置しばり：EXIF GPSで判定（canvasに描く前の元fileから）
+    const gps = await readExifGps(file);
+    if(!gps){ toast("位置情報つきの写真だけ投稿できます（その場で撮った写真を選んでね）"); return; }
+    if(imgGeo.mode==="near" && imgGeo.lat!=null && imgGeo.lng!=null){
+      const d = haversineM(gps.lat, gps.lng, imgGeo.lat, imgGeo.lng);
+      if(!(d <= (imgGeo.radius||0))){ toast("会場の近くで撮った写真だけ投稿できます"); return; }
+    }
+  }
   try{
     let img;
     try{ img = await createImageBitmap(file, {imageOrientation:"from-image"}); }  // EXIF回転を反映
@@ -2281,6 +2367,7 @@ function renderAdminBar(){
     '<span class="ab-meta">ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
     '<span class="ab-sep"></span>'+
     '<button class="ab-act" type="button" onclick="toggleImgPost()">画像投稿 '+(imgPostOn?'ON':'OFF')+'</button>'+
+    '<button class="ab-act" type="button" onclick="openImgGeo()">画像GPS'+(imgGeo.mode==="off"?"":"●")+'</button>'+
     '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
     '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
     '<button class="ab-act" type="button" onclick="openHistory()">履歴</button>'+
@@ -2428,8 +2515,13 @@ function listen(){
   });
   // 画像投稿の可否（運営トグル）。明示的に false の時だけ停止、未設定はON
   onValue(ref(db, "meta/imgPost"), snap=>{
-    imgPostOn = (snap && snap.val()) !== false;
-    applyImgPostState();
+    imgPostOn = (snap && snap.val()) !== false;    applyImgPostState();
+  });
+  onValue(ref(db, "meta/imgGeo"), snap=>{   // 画像の位置しばり（未設定/不正は off）
+    const v = snap && snap.val();
+    imgGeo = (v && typeof v==="object")
+      ? { mode: (v.mode==="any"||v.mode==="near")?v.mode:"off", lat:(typeof v.lat==="number"?v.lat:null), lng:(typeof v.lng==="number"?v.lng:null), radius:(typeof v.radius==="number"?v.radius:200) }
+      : { mode:"off", lat:null, lng:null, radius:200 };
   });
   // 色パレット（中間色をカンマ区切り文字列で共有）。未設定=デフォルト4色、空文字=中間色なし
   onValue(ref(db, "meta/palette"), snap=>{
@@ -3435,6 +3527,50 @@ document.getElementById("nameSave").addEventListener("click", async ()=>{
   }catch(e){ console.error(e); toast("権限がないか失敗しました"); }
 });
 window.openNamesEditor = openNamesEditor;
+// ===== 画像投稿の位置しばり（運営設定 meta/imgGeo） =====
+const imgGeoMask = document.getElementById("imgGeoMask");
+function imgGeoSyncNear(){
+  const m = (document.querySelector('input[name="geoMode"]:checked')||{}).value;
+  const box = document.getElementById("geoNearBox"); if(box) box.classList.toggle("dim", m!=="near");
+}
+function openImgGeo(){
+  if(!admin) return;
+  document.querySelectorAll('input[name="geoMode"]').forEach(r=> r.checked = (r.value===imgGeo.mode));
+  document.getElementById("geoLat").value = (imgGeo.lat!=null)?imgGeo.lat:"";
+  document.getElementById("geoLng").value = (imgGeo.lng!=null)?imgGeo.lng:"";
+  document.getElementById("geoRadius").value = imgGeo.radius||200;
+  imgGeoSyncNear();
+  imgGeoMask.classList.add("show");
+}
+async function saveImgGeo(){
+  const mode = (document.querySelector('input[name="geoMode"]:checked')||{}).value || "off";
+  const lat = parseFloat(document.getElementById("geoLat").value);
+  const lng = parseFloat(document.getElementById("geoLng").value);
+  const radius = Math.max(10, parseInt(document.getElementById("geoRadius").value,10)||200);
+  if(mode==="near" && (!isFinite(lat)||!isFinite(lng))){ toast("中心の緯度・経度を入れてね（「現在地」ボタンが便利）"); return; }
+  const payload = (mode==="near") ? { mode, lat, lng, radius } : { mode };
+  try{ await set(ref(db,"meta/imgGeo"), payload);
+    toast("画像の位置しばりを保存：" + ({off:"なし", any:"GPS必須", near:"指定地点から"+radius+"m以内"}[mode]));
+    imgGeoMask.classList.remove("show");
+  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/imgGeo の許可が必要です）"); }
+}
+function geoUseHere(){
+  if(!navigator.geolocation){ toast("この端末では現在地を取得できません"); return; }
+  toast("現在地を取得中…");
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ document.getElementById("geoLat").value = pos.coords.latitude.toFixed(6); document.getElementById("geoLng").value = pos.coords.longitude.toFixed(6); toast("現在地をセットしました"); },
+    ()=> toast("現在地を取得できませんでした（位置情報の許可が必要）"),
+    { enableHighAccuracy:true, timeout:10000 }
+  );
+}
+{ const m=imgGeoMask;
+  const c=document.getElementById("geoCancel"); if(c) c.addEventListener("click", ()=> m.classList.remove("show"));
+  const s=document.getElementById("geoSave"); if(s) s.addEventListener("click", saveImgGeo);
+  const h=document.getElementById("geoHere"); if(h) h.addEventListener("click", geoUseHere);
+  document.querySelectorAll('input[name="geoMode"]').forEach(r=> r.addEventListener("change", imgGeoSyncNear));
+  if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
+}
+window.openImgGeo = openImgGeo;
 
 async function adminRestore(id){
   if(!db || !admin) return;
