@@ -2979,6 +2979,11 @@ document.addEventListener("keydown", e=>{
   // いつでも有効
   if(e.key==="h"||e.key==="H"){ e.preventDefault(); clickId("deskToggle"); return; }   // 半紙を開く/閉じる
   if(e.key==="i"||e.key==="I"){ e.preventDefault(); toggleKbdHelp(); return; }          // ヘルプ
+  if(e.key==="f"||e.key==="F"){ e.preventDefault(); clickId("rsvOpen"); return; }        // お題枠を予約
+  if(e.key==="ArrowLeft"){  e.preventDefault(); gotoNote(-1); return; }                   // 半紙めぐり：前へ
+  if(e.key==="ArrowRight"){ e.preventDefault(); gotoNote(1);  return; }                   // 半紙めぐり：次へ
+  if(e.key==="+"||e.key==="="){ e.preventDefault(); zoomTo(zoom+zoomStep()); return; }    // ズームイン
+  if(e.key==="-"||e.key==="_"){ e.preventDefault(); zoomTo(zoom-zoomStep()); return; }    // ズームアウト
   // 以下は半紙を開いている時だけ
   if(!document.querySelector(".float-desk:not(.collapsed)")) return;
   const stepSize = d=>{ const sl=document.getElementById("size"); if(!sl) return; sl.value=Math.max(0, Math.min(11,(parseInt(sl.value,10)||0)+d)); sl.dispatchEvent(new Event("input",{bubbles:true})); };
@@ -2993,6 +2998,7 @@ document.addEventListener("keydown", e=>{
     case "e": case "E": e.preventDefault(); pickColor("#f7f4ec"); break;     // 白（半紙色）
     case "g": case "G": e.preventDefault(); clickId("fillBtn"); break;       // 塗りつぶし
     case ";": e.preventDefault(); clickId("bigBtn"); break;                  // 拡大（表示1.5倍）
+    case "o": case "O": e.preventDefault(); clickId("deskOrient"); break;    // 半紙の縦横を切り替え
     case "n": case "N": { e.preventDefault(); const el=document.getElementById("who"); if(el){ el.focus(); if(el.select) el.select(); } break; }   // 名前欄へフォーカス
     case "Delete": e.preventDefault(); clickId("clear"); break;             // 消（全部消して白紙に戻す）
     case "s": case "S": e.preventDefault(); clickId("post"); break;          // 貼る（投稿）
@@ -3018,13 +3024,16 @@ function toggleKbdHelp(force){
       + '</div>'
       + '<div class="kbd-sec">キーボードショートカット（半紙を開いている時）</div>'
       + '<div class="kbd-row"><kbd>[</kbd><kbd>]</kbd><span>線を 細く / 太く</span></div>'
-      + '<div class="kbd-row"><kbd>B</kbd><span>ペン先を変更</span></div>'
+      + '<div class="kbd-row"><kbd>B</kbd><kbd>O</kbd><span>ペン先を変更 / 半紙の縦横を切替</span></div>'
       + '<div class="kbd-row"><kbd>P</kbd><kbd>E</kbd><span>黒 / 白　<kbd>1</kbd>〜<kbd>7</kbd> パレット左から</span></div>'
       + '<div class="kbd-row"><kbd>G</kbd><kbd>;</kbd><span>塗りつぶし / 拡大　<kbd>Del</kbd> 消</span></div>'
       + '<div class="kbd-row"><kbd>S</kbd><kbd>Z</kbd><span>貼る（投稿） / ひとつ戻す</span></div>'
       + '<div class="kbd-row"><kbd>N</kbd><kbd>R</kbd><span>名前欄へ / レイアウトを戻す</span></div>'
       + '<div class="kbd-sec">いつでも</div>'
       + '<div class="kbd-row"><kbd>H</kbd><kbd>I</kbd><span>半紙を開く・閉じる / このヘルプ</span></div>'
+      + '<div class="kbd-row"><kbd>F</kbd><span>お題枠を予約</span></div>'
+      + '<div class="kbd-row"><kbd>←</kbd><kbd>→</kbd><span>半紙めぐり（前 / 次）</span></div>'
+      + '<div class="kbd-row"><kbd>+</kbd><kbd>-</kbd><span>ズーム（拡大 / 縮小）</span></div>'
       + '<button class="kbd-close" type="button">閉じる（I / Esc）</button>'
       + '</div>';
     document.body.appendChild(el);
