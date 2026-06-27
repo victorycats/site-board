@@ -584,6 +584,8 @@
   .geo-line{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
   .geo-line input[type=number]{flex:1;min-width:0;padding:6px;border:1px solid rgba(90,70,40,.35);border-radius:6px;font-size:13px}
   .geo-line span{color:var(--ink-faint);white-space:nowrap}
+  .geo-sec{margin:12px 0 4px;font-size:11px;font-weight:700;color:var(--shu);letter-spacing:.06em}
+  .geo-warn{width:100%;min-height:84px;resize:vertical;padding:8px;border:1px solid rgba(90,70,40,.35);border-radius:8px;font-size:13px;font-family:"Shippori Mincho",serif;line-height:1.5;box-sizing:border-box}
   .wall.placing{cursor:copy}
   .wall.placing #notes{pointer-events:none}
   .wall::after{
@@ -1154,17 +1156,26 @@
 
 <div class="login-mask" id="imgGeoMask">
   <div class="login-card">
-    <div class="login-title">画像投稿の位置しばり</div>
-    <div class="pal-fixed" style="line-height:1.6">荒らし・無分別投稿対策。写真のGPS情報（撮影位置）で投稿を制限します。<b>GPSの無い写真（スクショ・共有画像・位置オフで撮影）は弾かれます。</b>端末やブラウザによっては正規の写真でも位置が消えることがあるので、本番前に実機で確認してください。判定は端末側なので、完全な強制ではなく抑止です。</div>
-    <div class="geo-row"><label><input type="radio" name="geoMode" value="off">しばりなし（だれでも画像OK）</label></div>
+    <div class="login-title">画像投稿の設定</div>
+
+    <div class="geo-sec">受付</div>
+    <div class="geo-row"><label><input type="checkbox" id="imgOnChk">画像投稿を受け付ける</label></div>
+
+    <div class="geo-sec">位置しばり（荒らし・無分別投稿対策）</div>
+    <div class="pal-fixed" style="line-height:1.6">写真のGPS（撮影位置）で制限します。<b>GPSの無い写真（スクショ・共有画像・位置オフ撮影）は弾かれます。</b>端末次第で正規の写真でも位置が消えることがあるので本番前に実機確認を。判定は端末側なので抑止であり完全強制ではありません。</div>
+    <div class="geo-row"><label><input type="radio" name="geoMode" value="off">しばりなし</label></div>
     <div class="geo-row"><label><input type="radio" name="geoMode" value="any">GPS情報のある写真のみ</label></div>
     <div class="geo-row"><label><input type="radio" name="geoMode" value="near">指定地点の近くで撮った写真のみ</label></div>
     <div id="geoNearBox" class="geo-near">
       <div class="geo-line"><span>中心</span><input id="geoLat" type="number" step="any" placeholder="緯度"><input id="geoLng" type="number" step="any" placeholder="経度"><button type="button" class="pal-add" id="geoHere">現在地</button></div>
       <div class="geo-line"><span>半径</span><input id="geoRadius" type="number" min="10" step="10" placeholder="メートル"><span>m 以内</span></div>
     </div>
+
+    <div class="geo-sec">警告文（写真を選ぶ前に表示）</div>
+    <textarea id="imgWarnTa" class="geo-warn" maxlength="400" placeholder="エロ・グロ・法律違反はダメです。…（空欄なら既定の文面）"></textarea>
+
     <div class="login-btns">
-      <button class="login-cancel" id="geoCancel">キャンセル</button>
+      <button class="login-cancel" id="geoCancel">閉じる</button>
       <button class="login-ok" id="geoSave">保存</button>
     </div>
   </div>
@@ -1349,6 +1360,9 @@ const NOTIFY_WEBHOOK = "https://hook.us2.make.com/k68lp6o4rnvp7hkh8eag5osdd1rqq1
 let boardId = null;               // 現在のボード番号（meta/board）
 let imgPostOn = true;             // 画像投稿の可否（meta/imgPost。未設定はON。運営がトグル）
 let imgGeo = { mode:"off", lat:null, lng:null, radius:200 };   // 画像の位置しばり（meta/imgGeo）。off=なし／any=GPS必須／near=指定地点からradius以内
+const IMG_WARN_DEFAULT = "エロ・グロ・法律違反はダメです。\n投稿は運営がいつでも削除します。\n\nこれでよければ写真を選んでください。";
+let imgWarn = IMG_WARN_DEFAULT;   // 画像投稿前に出す警告文（meta/imgWarn。運営が編集）
+function imgWarnText(){ return (imgWarn && imgWarn.trim()) ? imgWarn : IMG_WARN_DEFAULT; }
 let boardCount = 0;               // 現在ボードの累積投稿数（boards/{id}/count）
 let boardSubs = [];               // 現在ボードの購読解除関数
 function bpath(sub){ return "boards/" + boardId + "/" + sub; }   // 現在ボードのパス
@@ -2048,7 +2062,7 @@ const photoInput = document.getElementById("photoInput");
 document.getElementById("photoBtn").addEventListener("click", ()=>{
   if(!imgPostOn){ toast("いまは画像投稿を停止しています"); return; }   // 運営がOFFにしている
   // 押したら必ず一度表示する注意（OKした人だけファイル選択へ）
-  if(!confirm("【テスト運用中】\nエロ・グロ・法律違反はダメです。\n投稿は運営がいつでも削除します。\n\nこれでよければ写真を選んでください。")) return;
+  if(!confirm(imgWarnText())) return;
   photoInput.click();
 });
 // 画像投稿の可否を画面へ反映（ボタンの見た目＋運営バナーの表記）
@@ -2364,15 +2378,16 @@ function renderAdminBar(){
   if(!admin){ bar.hidden = true; return; }
   bar.innerHTML =
     '<span class="ab-title">運営モード</span>'+
-    '<span class="ab-meta">ボード'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
+    '<span class="ab-meta">板'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
     '<span class="ab-sep"></span>'+
-    '<button class="ab-act" type="button" onclick="toggleImgPost()">画像投稿 '+(imgPostOn?'ON':'OFF')+'</button>'+
-    '<button class="ab-act" type="button" onclick="openImgGeo()">画像GPS'+(imgGeo.mode==="off"?"":"●")+'</button>'+
+    '<button class="ab-act" type="button" onclick="openImgGeo()">画像設定'+((!imgPostOn||imgGeo.mode!=="off")?' ●':'')+'</button>'+
     '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
     '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
+    '<span class="ab-sep"></span>'+
     '<button class="ab-act" type="button" onclick="openHistory()">履歴</button>'+
-    '<button class="ab-act" type="button" onclick="exportFullLookNow()">見たまま確認DL</button>'+
+    '<button class="ab-act" type="button" onclick="exportFullLookNow()">見たままDL</button>'+
     '<button class="ab-act" type="button" onclick="archiveAndAdvance()">保存して新ボード</button>'+
+    '<span class="ab-sep"></span>'+
     '<button class="ab-act ab-exit" type="button" onclick="exitAdmin()">終了</button>';
   bar.hidden = false;
   if(!bar.style.left && !LS.get("fg_adminbarpos")){   // 初回だけ上中央へ（以後はドラッグ位置を保存・復元）
@@ -2522,6 +2537,10 @@ function listen(){
     imgGeo = (v && typeof v==="object")
       ? { mode: (v.mode==="any"||v.mode==="near")?v.mode:"off", lat:(typeof v.lat==="number"?v.lat:null), lng:(typeof v.lng==="number"?v.lng:null), radius:(typeof v.radius==="number"?v.radius:200) }
       : { mode:"off", lat:null, lng:null, radius:200 };
+  });
+  onValue(ref(db, "meta/imgWarn"), snap=>{   // 画像投稿前の警告文（未設定はデフォルト）
+    const v = snap && snap.val();
+    imgWarn = (typeof v==="string" && v.trim()) ? v : IMG_WARN_DEFAULT;
   });
   // 色パレット（中間色をカンマ区切り文字列で共有）。未設定=デフォルト4色、空文字=中間色なし
   onValue(ref(db, "meta/palette"), snap=>{
@@ -3535,10 +3554,12 @@ function imgGeoSyncNear(){
 }
 function openImgGeo(){
   if(!admin) return;
+  const onChk=document.getElementById("imgOnChk"); if(onChk) onChk.checked = imgPostOn;
   document.querySelectorAll('input[name="geoMode"]').forEach(r=> r.checked = (r.value===imgGeo.mode));
   document.getElementById("geoLat").value = (imgGeo.lat!=null)?imgGeo.lat:"";
   document.getElementById("geoLng").value = (imgGeo.lng!=null)?imgGeo.lng:"";
   document.getElementById("geoRadius").value = imgGeo.radius||200;
+  const ta=document.getElementById("imgWarnTa"); if(ta) ta.value = imgWarn || IMG_WARN_DEFAULT;
   imgGeoSyncNear();
   imgGeoMask.classList.add("show");
 }
@@ -3548,11 +3569,14 @@ async function saveImgGeo(){
   const lng = parseFloat(document.getElementById("geoLng").value);
   const radius = Math.max(10, parseInt(document.getElementById("geoRadius").value,10)||200);
   if(mode==="near" && (!isFinite(lat)||!isFinite(lng))){ toast("中心の緯度・経度を入れてね（「現在地」ボタンが便利）"); return; }
-  const payload = (mode==="near") ? { mode, lat, lng, radius } : { mode };
-  try{ await set(ref(db,"meta/imgGeo"), payload);
-    toast("画像の位置しばりを保存：" + ({off:"なし", any:"GPS必須", near:"指定地点から"+radius+"m以内"}[mode]));
+  const geo = (mode==="near") ? { mode, lat, lng, radius } : { mode };
+  const on = !!(document.getElementById("imgOnChk")||{}).checked;
+  const warn = (document.getElementById("imgWarnTa").value||"").slice(0,400);
+  try{
+    await update(ref(db), { "meta/imgPost": on, "meta/imgGeo": geo, "meta/imgWarn": (warn.trim()? warn : IMG_WARN_DEFAULT) });
+    toast("画像投稿の設定を保存しました（受付"+(on?"ON":"OFF")+"・位置"+({off:"なし",any:"GPS必須",near:radius+"m以内"}[mode])+"）");
     imgGeoMask.classList.remove("show");
-  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/imgGeo の許可が必要です）"); }
+  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/imgGeo・meta/imgWarn の許可が必要です）"); }
 }
 function geoUseHere(){
   if(!navigator.geolocation){ toast("この端末では現在地を取得できません"); return; }
