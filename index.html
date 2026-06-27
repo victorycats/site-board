@@ -1351,12 +1351,24 @@ function rectHitsFloatNotes(rx,ry,rw,rh){   // 浮遊半紙（枠外）と矩形
   }
   return false;
 }
-function rectHitsOtherFrames(rx,ry,rw,rh, exclId){   // 他の予約枠の矩形（確保領域）と重なるか
+function frameClaimRects(exclId){   // 各予約枠の「現在の確保矩形」を配列で返す。終了枠は実枚数まで収縮した実サイズ（＝空いた予約スペースは解放）
+  const fn = buildFrameNotes(); const out=[];
   for(const [id,r] of reservations){ if(id===exclId || !r) continue;
-    const a=(r.rx||0), b=a+(r.rw||0), c=(r.ry||0), d=c+(r.rh||0);
-    if(rx < b && rx+rw > a && ry < d && ry+rh > c) return true;
+    const st=rsvState(r), cnt=(fn.get(id)||[]).length;
+    if(st==="ended" && cnt===0) continue;                                  // 0件で消える終了枠は占有なし
+    const a=(r.rx||0), c=(r.ry||0);
+    const bw=(st==="ended") ? rsvEndedWpx(r,cnt)/WALL_W : (r.rw||0);        // 終了枠は収縮後の実幅/実高で判定
+    const bh=(st==="ended") ? rsvContentHpx(r,cnt)/WALL_H : (r.rh||0);
+    out.push({ a, c, b:a+bw, d:c+bh });
   }
+  return out;
+}
+function rectHitsClaims(rx,ry,rw,rh, claims){
+  for(const k of claims){ if(rx < k.b && rx+rw > k.a && ry < k.d && ry+rh > k.c) return true; }
   return false;
+}
+function rectHitsOtherFrames(rx,ry,rw,rh, exclId){   // 他の予約枠の確保領域（終了枠は収縮後）と重なるか
+  return rectHitsClaims(rx,ry,rw,rh, frameClaimRects(exclId));
 }
 function rsvCanGrow(r){   // 幾何上まだ伸ばせる余地があるか（衝突は投稿時に最終判定）
   const cols=rsvCols(r), rows=rsvMaxRows(r);
@@ -2760,6 +2772,29 @@ notesEl.addEventListener("click", e=>{
   setActive(note.dataset.id);
 });
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && placing) cancelPlacing(); });
+
+// キーボードショートカット（半紙を開いている時のみ・描画ツール）。[ 細く／] 太く／B ペン先／P 黒／E 白／1〜7 パレット左から
+document.addEventListener("keydown", e=>{
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const ae = document.activeElement;
+  if(ae && (ae.tagName==="INPUT" || ae.tagName==="TEXTAREA" || ae.tagName==="SELECT" || ae.isContentEditable)) return;   // 入力中（名前欄など）は無効
+  if(!document.querySelector(".float-desk:not(.collapsed)")) return;   // 半紙（描画パッド）を開いている時だけ有効
+  const stepSize = d=>{ const sl=document.getElementById("size"); if(!sl) return; sl.value=Math.max(0, Math.min(11,(parseInt(sl.value,10)||0)+d)); sl.dispatchEvent(new Event("input",{bubbles:true})); };
+  const pickColor = hex=>{ const sw=document.querySelector('#swatchScroll .swatch[data-color="'+hex+'"]'); if(sw) sw.click(); };
+  const pickSwatch = i=>{ const sws=document.querySelectorAll("#swatchScroll .swatch"); if(sws[i]) sws[i].click(); };
+  const cycleBrush = ()=>{ const o=[...document.querySelectorAll(".brush-opt")]; if(!o.length) return; const i=o.findIndex(x=>x.classList.contains("active")); o[(i+1+o.length)%o.length].click(); };
+  switch(e.key){
+    case "[": e.preventDefault(); stepSize(-1); break;                       // 細く
+    case "]": e.preventDefault(); stepSize(+1); break;                       // 太く
+    case "b": case "B": e.preventDefault(); cycleBrush(); break;             // ペン先変更
+    case "p": case "P": e.preventDefault(); pickColor("#1a1714"); break;     // 黒（墨）
+    case "e": case "E": e.preventDefault(); pickColor("#f7f4ec"); break;     // 白（半紙色）
+    case "g": case "G": { e.preventDefault(); const b=document.getElementById("fillBtn"); if(b) b.click(); break; }   // 塗りつぶし
+    case ";": { e.preventDefault(); const b=document.getElementById("bigBtn"); if(b) b.click(); break; }              // 拡大（表示1.5倍）
+    case "1": case "2": case "3": case "4": case "5": case "6": case "7":
+      e.preventDefault(); pickSwatch(parseInt(e.key,10)-1); break;           // パレット左からN番目
+  }
+});
 document.addEventListener("keydown", e=>{
   if((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key==="z" || e.key==="Z")){
     const t = e.target;
@@ -4879,11 +4914,12 @@ function viewCenterFrac(){
 // グリッド走査で「既存半紙と重ならない空き」を探す。nearが指定されればそれに最も近い空きを返す
 function rsvFindSpot(rw, rh, nearFx, nearFy){
   const step=0.04, cands=[];
+  const claims = frameClaimRects(null);   // 走査前に1回だけ算出（終了枠は収縮後）
   for(let y=0; y<=1-rh+1e-9; y+=step){
     for(let x=0; x<=1-rw+1e-9; x+=step){
       const rx=Math.min(x,1-rw), ry=Math.min(y,1-rh);
       if(postsInRect(rx,ry,rw,rh)) continue;
-      if(rectHitsOtherFrames(rx,ry,rw,rh, null)) continue;   // 既存のお題枠領域も避ける（重なる枠は作らない）
+      if(rectHitsClaims(rx,ry,rw,rh, claims)) continue;   // 既存のお題枠領域も避ける（重なる枠は作らない）
       cands.push({rx,ry});
     }
   }
