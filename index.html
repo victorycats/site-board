@@ -4238,7 +4238,7 @@ document.getElementById("zoomRange").addEventListener("input", e=> zoomTo(+e.tar
   zv.addEventListener("click", reset);
   zv.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); reset(); } });
 })();
-const zoomStep = ()=> isMobileView() ? 0.2 : 0.1;   // モバイルはピンチが重いので、ボタン1回で20%（PCは従来の10%）
+const zoomStep = ()=> isMobileView() ? 0.15 : 0.1;   // モバイルはピンチが重いので、ボタン1回で15%（PCは従来の10%）
 document.getElementById("zoomIn").addEventListener("click", ()=> zoomTo(zoom+zoomStep()));
 document.getElementById("zoomOut").addEventListener("click", ()=> zoomTo(zoom-zoomStep()));
 window.addEventListener("resize", ()=>{ computeZoomMin(); drawMinimap(); });
