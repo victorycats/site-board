@@ -1111,12 +1111,12 @@
       <canvas id="miniCanvas"></canvas>
     </div>
     <div class="meguri">
+      <button id="meguriMode" class="meguri-mode" title="めぐり順を切替（おまかせ／そ順／新順／古順）">順 <span class="mm-cur">おまかせ</span></button>
       <div class="meguri-row">
         <button id="prevNote" title="前の半紙へ" aria-label="前の半紙へ">◀</button>
         <span class="lab"><span class="lab-pc">半紙めぐり<span class="fresh-badge" id="freshBadge" style="display:none">0</span></span><span class="lab-mb"><span class="l1">半紙</span><span class="l2">めぐり</span></span></span>
         <button id="nextNote" title="次の半紙へ" aria-label="次の半紙へ">▶</button>
       </div>
-      <button id="meguriMode" class="meguri-mode" title="めぐり順を切替（おまかせ／そ順／新順／古順）">順 <span class="mm-cur">おまかせ</span></button>
     </div>
     <div class="zoom-block">
       <div class="zoom-ctl">
@@ -4724,6 +4724,22 @@ function gotoOrdered(step){
   const useZoom = navPrelude();
   const ids = meguriOrderedList();
   if(!ids.length){ toast("まだ半紙がないよ"); return; }
+  if(meguriMode==="new" && step>0){   // 新順×▶：新着（未読）が残っていれば、順送りより先に新しい方を優先案内
+    const unread = new Set(unreadList().map(([uid])=>uid));
+    const cand = ids.find(nid=> unread.has(nid) && nid!==focusId);
+    if(cand){
+      const p = posts.get(cand);
+      if(p){
+        meguriFresh = false;
+        navStack = navStack.slice(0, navIdx+1);
+        if(navStack[navStack.length-1] !== cand) navStack.push(cand);
+        navIdx = navStack.length-1;
+        meguriNoteRecent(cand);
+        markSeen(cand, p); centerOnNote(cand, p, useZoom, false);
+        return;
+      }
+    }
+  }
   let np;
   if(meguriFresh){ np = (step<0) ? ids.length-1 : 0; meguriFresh=false; }     // モード変更直後は先頭(▶)/末尾(◀)から
   else { const pos = focusId ? ids.indexOf(focusId) : -1; np = (pos<0) ? (step<0?ids.length-1:0) : pos+step; }
