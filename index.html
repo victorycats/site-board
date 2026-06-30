@@ -3019,7 +3019,7 @@ function toggleKbdHelp(force){
       + '<div class="kbd-guide">'
       +   '<p><b>① 描いて貼る</b><br>「半紙」を開いて筆で一枚書き、「貼る」で板に貼れます。名前は空欄だとランダムになります。</p>'
       +   '<p><b>② 道具</b><br>ペン先（本筆・丸筆・平筆・にじみ）／色／太さを選べます。「塗」で塗りつぶし、「消」で全消し、「戻」でひとつ戻す、「拡」で表示だけ大きく。</p>'
-      +   '<p><b>③ 板を見てまわる</b><br>ドラッグで移動、ズーム（＋－ボタンやピンチ）と右下のミニマップで全体を行き来。「半紙めぐり」の◀▶で一枚ずつ見られます（中央の「順」ボタンでめぐる順番をおまかせ／そ順／新順／古順に切替）。◀▶の間のボタンは、新順のときは「新順の中で一番HOTな一枚」へ、それ以外のときは「あなたの未読リストの先頭」へジャンプします。めぐり中に半紙をクリック／タップすると、その一枚を最大までズーム。気に入ったら「そうだね」。</p>'
+      +   '<p><b>③ 板を見てまわる</b><br>ドラッグで移動、ズーム（＋－ボタンやピンチ）と右下のミニマップで全体を行き来。「半紙めぐり」の◀▶で一枚ずつ見られます（中央の「順」ボタンでめぐる順番をおまかせ／そ順／新順／古順に切替）。◀▶の間のボタンは「新着の中で一番HOTな一枚」へ、◀▶は新順のときは新着を順に案内します。めぐり中に半紙をクリック／タップすると、その一枚を最大までズーム。気に入ったら「そうだね」。</p>'
       +   '<p><b>④ お題枠</b><br>「お題枠を予約」でテーマ付きの枠を作れます。枠の中に描かれた半紙は自動で整列します。</p>'
       +   '<p class="kbd-note">※ 連続投稿には少し間隔（クールダウン）があります。わいせつ・グロ・せいじ・法律違反はだめ</p>'
       + '</div>'
@@ -4757,7 +4757,7 @@ function updateMeguriModeLabel(){
   const c = el.querySelector(".mm-cur"); if(c) c.textContent = (meguriMode==="uid") ? (meguriUidCode||"投稿者") : MEGURI_LABEL[meguriMode];
   el.classList.toggle("on", meguriMode!=="auto");
   const lab = document.querySelector(".meguri .lab");   // 新順は▶がもう新着優先なので、中央ボタンの案内文を「話題の1枚」に
-  if(lab) lab.title = (meguriMode==="new") ? "新順の中で一番HOTな一枚へ" : "あなたの未読リストの先頭へ";
+  if(lab) lab.title = "新着の中で一番HOTな一枚へ";
 }
 function cycleMeguriMode(){
   if(meguriMode==="uid"){ meguriMode="auto"; meguriUid=null; meguriUidCode=""; }   // 投稿者ツアーから抜ける
@@ -4826,8 +4826,7 @@ function discoveryJump(){
 // 中央タップの本体：未読があれば「伸び率（単位時間あたりのそうだね）が最高の未読」へ一発。無ければおまかせ発見。
 // ▶＝最古から順送り / 中央＝未読の中の“いま一番伸びてる推し”。選び方が違うので被らない。
 function centerMeguri(){
-  if(meguriMode==="new"){ discoveryJump(); return; }   // 新順×▶はもう新着優先を持っているので、ここは「話題の1枚」担当にして役割を分ける
-  const u = unreadAllList();   // 半紙＋枠（並列）
+  const u = unreadAllList();   // 半紙＋枠（並列）。新着の中で一番ホットな1枚へ＝▶（時系列で順に）とは役割が分かれる
   if(!u.length){ discoveryJump(); return; }
   const useZoom = navPrelude();
   const now = Date.now();
