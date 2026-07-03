@@ -916,6 +916,26 @@
   .note.found{outline:5px solid var(--shu);outline-offset:2px;z-index:25;animation:foundpulse 4s ease-out forwards;transition:transform .18s ease}
   .note.peek-straight{transform:rotate(0deg) !important}              /* のぞき見中だけ正立（書いたまま＝読みやすい） */
   .note.peek-straight .tape{top:-9px;bottom:auto}                     /* 正立に合わせてテープも上へ */
+  /* 半紙を選んでいる時（.sel＝タップ／.found＝めぐりで来た／.peek-straight＝最大化中）だけ出るフロートボタン */
+  .note-fab{
+    position:absolute;top:-11px;z-index:31;width:27px;height:27px;border-radius:50%;
+    border:none;background:#fffaf0;color:var(--ink,#1a1714);
+    display:none;align-items:center;justify-content:center;font-size:13px;line-height:1;cursor:pointer;
+    box-shadow:0 2px 7px rgba(0,0,0,.35);transform:rotate(calc(var(--ang,0deg) * -1));transform-origin:center;padding:0;
+  }
+  .note-fab:active{transform:rotate(calc(var(--ang,0deg) * -1)) scale(.92)}
+  .note-share{left:-11px}
+  .note-max{right:-11px}
+  .note.sel .note-fab, .note.found .note-fab, .note.peek-straight .note-fab{display:flex}
+  .note.peek-straight .note-fab{transform:none}                       /* 正立中はボタンも正立のまま */
+  .note.peek-straight .note-fab:active{transform:scale(.92)}
+  .note.peek-straight .note-max{display:none}                          /* 既に最大化済みなので隠す */
+  .note.peek-straight .note-share{
+    background:var(--shu);color:#fff;
+    box-shadow:0 0 0 3px rgba(181,52,31,.28),0 3px 12px rgba(0,0,0,.4);
+    animation:shareGlow 1.6s ease-in-out infinite;                     /* 最大化中は共有ボタンを強調 */
+  }
+  @keyframes shareGlow{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
   @keyframes foundpulse{
     0%{outline-color:var(--shu)}
     8%{outline-color:rgba(181,52,31,.2)}
@@ -1394,6 +1414,18 @@ let lastPostAt = (function(){ try{ return +localStorage.getItem("fg_lastPost")||
 /* ---------- ボード切替（満杯で保存→新ボード） ---------- */
 const BOARD_LIMIT = 300;          // この枚数でボード満杯（サーバ側ルールと一致させること）
 let boardId = null;               // 現在のボード番号（meta/board）
+// ===== 共有リンクからの直リンク（?board=N&note=ID）＝その半紙へ直接ジャンプ =====
+const DEEPLINK_PARAMS = new URLSearchParams(location.search);
+const dlBoard = (()=>{ const v=parseInt(DEEPLINK_PARAMS.get("board"),10); return isFinite(v) ? v : null; })();
+const dlNote  = DEEPLINK_PARAMS.get("note") || null;
+let dlMismatchShown = false;
+function noteShareUrl(id){   // その半紙「だけ」に飛べる共有用URL（板番号＋半紙IDをクエリに載せる）
+  const u = new URL(location.href);
+  u.search = ""; u.hash = "";
+  if(boardId!=null) u.searchParams.set("board", boardId);
+  u.searchParams.set("note", id);
+  return u.toString();
+}
 let imgPostOn = true;             // 画像投稿の可否（meta/imgPost。未設定はON。運営がトグル）
 let imgGeo = { mode:"off", lat:null, lng:null, radius:200 };   // 画像の位置しばり（meta/imgGeo）。off=なし／any=GPS必須／near=指定地点からradius以内
 const IMG_WARN_DEFAULT = "エロ・グロ・法律違反はダメです。\n投稿は運営がいつでも削除します。\n\nこれでよければ写真を選んでください。";
@@ -2577,8 +2609,10 @@ function render(){
     const zr = zOverride.has(p.id) ? `;z-index:${zOverride.get(p.id)}` : "";
     const landCls = (fp ? (oriOf(fp.r)==="l") : !!p.land) ? ' land' : '';   // 枠内は枠の向きに従う（半紙のp.landとズレていても枠に揃える）
     return `
-    <div class="note${mine}${rotoring}${fresh}${flippedCls}${landCls}${fp?' in-frame':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;transform:${fp?'none':`rotate(${ang}deg)`}${zr}">
+    <div class="note${mine}${rotoring}${fresh}${flippedCls}${landCls}${fp?' in-frame':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;--ang:${fp?0:ang}deg;transform:${fp?'none':`rotate(${ang}deg)`}${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
+      <button type="button" class="note-fab note-share" title="Xでシェア" aria-label="Xでシェア" onclick="event.stopPropagation(); shareNote('${p.id}')">↗</button>
+      <button type="button" class="note-fab note-max" title="向きを直して最大化" aria-label="最大化" onclick="event.stopPropagation(); maximizeNote('${p.id}')">⤢</button>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
       ${ (admin && !EXPORT_VISITOR) ? `<div class="who-uid" title="同一性タグ ${idtg.code}（個人特定不可）"><span class="uid-dot" style="background:hsl(${idtg.hue} 62% 55%)"></span><span class="uid-code">${idtg.code}</span></div>` : '' }
@@ -4964,6 +4998,43 @@ function exitPeek(){
   drawMinimap();
 }
 function togglePeek(){ peeking ? exitPeek() : enterPeek(); }
+// ===== 半紙右上「最大化」ボタン：向きを直して最大までズーム（.sel／.found いずれの選択状態からでも呼べる） =====
+function maximizeNote(id){
+  const p = posts.get(id); if(!p) return;
+  if(peeking && focusId===id) return;   // 既に最大化中なら何もしない
+  raiseNote(id);
+  setActive(id);
+  focusId = id;      // centerOnNote のパン演出は挟まず、今の見え方を「戻り先」にしてそのまま最大化
+  enterPeek();
+}
+window.maximizeNote = maximizeNote;
+// ===== 半紙左上「共有」ボタン：画像をファイルとして共有（対応端末はXアプリの投稿画面に直接添付される） =====
+async function shareNote(id){
+  const p = posts.get(id); if(!p) return;
+  const el = notesEl.querySelector('.note[data-id="'+id+'"] .note-img');
+  const src = (el && el.src) || imgCache.get(id) || (isSafePath(p.imgPath) ? imgUrl(p.imgPath) : null);
+  if(!src){ toast("画像が読み込まれてから共有してね"); return; }
+  const text = "「ふたば(偽)お習字」で描きました";
+  const shareUrl = noteShareUrl(id);   // この半紙「だけ」に飛べるリンク
+  try{
+    if(navigator.share){
+      try{
+        const res = await fetch(src);
+        const blob = await res.blob();
+        const file = new File([blob], "oshuji.jpg", { type: blob.type || "image/jpeg" });
+        if(navigator.canShare && navigator.canShare({ files:[file] })){
+          await navigator.share({ files:[file], text, url: shareUrl });
+          return;
+        }
+      }catch(e){ /* 画像取得に失敗したらテキスト共有へフォールバック */ }
+      await navigator.share({ text, url: shareUrl });
+      return;
+    }
+  }catch(e){ if(e && e.name==="AbortError") return; /* 共有をキャンセルしただけ＝何もしない */ }
+  const tw = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + "&url=" + encodeURIComponent(shareUrl);
+  window.open(tw, "_blank", "noopener");   // Web Share非対応：Xの投稿画面をテキストで開く（画像は各自添付）
+}
+window.shareNote = shareNote;
 
 let peekDownX=0, peekDownY=0, peekDownT=0, peekArmed=false;
 notesEl.addEventListener("pointerdown", e=>{
@@ -5000,6 +5071,27 @@ function focusReachable(id, p, z){
 }
 function initialFocus(){
   if(didInitialFocus) return;
+  if(dlNote){   // 共有リンク経由：可能ならその半紙へ直接ジャンプ（通常のランダム／未読着地より優先）
+    if(dlBoard!=null && boardId!=null && boardId!==dlBoard){
+      if(!dlMismatchShown){ dlMismatchShown=true; toast("この半紙があった回はもう入れ替わっています。今の回を表示するね", 3600); }
+      // 板が別物＝この直リンクは成立しない → 下の通常ロジックへフォールバック
+    } else {
+      const p = posts.get(dlNote);
+      if(p && !(p.hidden && !admin)){
+        didInitialFocus = true;
+        navStack=[dlNote]; navIdx=0;
+        centerOnNote(dlNote, p, 1.3, false);
+        requestAnimationFrame(()=> requestAnimationFrame(()=> maximizeNote(dlNote)));   // 着地後、向きを直して最大化まで
+        return;
+      }
+      if(p && p.hidden && !admin){
+        if(!dlMismatchShown){ dlMismatchShown=true; toast("この半紙は現在表示されていません", 3200); }
+        // 削除済み等で見えない → 下の通常ロジックへフォールバック
+      } else {
+        return;   // まだこのIDが届いていないだけかもしれない → 次の追加を待つ（ランダム着地はしない）
+      }
+    }
+  }
   const full = visibleByRecency();
   if(!full.length) return;       // まだ無ければ何もしない（次の追加で再トライ）
   didInitialFocus = true;
