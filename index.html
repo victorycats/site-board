@@ -2612,8 +2612,8 @@ function render(){
     return `
     <div class="note${mine}${rotoring}${fresh}${flippedCls}${landCls}${fp?' in-frame':''}${(peeking && p.id===focusId)?' peek-straight':''} ${p.hidden?'is-hidden':''}" data-id="${p.id}" style="left:${left}px;top:${top}px;--ang:${fp?0:ang}deg;transform:${fp?'none':`rotate(${ang}deg)`}${zr}">
       <span class="tape" style="--r:${tapeColor()}deg"></span>
-      <button type="button" class="note-fab note-share" title="共有" aria-label="共有" onclick="event.stopPropagation(); shareNote('${p.id}')">↗</button>
-      <button type="button" class="note-fab note-max" title="向きを直して最大化" aria-label="最大化" onclick="event.stopPropagation(); maximizeNote('${p.id}')">⤢</button>
+      <button type="button" class="note-fab note-share" title="共有" aria-label="共有" onclick="event.stopPropagation(); shareNote('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" width="60%" height="60%"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="9 7 17 7 17 15"/></svg></button>
+      <button type="button" class="note-fab note-max" title="向きを直して最大化" aria-label="最大化" onclick="event.stopPropagation(); maximizeNote('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" width="65%" height="65%"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
       <div class="imgwrap">${hiddenBadge}${imgHtml}</div>
       <div class="who">${esc(p.name)||"としあき"}</div>
       ${ (admin && !EXPORT_VISITOR) ? `<div class="who-uid" title="同一性タグ ${idtg.code}（個人特定不可）"><span class="uid-dot" style="background:hsl(${idtg.hue} 62% 55%)"></span><span class="uid-code">${idtg.code}</span></div>` : '' }
