@@ -4132,6 +4132,19 @@ async function openHistory(){
     });
     body.innerHTML = html;
     body.querySelectorAll(".hist-redo").forEach(btn=> btn.addEventListener("click", ()=> reoutputBoard(+btn.dataset.board, btn)));
+    const manualEl = document.getElementById("histManual"); if(manualEl) manualEl.remove();   // 二重挿入防止
+    const manual = document.createElement("div");
+    manual.id = "histManual";
+    manual.innerHTML = '<div class="hist-h">板番号を指定して再出力</div>'
+      + '<div class="pal-fixed" style="line-height:1.6">履歴に出てこない古い板（記録が無い時代の板など）も、番号が分かれば直接再出力できます。データがFirebaseに残っていれば作成できます。</div>'
+      + '<div class="geo-line"><input id="histManualNum" type="number" min="1" step="1" placeholder="板番号"><button type="button" class="pal-add" id="histManualBtn">再出力</button></div>';
+    body.appendChild(manual);
+    const mb = document.getElementById("histManualBtn");
+    if(mb) mb.addEventListener("click", ()=>{
+      const n = parseInt(document.getElementById("histManualNum").value, 10);
+      if(!n || n<1){ toast("板番号を入力してね"); return; }
+      reoutputBoard(n, mb);
+    });
   }catch(e){ console.error(e); body.innerHTML = '<div class="hist-empty">読み込みに失敗しました</div>'; }
 }
 window.openHistory = openHistory;
