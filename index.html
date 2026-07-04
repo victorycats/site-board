@@ -585,13 +585,16 @@
   .ag-li{font-size:12.5px;line-height:1.55;margin:2px 0;padding-left:1em;text-indent:-1em}
   .ag-p{font-size:12.5px;line-height:1.6;margin:3px 0}
   .ag-sp{height:6px}
+  .geo-card{width:min(460px,calc(100vw - 28px))}
   .geo-row{margin:7px 0;font-size:13px}
-  .geo-row label{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .geo-row label{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
+  .geo-row input[type=radio]{flex:0 0 auto;margin-top:3px}
   .geo-near{margin:6px 0 2px;padding:9px;border:1px solid rgba(90,70,40,.25);border-radius:8px;background:rgba(0,0,0,.03)}
   .geo-near.dim{opacity:.4;pointer-events:none}
-  .geo-line{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
-  .geo-line input[type=number]{flex:1;min-width:0;padding:6px;border:1px solid rgba(90,70,40,.35);border-radius:6px;font-size:13px}
+  .geo-line{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px;flex-wrap:wrap}
+  .geo-line input[type=number]{flex:1;min-width:70px;padding:6px;border:1px solid rgba(90,70,40,.35);border-radius:6px;font-size:13px}
   .geo-line span{color:var(--ink-faint);white-space:nowrap}
+  .usage-line{font-size:12.5px;line-height:1.7;color:var(--ink-faint)}
   .geo-sec{margin:12px 0 4px;font-size:11px;font-weight:700;color:var(--shu);letter-spacing:.06em}
   .geo-warn{width:100%;min-height:84px;resize:vertical;padding:8px;border:1px solid rgba(90,70,40,.35);border-radius:8px;font-size:13px;font-family:"Shippori Mincho",serif;line-height:1.5;box-sizing:border-box}
   .wall.placing{cursor:copy}
@@ -1204,7 +1207,7 @@
 </div>
 
 <div class="login-mask" id="imgGeoMask">
-  <div class="login-card">
+  <div class="login-card geo-card">
     <div class="login-title">画像投稿の設定</div>
 
     <div class="geo-sec">受付</div>
@@ -1225,7 +1228,7 @@
 
     <div class="geo-sec">通信量（Supabase転送量に応じて半紙画像の先読みを自動で絞る）</div>
     <div class="pal-fixed" style="line-height:1.6">実際にネットワークから読み込んだ分だけを概算で集計（ブラウザキャッシュ命中はカウントしません）。上限の70%で「節約」、90%で「緊急」になり、寄らないと画像が出ない・先読みが減る、という形で自動的に転送量を抑えます。上限を空欄/0にすると自動節約はオフ。</div>
-    <div id="usageView" class="geo-line" style="font-size:12.5px"></div>
+    <div id="usageView" class="usage-line"></div>
     <div class="geo-line"><span>上限</span><input id="usageCap" type="number" min="0" step="100" placeholder="MB（例:5000）"><span>MB</span><button type="button" class="pal-add" id="usageReset">使用量リセット</button></div>
 
     <div class="login-btns">
