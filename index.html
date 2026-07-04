@@ -5022,7 +5022,11 @@ async function shareNote(id){
       try{
         const res = await fetch(src);
         const blob = await res.blob();
-        const file = new File([blob], "oshuji.jpg", { type: blob.type || "image/jpeg" });
+        const mime = blob.type || "image/jpeg";
+        const ext = mime.includes("webp") ? "webp" : mime.includes("png") ? "png" : "jpg";
+        const safeId = String(id).replace(/[^A-Za-z0-9_-]/g,"");   // ファイル名に使えない文字を除去
+        const fname = "oshuji_" + (boardId!=null?boardId+"_":"") + safeId + "." + ext;   // 板番号＋半紙IDで一意化
+        const file = new File([blob], fname, { type: mime });
         if(navigator.canShare && navigator.canShare({ files:[file] })){
           await navigator.share({ files:[file], text, url: shareUrl });
           return;
