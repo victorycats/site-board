@@ -1228,6 +1228,7 @@
 
     <div class="geo-sec">通信量（Supabase転送量に応じて半紙画像の先読みを自動で絞る）</div>
     <div class="pal-fixed" style="line-height:1.6">実際にネットワークから読み込んだ分だけを概算で集計（ブラウザキャッシュ命中はカウントしません）。上限の70%で「節約」、90%で「緊急」になり、寄らないと画像が出ない・先読みが減る、という形で自動的に転送量を抑えます。上限を空欄/0にすると自動節約はオフ。</div>
+    <div class="geo-row"><label><input type="checkbox" id="lazyGateChk">最大まで引いた時は個別の半紙を読み込まない（節約・OFFなら常に読み込む）</label></div>
     <div id="usageView" class="usage-line"></div>
     <div class="geo-line"><span>上限</span><input id="usageCap" type="number" min="0" step="100" placeholder="MB（例:5000）"><span>MB</span><button type="button" class="pal-add" id="usageReset">使用量リセット</button></div>
 
@@ -1432,6 +1433,7 @@ function noteShareUrl(id){   // その半紙「だけ」に飛べる共有用URL
 }
 let imgPostOn = true;             // 画像投稿の可否（meta/imgPost。未設定はON。運営がトグル）
 let imgGeo = { mode:"off", lat:null, lng:null, radius:200 };   // 画像の位置しばり（meta/imgGeo）。off=なし／any=GPS必須／near=指定地点からradius以内
+let lazyGateOn = false;   // 最大ズームアウト時に個別の半紙読み込みを控えるか（meta/lazyGate。運営が切替。今は既定オフ＝常に読み込む）
 const IMG_WARN_DEFAULT = "エロ・グロ・法律違反はダメです。\n投稿は運営がいつでも削除します。\n\nこれでよければ写真を選んでください。";
 let imgWarn = IMG_WARN_DEFAULT;   // 画像投稿前に出す警告文（meta/imgWarn。運営が編集）
 function imgWarnText(){ return (imgWarn && imgWarn.trim()) ? imgWarn : IMG_WARN_DEFAULT; }
@@ -2499,7 +2501,7 @@ function scheduleLazy(){ if(lazyScheduled) return; lazyScheduled=true; requestAn
 function ensureImagesInView(){
   if(!notesEl) return;
   const tier = lazyTier();
-  // if(NOTE_W*zoom < tier.minPx) return;   // ※一旦無効化：最大まで引いた状態でも読み込みを止めない（実験中）
+  if(lazyGateOn && NOTE_W*zoom < tier.minPx) return;   // 最大まで引いた状態は保留（運営設定でON時のみ）。通信量がひっ迫していれば通信量側の絞りは別途効く
   const marginX = scrollEl.clientWidth*tier.marginFrac, marginY = scrollEl.clientHeight*tier.marginFrac;  // 先読みを控えめに（緊急時は先読みなし）
   const x0 = scrollEl.scrollLeft/zoom - GUT_X - marginX/zoom;
   const x1 = (scrollEl.scrollLeft+scrollEl.clientWidth)/zoom - GUT_X + marginX/zoom;
@@ -2694,6 +2696,9 @@ function listen(){
     imgGeo = (v && typeof v==="object")
       ? { mode: (v.mode==="any"||v.mode==="near")?v.mode:"off", lat:(typeof v.lat==="number"?v.lat:null), lng:(typeof v.lng==="number"?v.lng:null), radius:(typeof v.radius==="number"?v.radius:200) }
       : { mode:"off", lat:null, lng:null, radius:200 };
+  });
+  onValue(ref(db, "meta/lazyGate"), snap=>{   // 最大ズームアウト時の読み込み抑制（未設定は既定オフ）
+    lazyGateOn = !!(snap && snap.val()===true);
   });
   onValue(ref(db, "meta/imgWarn"), snap=>{   // 画像投稿前の警告文（未設定はデフォルト）
     const v = snap && snap.val();
@@ -3731,6 +3736,7 @@ function openImgGeo(){
   document.getElementById("geoLng").value = (imgGeo.lng!=null)?imgGeo.lng:"";
   document.getElementById("geoRadius").value = imgGeo.radius||200;
   const ta=document.getElementById("imgWarnTa"); if(ta) ta.value = imgWarn || IMG_WARN_DEFAULT;
+  const lg=document.getElementById("lazyGateChk"); if(lg) lg.checked = lazyGateOn;
   const uc=document.getElementById("usageCap"); if(uc) uc.value = usageCapMB>0 ? usageCapMB : "";
   updateUsageUI();
   imgGeoSyncNear();
@@ -3745,13 +3751,14 @@ async function saveImgGeo(){
   const geo = (mode==="near") ? { mode, lat, lng, radius } : { mode };
   const on = !!(document.getElementById("imgOnChk")||{}).checked;
   const warn = (document.getElementById("imgWarnTa").value||"").slice(0,400);
+  const lazyGate = !!(document.getElementById("lazyGateChk")||{}).checked;
   const capRaw = document.getElementById("usageCap").value;
   const cap = capRaw==="" ? 0 : Math.max(0, parseInt(capRaw,10)||0);
   try{
-    await update(ref(db), { "meta/imgPost": on, "meta/imgGeo": geo, "meta/imgWarn": (warn.trim()? warn : IMG_WARN_DEFAULT), "meta/usage/capMB": cap });
+    await update(ref(db), { "meta/imgPost": on, "meta/imgGeo": geo, "meta/imgWarn": (warn.trim()? warn : IMG_WARN_DEFAULT), "meta/lazyGate": lazyGate, "meta/usage/capMB": cap });
     toast("画像投稿の設定を保存しました（受付"+(on?"ON":"OFF")+"・位置"+({off:"なし",any:"GPS必須",near:radius+"m以内"}[mode])+"・通信量上限"+(cap>0?cap+"MB":"未設定")+"）");
     imgGeoMask.classList.remove("show");
-  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/imgGeo・meta/imgWarn・meta/usage の許可が必要です）"); }
+  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/imgGeo・meta/imgWarn・meta/lazyGate・meta/usage の許可が必要です）"); }
 }
 async function resetUsage(){
   if(!admin || !db) return;
@@ -4354,9 +4361,10 @@ function pinchZoom(z, anchorClientX, anchorClientY){
 }
 let lastZoomOutNote = 0;
 function notifyZoomedOut(prev){
-  // 半紙が小さすぎて画像読み込みを保留する領域（NOTE_W*zoom<56）に、引きで入った瞬間だけ案内
-  if(!didInitialFocus) return;
-  if(NOTE_W*zoom < 56 && NOTE_W*prev >= 56 && Date.now()-lastZoomOutNote > 6000){
+  // 半紙が小さすぎて画像読み込みを保留する領域に、引きで入った瞬間だけ案内（運営設定でOFFの間は出さない）
+  if(!didInitialFocus || !lazyGateOn) return;
+  const minPx = lazyTier().minPx;
+  if(NOTE_W*zoom < minPx && NOTE_W*prev >= minPx && Date.now()-lastZoomOutNote > 6000){
     lastZoomOutNote = Date.now();
     toast("最大ズームアウト状態では個別の半紙が読み込まれません。", 3800);
   }
