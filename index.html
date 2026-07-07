@@ -2453,7 +2453,7 @@ async function loadImage(id){
   const p = posts.get(id);
   if(p && isImgData(p.img)){ seedImage(id, p.img); setNoteImg(id); return; }      // 旧：埋め込み
   if(imgCache.has(id)){ imgState.set(id,"loaded"); setNoteImg(id); return; }       // 自分の投稿（dataURL）
-  if(p && isSafePath(p.imgPath)){ imgState.set(id,"loaded"); setNoteImg(id); return; } // Supabase：ブラウザがHTTPキャッシュ
+  if(p && isSafePath(p.imgPath)){ imgState.set(id,"loaded"); setNoteImg(id); measureImgBytes(id, imgUrl(p.imgPath)); return; } // Supabase：表示はブラウザのHTTPキャッシュ、計測は別途HEADで
   // 旧データ救済：base64がRTDBにある場合だけ取得
   imgState.set(id, "loading");
   const local = await idbGet(id);
@@ -2465,9 +2465,11 @@ async function loadImage(id){
     else { imgState.set(id, "error"); }
   }catch(e){ imgState.set(id, "error"); }
 }
-// ===== 通信量トラッキング（Supabase Storageの実転送量を計測→自動で先読みを絞る） =====
-// 既存の<img src=...>読み込みに割り込まず、PerformanceResourceTimingで「実際にネットワークから来た分」だけを集計
-// （ブラウザキャッシュ命中時はtransferSize=0になるので、二重カウントしない＝実際のSupabase転送量に近い）
+// ===== 通信量トラッキング（Supabase Storageの半紙画像サイズを計測→自動で先読みを絞る） =====
+// 表示は今まで通り<img src=...>のまま（触らない）。計測だけ軽量なHEADリクエストで別途行う。
+// ※PerformanceResourceTimingのtransferSizeはクロスオリジンだとSupabase側がTiming-Allow-Originを
+//   返さない限り常に0にリダクトされ、原理的に計測不可能だったため方式変更。
+// Content-LengthはCORSセーフリストヘッダーなので、相手が何も設定していなくてもfetchから読める。
 let usagePending = 0;
 function flushUsagePending(){
   if(!db || usagePending<=0) return;
@@ -2477,15 +2479,16 @@ function flushUsagePending(){
 setInterval(flushUsagePending, 10000);
 window.addEventListener("pagehide", flushUsagePending);
 window.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden") flushUsagePending(); });
-try{
-  const supaPrefix = SUPA_URL + "/storage/v1/object/public/" + SUPA_BUCKET + "/";
-  const po = new PerformanceObserver(list=>{
-    for(const e of list.getEntries()){
-      if(e.name && e.name.indexOf(supaPrefix)===0 && e.transferSize>0) usagePending += e.transferSize;
-    }
-  });
-  po.observe({ type:"resource", buffered:true });
-}catch(e){ /* 非対応ブラウザは計測スキップ（自動節約は素通し動作のまま）*/ }
+const usageMeasured = new Set();   // 同じ画像を二重計測しない（このセッション内）
+async function measureImgBytes(id, url){
+  if(usageMeasured.has(id)) return;
+  usageMeasured.add(id);
+  try{
+    const res = await fetch(url, { method:"HEAD" });
+    const len = parseInt(res.headers.get("content-length")||"0", 10);
+    if(len>0) usagePending += len;
+  }catch(e){ /* 計測失敗は無視（表示自体には影響しない） */ }
+}
 function updateUsageUI(){
   const el = document.getElementById("usageView"); if(!el) return;
   const mb = (usageBytes/1024/1024);
