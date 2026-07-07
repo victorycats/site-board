@@ -585,7 +585,7 @@
   .ag-li{font-size:12.5px;line-height:1.55;margin:2px 0;padding-left:1em;text-indent:-1em}
   .ag-p{font-size:12.5px;line-height:1.6;margin:3px 0}
   .ag-sp{height:6px}
-  .login-card.geo-card{width:min(460px,calc(100vw - 28px))}
+  .login-card.geo-card{width:min(560px,calc(100vw - 32px))}
   .geo-row{margin:7px 0;font-size:13px}
   .geo-row label{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
   .geo-row input[type=radio]{flex:0 0 auto;margin-top:3px}
@@ -2499,7 +2499,7 @@ function scheduleLazy(){ if(lazyScheduled) return; lazyScheduled=true; requestAn
 function ensureImagesInView(){
   if(!notesEl) return;
   const tier = lazyTier();
-  if(NOTE_W*zoom < tier.minPx) return;   // 全体を引きで見ている時（半紙が極小）は取得を保留＝大量DL抑制。通信量がひっ迫していればさらに絞る
+  // if(NOTE_W*zoom < tier.minPx) return;   // ※一旦無効化：最大まで引いた状態でも読み込みを止めない（実験中）
   const marginX = scrollEl.clientWidth*tier.marginFrac, marginY = scrollEl.clientHeight*tier.marginFrac;  // 先読みを控えめに（緊急時は先読みなし）
   const x0 = scrollEl.scrollLeft/zoom - GUT_X - marginX/zoom;
   const x1 = (scrollEl.scrollLeft+scrollEl.clientWidth)/zoom - GUT_X + marginX/zoom;
