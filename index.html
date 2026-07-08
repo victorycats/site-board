@@ -3886,7 +3886,7 @@ async function buildFullLookCanvas(){
   // content-visibility:auto / contain-intrinsic-size を一時的に全面無効化（!importantでhtml2canvasの計算スタイルごと上書き＝下部グレー化の根治）
   const exfix = document.createElement("style");
   exfix.id = "__exportFix";
-  exfix.textContent = ".note,.note.land{content-visibility:visible !important;contain:none !important;contain-intrinsic-size:none !important;box-shadow:none !important}#wallPanel,.pp,.pp-foot{box-shadow:none !important}"
+  exfix.textContent = ".note,.note.land{content-visibility:visible !important;contain:none !important;contain-intrinsic-size:none !important;box-shadow:none !important;border:1px solid rgba(90,70,40,.28) !important}#wallPanel,.pp,.pp-foot{box-shadow:none !important}"
     + ".note .acts{gap:0 !important}.note .acts>*{margin-right:3px !important}.note .acts>*:last-child{margin-right:0 !important}"
     + ".sou-btn{gap:0 !important}"
     // html2canvasは inset box-shadow + 角丸の組み合わせを正しく描けない（隅にゴミ・背景色の化け）ので、書き出し中だけ枠線に置き換える
