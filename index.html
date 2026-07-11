@@ -4152,24 +4152,32 @@ async function openHistory(){
       const elapsed = (prev && prev.at && r.at) ? humanGap(r.at - prev.at) : "—";
       const dlC = r.clean ? '<a class="hist-dl" href="'+imgUrl(r.clean)+'" download target="_blank" rel="noopener">クリーンDL</a>' : '';
       const dlF = r.full ? '<a class="hist-dl" href="'+imgUrl(r.full)+'" download target="_blank" rel="noopener">見たままDL</a>' : '';
+      const redoFull = !r.full ? '<button class="hist-redo" data-fullboard="'+r.id+'">見たまま再出力</button>' : '';
       html += '<div class="hist-row"><div class="hist-main"><b>板'+r.id+'</b><span class="hist-dt">'+fmtDate(r.at)+'</span></div>'
         + '<div class="hist-sub">前回から '+elapsed+'・'+(r.count!=null?r.count+'枚':'枚数不明')+'</div>'
-        + '<div class="hist-acts">'+dlC+dlF+'<button class="hist-redo" data-board="'+r.id+'">再出力</button></div></div>';
+        + '<div class="hist-acts">'+dlC+dlF+'<button class="hist-redo" data-board="'+r.id+'">再出力</button>'+redoFull+'</div></div>';
     });
     body.innerHTML = html;
-    body.querySelectorAll(".hist-redo").forEach(btn=> btn.addEventListener("click", ()=> reoutputBoard(+btn.dataset.board, btn)));
+    body.querySelectorAll(".hist-redo[data-board]").forEach(btn=> btn.addEventListener("click", ()=> reoutputBoard(+btn.dataset.board, btn)));
+    body.querySelectorAll(".hist-redo[data-fullboard]").forEach(btn=> btn.addEventListener("click", ()=> reoutputBoardFull(+btn.dataset.fullboard, btn)));
     const manualEl = document.getElementById("histManual"); if(manualEl) manualEl.remove();   // 二重挿入防止
     const manual = document.createElement("div");
     manual.id = "histManual";
     manual.innerHTML = '<div class="hist-h">板番号を指定して再出力</div>'
-      + '<div class="pal-fixed" style="line-height:1.6">履歴に出てこない古い板（記録が無い時代の板など）も、番号が分かれば直接再出力できます。データがFirebaseに残っていれば作成できます。</div>'
-      + '<div class="geo-line"><input id="histManualNum" type="number" min="1" step="1" placeholder="板番号"><button type="button" class="pal-add" id="histManualBtn">再出力</button></div>';
+      + '<div class="pal-fixed" style="line-height:1.6">履歴に出てこない古い板（記録が無い時代の板など）も、番号が分かれば直接再出力できます。データがFirebaseに残っていれば作成できます。見たまま再出力は今の板の表示を一時的に切り替えて撮影するため、少し時間がかかります。</div>'
+      + '<div class="geo-line"><input id="histManualNum" type="number" min="1" step="1" placeholder="板番号"><button type="button" class="pal-add" id="histManualBtn">再出力</button><button type="button" class="pal-add" id="histManualFullBtn">見たまま再出力</button></div>';
     body.appendChild(manual);
     const mb = document.getElementById("histManualBtn");
     if(mb) mb.addEventListener("click", ()=>{
       const n = parseInt(document.getElementById("histManualNum").value, 10);
       if(!n || n<1){ toast("板番号を入力してね"); return; }
       reoutputBoard(n, mb);
+    });
+    const mfb = document.getElementById("histManualFullBtn");
+    if(mfb) mfb.addEventListener("click", ()=>{
+      const n = parseInt(document.getElementById("histManualNum").value, 10);
+      if(!n || n<1){ toast("板番号を入力してね"); return; }
+      reoutputBoardFull(n, mfb);
     });
   }catch(e){ console.error(e); body.innerHTML = '<div class="hist-empty">読み込みに失敗しました</div>'; }
 }
@@ -4201,6 +4209,53 @@ async function reoutputBoard(id, btn){
   }catch(e){ console.error(e); toast("再出力に失敗しました"); }
   finally{ if(btn){ btn.textContent=label; btn.disabled=false; } }
 }
+// 過去の板を「見たまま」（紙・テープ・朱印・ボタン込み）で再出力。今の板の表示を一時的に差し替えて撮影し、必ず元へ戻す
+let fullReoutputBusy = false;
+async function reoutputBoardFull(id, btn){
+  if(!db || !admin) return;
+  if(id === boardId){ toast("今の板は運営バーの「見たままDL」を使ってね"); return; }
+  if(fullReoutputBusy){ toast("見たまま再出力は一度に1つずつです。少し待ってね"); return; }
+  fullReoutputBusy = true;
+  const label = btn ? btn.textContent : "";
+  if(btn){ btn.textContent="出力中…"; btn.disabled=true; }
+  const originalBoardId = boardId;
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;z-index:9000;background:rgba(26,23,20,.55);display:flex;align-items:center;justify-content:center;color:#fff5ef;font-family:'Shippori Mincho',serif;font-size:15px;letter-spacing:.06em;text-align:center;padding:20px";
+  overlay.textContent = "板"+id+"を見たまま再出力中…（この間、画面が一時的に切り替わります。触らずお待ちください）";
+  document.body.appendChild(overlay);
+  unsubBoard();   // 今の板の購読を止める（作業中に自動処理等が誤って動かないように）
+  try{
+    const ps = await get(ref(db,"boards/"+id+"/posts"));
+    const pv = ps.val()||{};
+    const entries = Object.entries(pv).filter(([pid,p])=> p && typeof p==="object");
+    if(!entries.length){ toast("板"+id+"に半紙データがありません"); return; }
+    const need = entries.filter(([pid,p])=> !isSafePath(p.imgPath));
+    await Promise.all(need.map(async ([pid,p])=>{
+      try{ const s = await get(ref(db,"boards/"+id+"/imgs/"+pid)); const d=s.val(); if(isImgData(d)) imgCache.set(pid, d); }catch(e){}
+    }));
+    const rs = await get(ref(db,"boards/"+id+"/reservations"));
+    const rv = (rs && rs.val()) || {};
+    // ライブの描画状態を、この板のデータへ一時的に差し替え（DBへは一切書き込まない）
+    posts.clear(); entries.forEach(([pid,p])=> posts.set(pid, p));
+    reservations.clear(); Object.keys(rv).forEach(k=>{ if(/^[A-Za-z0-9_-]+$/.test(k)) reservations.set(k, rv[k]||{}); });
+    boardId = id; rsvLoaded = true;
+    renderReservations(); render();
+    await new Promise(r=> requestAnimationFrame(()=> requestAnimationFrame(r)));   // 描画が落ち着くのを一呼吸待つ
+    const full = await buildFullLookCanvas();
+    if(!full){ toast("見たまま画像の生成に失敗しました"); return; }
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+    const furl = full.toDataURL("image/jpeg", 0.85);
+    const a = document.createElement("a"); a.href=furl; a.download="oshuji-board-"+id+"-"+stamp+"-full.jpg"; document.body.appendChild(a); a.click(); a.remove();
+    toast("板"+id+"を見たまま再出力しました（"+entries.length+"枚）", 4000);
+  }catch(e){ console.error(e); toast("見たまま再出力に失敗しました"); }
+  finally{
+    switchToBoard(originalBoardId);   // 元の板へ確実に復帰（購読も張り直す）
+    overlay.remove();
+    if(btn){ btn.textContent=label; btn.disabled=false; }
+    fullReoutputBusy = false;
+  }
+}
+window.reoutputBoardFull = reoutputBoardFull;
 
 (function(){
   const c = document.getElementById("histClose"), m = document.getElementById("historyMask");
