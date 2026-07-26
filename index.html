@@ -233,6 +233,8 @@
   .remain{font-size:11px;font-weight:700}
   .remain.warn{color:#ffd27a}
   .remain.full{color:#ff8a72}
+  .remain.clickable{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+  .remain.clickable:active{opacity:.7}
 
   /* floating message (placing/empty/admin/err) top-center */
   .float-msg{
@@ -1194,9 +1196,13 @@
 
 <div class="login-mask" id="boardLimitMask">
   <div class="login-card">
-    <div class="login-title">板の上限枚数</div>
-    <div class="pal-fixed" style="line-height:1.6">1つの板が満員になる枚数です。変更は次に枚数を数える時から反映されます（今すでに貼ってある半紙が消えることはありません）。サーバ側の制限も自動で連動します。</div>
+    <div class="login-title">板の自動リセット設定</div>
+    <div class="geo-sec">枚数で自動リセット</div>
+    <div class="pal-fixed" style="line-height:1.6">1つの板が満員になる枚数です。サーバ側の制限も自動で連動します。</div>
     <div class="geo-line"><span>上限</span><input id="boardLimitNum" type="number" min="10" max="1000" step="10"><span>枚</span></div>
+    <div class="geo-sec">日数でも自動リセット</div>
+    <div class="pal-fixed" style="line-height:1.6">板が始まってからの経過日数でもリセットできます（枚数上限と併用・どちらか早い方が優先）。0にすると日数リセットは無効になり、枚数のみで判定します。</div>
+    <div class="geo-line"><span>日数</span><input id="resetDaysNum" type="number" min="0" max="90" step="1"><span>日（0で無効）</span></div>
     <div class="login-btns">
       <button class="login-cancel" id="boardLimitCancel">キャンセル</button>
       <button class="login-ok" id="boardLimitSave">保存</button>
@@ -1430,6 +1436,10 @@ let lastPostAt = (function(){ try{ return +localStorage.getItem("fg_lastPost")||
 
 /* ---------- ボード切替（満杯で保存→新ボード） ---------- */
 let BOARD_LIMIT = 300;            // この枚数でボード満杯（meta/boardLimitで運営が変更可。サーバ側ルールもmeta/boardLimit参照に統一済み）
+let boardResetDays = 0;           // 日数でも自動リセット（meta/resetDays。0/未設定なら日数リセットは無効）
+let boardStartedAt = null;        // 今の板が始まった時刻（boards/{id}/startedAt。最初に来た1人が記録）
+function boardExpiredByDays(){ return !!(boardResetDays>0 && boardStartedAt && (Date.now()-boardStartedAt) >= boardResetDays*86400000); }
+function boardShouldReset(){ return remaining()<=0 || boardExpiredByDays(); }   // 枚数上限・日数上限のどちらかで満員扱い
 let boardId = null;               // 現在のボード番号（meta/board）
 // ===== 共有リンクからの直リンク（?board=N&note=ID）＝その半紙へ直接ジャンプ =====
 const DEEPLINK_PARAMS = new URLSearchParams(location.search);
@@ -1453,7 +1463,7 @@ const ADMIN_GUIDE_DEFAULT = `ふたば(偽)お習字 — 運営モードの使�
 引き継ぎ・共有用。運営なら誰でもこの画面で編集できます（保存すると全運営に反映）。
 
 ## 運営バーのボタン
-- 上限変更：1つの板が満員になる枚数を変更（既定300枚）。サーバ側の制限も自動で連動する。
+- 自動リセット設定：1つの板が満員になる枚数（既定300枚）と、日数での自動リセット（既定0＝無効）を変更。サーバ側の制限も自動で連動する。どちらか早く条件を満たした方でリセットされる。
 - 画像設定：写真投稿の受付ON/OFF、位置しばり（GPS）、投稿前の警告文の編集。
 - 色設定：みんなが使える中間色パレットの編集。
 - 名前：空欄投稿に使うランダムネームの追加。
@@ -1466,9 +1476,10 @@ const ADMIN_GUIDE_DEFAULT = `ふたば(偽)お習字 — 運営モードの使�
 - 1枚ごとに少しクールダウンがある。わいせつ・グロ・せいじ・法律違反はNGで、運営はいつでも削除できる。
 - 運営は半紙を「動かす」で移動でき、「元位置」で直前の位置に戻せる。枠内の半紙は自動整列なので動かせない。
 
-## 板送りの自動化（満員＝300枚）
-満員になると、その板を画像保存して、みんなを新しい空の板へ移す。これを自動でやる。
-同時に全端末が満員に気づくので、データベースの「旗」で最初の1人だけが作業する（二重進行を防止）。
+## 板送りの自動化（満員＝枚数上限、または設定した日数の経過）
+満員になる（または自動リセット設定で決めた日数が経つ）と、その板を画像保存して、みんなを新しい空の板へ移す。これを自動でやる。
+同時に全端末が条件達成に気づくので、データベースの「旗」で最初の1人だけが作業する（二重進行を防止）。
+日数リセットが有効な場合、投稿が無い静かな時間帯でも、開いている端末が5分おきに経過日数をチェックして見逃さない。
 
 ### 運営タブが開いているとき
 1. 満員を検知。
@@ -2359,7 +2370,13 @@ const ghostEl  = document.getElementById("ghost");
 const ghostImg = document.getElementById("ghostImg");
 const msgEl    = document.getElementById("msg");
 const countEl  = document.getElementById("count");
-if(countEl) countEl.title = "上限 "+BOARD_LIMIT+" 枚（満員で新ボードへ）";   // マウスオーバーで上限表示
+function updateCountTooltip(){   // マウスオーバーで上限枚数・日数リセットの設定を表示
+  if(!countEl) return;
+  let t = "上限 "+BOARD_LIMIT+" 枚（満員で新ボードへ）";
+  if(boardResetDays>0) t += "／"+boardResetDays+"日で自動リセット";
+  countEl.title = t;
+}
+updateCountTooltip();
 // 端末ローカル保存（未対応・ブロック時も壊れないよう try/catch）
 const LS = {
   get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
@@ -2490,6 +2507,7 @@ function flushUsagePending(){
   update(ref(db,"meta/usage"), { bytes: increment(delta) }).catch(()=>{});
 }
 setInterval(flushUsagePending, 10000);
+setInterval(()=>{ if(boardId!=null && boardExpiredByDays()){ maybeAutoArchive(); maybeAutoAdvance(); } }, 5*60*1000);   // 投稿が無い静かな期間でも日数超過を見逃さない
 window.addEventListener("pagehide", flushUsagePending);
 window.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden") flushUsagePending(); });
 const usageMeasured = new Set();   // 同じ画像を二重計測しない（このセッション内）
@@ -2551,7 +2569,7 @@ function renderAdminBar(){
   bar.innerHTML =
     '<span class="ab-title">運営モード</span>'+
     '<span class="ab-meta">板'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
-    '<button class="ab-act" type="button" onclick="openBoardLimit()">上限変更</button>'+
+    '<button class="ab-act" type="button" onclick="openBoardLimit()">自動リセット設定</button>'+
     '<span class="ab-sep"></span>'+
     '<button class="ab-act" type="button" onclick="openGuide()">運営ガイド</button>'+
     '<button class="ab-act" type="button" onclick="openImgGeo()">画像設定'+((!imgPostOn||imgGeo.mode!=="off"||lazyTier().label!=="通常")?' ●':'')+'</button>'+
@@ -2720,7 +2738,14 @@ function listen(){
   onValue(ref(db, "meta/boardLimit"), snap=>{   // 板の満員枚数（未設定は既定300）
     const v = snap && snap.val();
     BOARD_LIMIT = (typeof v==="number" && v>=10 && v<=1000) ? v : 300;
-    if(countEl) countEl.title = "上限 "+BOARD_LIMIT+" 枚（満員で新ボードへ）";
+    updateCountTooltip();
+  });
+  onValue(ref(db, "meta/resetDays"), snap=>{   // 板の自動リセット日数（未設定/0は日数リセット無効）
+    const v = snap && snap.val();
+    boardResetDays = (typeof v==="number" && v>=0 && v<=90) ? v : 0;
+    updateCountTooltip();
+    setActiveCount();
+    maybeAutoArchive(); maybeAutoAdvance();
   });
   onValue(ref(db, "meta/imgWarn"), snap=>{   // 画像投稿前の警告文（未設定はデフォルト）
     const v = snap && snap.val();
@@ -2802,6 +2827,13 @@ function switchToBoard(id){
       maybeAutoArchive();   // 運営タブがあれば：満員で自動保存（画像化）→新ボード
       maybeAutoAdvance();   // 運営タブが無くても：満員なら誰かが新ボードへ進める（画像化はpendingに記録、後で運営が処理）
     }));
+    // この板が始まった時刻（日数リセット判定用）。無ければ最初に来た1人が記録（ルール上、既にあれば書けないので安全）
+    boardSubs.push(onValue(ref(db, bpath("startedAt")), s=>{
+      if(s && s.exists() && typeof s.val()==="number"){ boardStartedAt = s.val(); }
+      else { boardStartedAt = null; set(ref(db, bpath("startedAt")), serverTimestamp()).catch(()=>{}); }
+      setActiveCount();
+      maybeAutoArchive(); maybeAutoAdvance();   // 日数超過を即座に拾えるように
+    }));
     // お題枠予約（板ローカル）
     boardSubs.push(onValue(ref(db, bpath("reservations")), s=>{
       reservations.clear();
@@ -2816,16 +2848,38 @@ function switchToBoard(id){
   }catch(e){ console.error(e); showConnError(); }
 }
 function remaining(){ return Math.max(0, BOARD_LIMIT - boardCount); }
+let remainDisplayMode = "count";   // "count"（あとN枚）／"days"（あとN日M時間）。#remainクリックで切替
+function remainDaysText(){   // 日数リセットまでの残り時間文言（無効/未計測はnull）
+  if(boardResetDays<=0) return null;
+  if(!boardStartedAt) return "日数を計測中…";
+  const leftMs = boardStartedAt + boardResetDays*86400000 - Date.now();
+  if(leftMs<=0) return "まもなく新ボードへ";
+  const days = Math.floor(leftMs/86400000), hours = Math.floor((leftMs%86400000)/3600000);
+  return days>0 ? ("あと"+days+"日"+hours+"時間で新ボード") : ("あと"+hours+"時間で新ボード");
+}
 function setActiveCount(){
-  // 残数の小さい表示（カウント帯の隣）。満杯なら満員表示
+  // 残数の小さい表示（カウント帯の隣）。満杯なら満員表示。日数リセットが有効ならクリックで枚数/日数を切替できる
   const el = document.getElementById("remain");
   if(!el) return;
   const r = remaining();
-  if(r <= 0){ el.textContent = "満員"; el.className = "remain full"; }
-  else if(r <= 60){ el.textContent = "あと"+r+"枚で新ボード"; el.className = "remain warn"; }
-  else { el.textContent = ""; el.className = "remain"; }
+  const canToggle = boardResetDays > 0;
+  if(canToggle){ el.title = "クリックで枚数／日数の表示を切替"; }
+  else { el.removeAttribute("title"); remainDisplayMode = "count"; }   // 切り替えるものが無ければ枚数表示に固定
+  const cls = canToggle ? " clickable" : "";
+  if(r <= 0){ el.textContent = "満員"; el.className = "remain full"+cls; }
+  else if(remainDisplayMode==="days" && canToggle){ el.textContent = remainDaysText()||""; el.className = "remain warn"+cls; }
+  else if(r <= 60 || canToggle){ el.textContent = "あと"+r+"枚で新ボード"; el.className = "remain warn"+cls; }
+  else { el.textContent = ""; el.className = "remain"+cls; }
   fitStatusTicker();
 }
+{ const el = document.getElementById("remain");
+  if(el) el.addEventListener("click", ()=>{
+    if(boardResetDays<=0) return;   // 切り替えるものが無い
+    remainDisplayMode = (remainDisplayMode==="days") ? "count" : "days";
+    setActiveCount();
+  });
+}
+setInterval(()=>{ if(remainDisplayMode==="days") setActiveCount(); }, 60000);   // 日数表示中は1分ごとに残り時間を更新
 // 残り枚数などの文言がパネル幅を超えたら、電光掲示板のように左へ流す（収まる時は止める）
 function fitStatusTicker(){
   const bar = document.getElementById("statusBar"), inner = document.getElementById("statusInner");
@@ -3865,16 +3919,20 @@ const boardLimitMask = document.getElementById("boardLimitMask");
 function openBoardLimit(){
   if(!admin) return;
   const el=document.getElementById("boardLimitNum"); if(el) el.value = BOARD_LIMIT;
+  const dEl=document.getElementById("resetDaysNum"); if(dEl) dEl.value = boardResetDays;
   boardLimitMask.classList.add("show");
 }
 async function saveBoardLimit(){
   const n = parseInt(document.getElementById("boardLimitNum").value, 10);
-  if(!n || n<10 || n>1000){ toast("10〜1000の範囲で入れてね"); return; }
+  if(!n || n<10 || n>1000){ toast("枚数上限は10〜1000の範囲で入れてね"); return; }
+  const dRaw = document.getElementById("resetDaysNum").value;
+  const d = dRaw==="" ? 0 : parseInt(dRaw,10);
+  if(!isFinite(d) || d<0 || d>90){ toast("日数は0〜90の範囲で入れてね"); return; }
   try{
-    await set(ref(db,"meta/boardLimit"), n);
-    toast("板の上限を"+n+"枚にしました");
+    await update(ref(db), { "meta/boardLimit": n, "meta/resetDays": d });
+    toast("板の自動リセット設定を保存しました（"+n+"枚"+(d>0?"・"+d+"日":"")+"）");
     boardLimitMask.classList.remove("show");
-  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/boardLimit の許可が必要です）"); }
+  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/boardLimit・meta/resetDays の許可が必要です）"); }
 }
 { const m=boardLimitMask;
   const c=document.getElementById("boardLimitCancel"); if(c) c.addEventListener("click", ()=> m.classList.remove("show"));
@@ -4341,7 +4399,7 @@ async function processPendingArchives(){
 let autoArchiving = false;
 async function maybeAutoArchive(){
   if(!admin || autoArchiving || boardId == null) return;
-  if(remaining() > 0) return;
+  if(!boardShouldReset()) return;
   autoArchiving = true;
   try{
     const claim = await runTransaction(ref(db, bpath("archiving")), c => c ? undefined : true);  // 旗を立てた1人だけ実行
@@ -4356,13 +4414,13 @@ async function maybeAutoArchive(){
 let autoAdvancing = false, advanceTimer = null;
 async function maybeAutoAdvance(){
   if(autoAdvancing || boardId == null) return;
-  if(remaining() > 0){ if(advanceTimer){ clearTimeout(advanceTimer); advanceTimer = null; } return; }
+  if(!boardShouldReset()){ if(advanceTimer){ clearTimeout(advanceTimer); advanceTimer = null; } return; }
   if(admin) return;                       // 運営タブは maybeAutoArchive 側で処理（画像化込み）
   if(advanceTimer) return;                // すでに待機中
   // 運営が画像化込みで処理する猶予を与え、一定時間後もまだ満員（＝運営不在）なら切替だけ実行
   advanceTimer = setTimeout(async ()=>{
     advanceTimer = null;
-    if(boardId == null || remaining() > 0) return;     // 既に誰かが進めた
+    if(boardId == null || !boardShouldReset()) return;     // 既に誰かが進めた
     if(autoAdvancing) return;
     // 運営が画像化処理中（archiving旗）なら、その運営に任せて切替しない（board二重進行を防ぐ）
     try{ const ar = await get(ref(db, bpath("archiving"))); if(ar && ar.val()===true) return; }catch(_){}
@@ -4371,12 +4429,13 @@ async function maybeAutoAdvance(){
     try{
       const claim = await runTransaction(ref(db, bpath("advancing")), c => c ? undefined : true);  // 旗を立てた1人だけ実行
       if(claim.committed && claim.snapshot.val() === true){
-        // 念のため満員を再確認してから進める
+        // 念のため満員／日数超過を再確認してから進める
         const cs = await get(ref(db, bpath("count")));
-        if(((cs && cs.val())||0) >= BOARD_LIMIT){
+        const stillFull = ((cs && cs.val())||0) >= BOARD_LIMIT;
+        if(stillFull || boardExpiredByDays()){
           await set(ref(db, "meta/pendingArchive/"+myBoard), true);   // 「このボードは未画像化」と記録（後で運営が処理）
           await set(ref(db, "meta/board"), myBoard + 1);              // 全クライアントが meta/board 監視で自動移行
-          toast("満員のため新しいボードへ切り替えました", 4000);
+          toast((stillFull?"満員":"期間経過")+"のため新しいボードへ切り替えました", 4000);
         } else {
           remove(ref(db, bpath("advancing"))).catch(()=>{});          // もう満員でない→旗を戻す
         }
