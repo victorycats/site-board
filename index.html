@@ -1194,6 +1194,18 @@
   </div>
 </div>
 
+<div class="login-mask" id="cooldownMask">
+  <div class="login-card">
+    <div class="login-title">連投の間隔（クールダウン）</div>
+    <div class="pal-fixed" style="line-height:1.6">1人が続けて投稿できるまでの最短間隔です。0にすると連投制限が無効になります（荒らし対策が弱まるので通常は非推奨）。サーバ側の制限も自動で連動します。</div>
+    <div class="geo-line"><span>間隔</span><input id="cooldownSec" type="number" min="0" max="600" step="5"><span>秒（0で無効）</span></div>
+    <div class="login-btns">
+      <button class="login-cancel" id="cooldownCancel">キャンセル</button>
+      <button class="login-ok" id="cooldownSave">保存</button>
+    </div>
+  </div>
+</div>
+
 <div class="login-mask" id="boardLimitMask">
   <div class="login-card">
     <div class="login-title">板の自動リセット設定</div>
@@ -1431,7 +1443,7 @@ const DEL_THRESHOLD = 5;          // del がこの数たまるとクライアン
 //   Firebaseコンソール → Authentication → Users → 作成したメールアカウントの「ユーザーUID」
 //   ※同じUIDをデータベースのルールにも貼り付けること（下のメッセージ参照）。秘密情報ではない。
 const ADMIN_UID = "VRZS1oZuihN7if6GD2yuP1qvDik1";
-const POST_COOLDOWN_MS = 40000;   // 連続投稿の最短間隔（サーバ側ルールと一致させること）
+let POST_COOLDOWN_MS = 40000;   // 連続投稿の最短間隔（meta/postCooldownMsで運営が変更可。0で無効。サーバ側ルールも連動）
 let lastPostAt = (function(){ try{ return +localStorage.getItem("fg_lastPost")||0; }catch(e){ return 0; } })();   // 端末に残る前回投稿時刻（事前警告用）
 
 /* ---------- ボード切替（満杯で保存→新ボード） ---------- */
@@ -1462,14 +1474,25 @@ function imgWarnText(){ return (imgWarn && imgWarn.trim()) ? imgWarn : IMG_WARN_
 const ADMIN_GUIDE_DEFAULT = `ふたば(偽)お習字 — 運営モードの使い方メモ
 引き継ぎ・共有用。運営なら誰でもこの画面で編集できます（保存すると全運営に反映）。
 
-## 運営バーのボタン
+## 運営バーのボタン（左から機能グループごとに並んでいる）
+### 板の運用
 - 自動リセット設定：1つの板が満員になる枚数（既定300枚）と、日数での自動リセット（既定0＝無効）を変更。サーバ側の制限も自動で連動する。どちらか早く条件を満たした方でリセットされる。
+- 履歴：過去の板の一覧。クリーンDL／見たままDL／再出力ができる。投稿者ランキングのタグを押すと、その人の半紙を順に表示。
+- 保存して新ボード：今の板を保存して、新しい空の板へ進める。
+
+### 投稿ルール
 - 画像設定：写真投稿の受付ON/OFF、位置しばり（GPS）、投稿前の警告文の編集。
+- 連投間隔：1人が続けて投稿できるまでの最短間隔（既定40秒）。0にすると連投制限が無効になる（荒らし対策が弱まるので通常は非推奨）。サーバ側の制限も自動で連動する。
+
+### 共有素材
 - 色設定：みんなが使える中間色パレットの編集。
 - 名前：空欄投稿に使うランダムネームの追加。
-- 履歴：過去の板の一覧。クリーンDL／見たままDL／再出力ができる。投稿者ランキングのタグを押すと、その人の半紙を順に表示。
+
+### 資料・出力
+- 運営ガイド：この画面そのもの。編集すると全運営に共有される。
 - 見たままDL：今の板を画面の見たまま画像化してDL（板送りはしない）。
-- 保存して新ボード：今の板を保存して、新しい空の板へ進める。
+
+### その他
 - 終了：運営モードを抜ける。
 
 ## 半紙について
@@ -2570,15 +2593,17 @@ function renderAdminBar(){
     '<span class="ab-title">運営モード</span>'+
     '<span class="ab-meta">板'+(boardId||1)+'・'+boardCount+'/'+BOARD_LIMIT+'</span>'+
     '<button class="ab-act" type="button" onclick="openBoardLimit()">自動リセット設定</button>'+
+    '<button class="ab-act" type="button" onclick="openHistory()">履歴</button>'+
+    '<button class="ab-act" type="button" onclick="archiveAndAdvance()">保存して新ボード</button>'+
     '<span class="ab-sep"></span>'+
-    '<button class="ab-act" type="button" onclick="openGuide()">運営ガイド</button>'+
     '<button class="ab-act" type="button" onclick="openImgGeo()">画像設定'+((!imgPostOn||imgGeo.mode!=="off"||lazyTier().label!=="通常")?' ●':'')+'</button>'+
+    '<button class="ab-act" type="button" onclick="openCooldown()">連投間隔'+(POST_COOLDOWN_MS<=0?' ●':'')+'</button>'+
+    '<span class="ab-sep"></span>'+
     '<button class="ab-act" type="button" onclick="openPaletteEditor()">色設定</button>'+
     '<button class="ab-act" type="button" onclick="openNamesEditor()">名前</button>'+
     '<span class="ab-sep"></span>'+
-    '<button class="ab-act" type="button" onclick="openHistory()">履歴</button>'+
+    '<button class="ab-act" type="button" onclick="openGuide()">運営ガイド</button>'+
     '<button class="ab-act" type="button" onclick="exportFullLookNow()">見たままDL</button>'+
-    '<button class="ab-act" type="button" onclick="archiveAndAdvance()">保存して新ボード</button>'+
     '<span class="ab-sep"></span>'+
     '<button class="ab-act ab-exit" type="button" onclick="exitAdmin()">終了</button>';
   bar.hidden = false;
@@ -2746,6 +2771,10 @@ function listen(){
     updateCountTooltip();
     setActiveCount();
     maybeAutoArchive(); maybeAutoAdvance();
+  });
+  onValue(ref(db, "meta/postCooldownMs"), snap=>{   // 連投の最短間隔（未設定は既定40秒。0で無効）
+    const v = snap && snap.val();
+    POST_COOLDOWN_MS = (typeof v==="number" && v>=0 && v<=600000) ? v : 40000;
   });
   onValue(ref(db, "meta/imgWarn"), snap=>{   // 画像投稿前の警告文（未設定はデフォルト）
     const v = snap && snap.val();
@@ -3940,6 +3969,28 @@ async function saveBoardLimit(){
   if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
 }
 window.openBoardLimit = openBoardLimit;
+// ===== 連投の間隔（meta/postCooldownMs：運営が編集・全員に反映） =====
+const cooldownMask = document.getElementById("cooldownMask");
+function openCooldown(){
+  if(!admin) return;
+  const el=document.getElementById("cooldownSec"); if(el) el.value = Math.round(POST_COOLDOWN_MS/1000);
+  cooldownMask.classList.add("show");
+}
+async function saveCooldown(){
+  const s = parseInt(document.getElementById("cooldownSec").value, 10);
+  if(!isFinite(s) || s<0 || s>600){ toast("0〜600秒の範囲で入れてね"); return; }
+  try{
+    await set(ref(db,"meta/postCooldownMs"), s*1000);
+    toast(s>0 ? ("連投間隔を"+s+"秒にしました") : "連投制限を無効にしました");
+    cooldownMask.classList.remove("show");
+  }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/postCooldownMs の許可が必要です）"); }
+}
+{ const m=cooldownMask;
+  const c=document.getElementById("cooldownCancel"); if(c) c.addEventListener("click", ()=> m.classList.remove("show"));
+  const s=document.getElementById("cooldownSave"); if(s) s.addEventListener("click", saveCooldown);
+  if(m) m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); });
+}
+window.openCooldown = openCooldown;
 
 async function adminRestore(id){
   if(!db || !admin) return;
