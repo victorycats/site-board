@@ -1213,8 +1213,9 @@
     <div class="pal-fixed" style="line-height:1.6">1つの板が満員になる枚数です。サーバ側の制限も自動で連動します。</div>
     <div class="geo-line"><span>上限</span><input id="boardLimitNum" type="number" min="10" max="1000" step="10"><span>枚</span></div>
     <div class="geo-sec">日数でも自動リセット</div>
-    <div class="pal-fixed" style="line-height:1.6">板が始まってからの経過日数でもリセットできます（枚数上限と併用・どちらか早い方が優先）。0にすると日数リセットは無効になり、枚数のみで判定します。</div>
+    <div class="pal-fixed" style="line-height:1.6">板が始まってからの経過日数でもリセットできます（枚数上限と併用・どちらか早い方が優先）。0にすると日数リセットは無効になり、枚数のみで判定します。判定は誰かがこのページを開いている時に行われるため、来場者が誰もいない時間が続くと、日数が過ぎてから実際に切り替わるまで少し遅れることがあります。</div>
     <div class="geo-line"><span>日数</span><input id="resetDaysNum" type="number" min="0" max="90" step="1"><span>日（0で無効）</span></div>
+    <div id="boardStartedInfo" class="usage-line"></div>
     <div class="login-btns">
       <button class="login-cancel" id="boardLimitCancel">キャンセル</button>
       <button class="login-ok" id="boardLimitSave">保存</button>
@@ -1503,6 +1504,7 @@ const ADMIN_GUIDE_DEFAULT = `ふたば(偽)お習字 — 運営モードの使�
 満員になる（または自動リセット設定で決めた日数が経つ）と、その板を画像保存して、みんなを新しい空の板へ移す。これを自動でやる。
 同時に全端末が条件達成に気づくので、データベースの「旗」で最初の1人だけが作業する（二重進行を防止）。
 日数リセットが有効な場合、投稿が無い静かな時間帯でも、開いている端末が5分おきに経過日数をチェックして見逃さない。
+日数のカウントは「誰かが板を開いた時に記録される開始時刻」が起点。すでに開催中の板で日数リセットを新しく設定した場合、開始時刻がまだ無ければ設定を保存した時点を起点として記録される（「自動リセット設定」画面に現在の記録状況が出る）。判定自体は誰かがページを開いている時にしか走らないため、無人の期間が続くと切り替わりが遅れることがある。
 
 ### 運営タブが開いているとき
 1. 満員を検知。
@@ -3949,6 +3951,12 @@ function openBoardLimit(){
   if(!admin) return;
   const el=document.getElementById("boardLimitNum"); if(el) el.value = BOARD_LIMIT;
   const dEl=document.getElementById("resetDaysNum"); if(dEl) dEl.value = boardResetDays;
+  const sEl=document.getElementById("boardStartedInfo");
+  if(sEl){
+    sEl.textContent = boardStartedAt
+      ? ("この板の開始記録：" + new Date(boardStartedAt).toLocaleString("ja-JP"))
+      : "この板の開始時刻はまだ記録されていません（保存すると今の時刻で記録されます）";
+  }
   boardLimitMask.classList.add("show");
 }
 async function saveBoardLimit(){
@@ -3959,6 +3967,10 @@ async function saveBoardLimit(){
   if(!isFinite(d) || d<0 || d>90){ toast("日数は0〜90の範囲で入れてね"); return; }
   try{
     await update(ref(db), { "meta/boardLimit": n, "meta/resetDays": d });
+    if(d>0 && !boardStartedAt && boardId!=null){
+      // 日数リセットを有効化した時点で開始記録が無ければ、今を起点として記録する（ルール上、既にあれば書けないので安全）
+      set(ref(db, bpath("startedAt")), serverTimestamp()).catch(()=>{});
+    }
     toast("板の自動リセット設定を保存しました（"+n+"枚"+(d>0?"・"+d+"日":"")+"）");
     boardLimitMask.classList.remove("show");
   }catch(e){ console.error(e); toast("保存できませんでした（ルールに meta/boardLimit・meta/resetDays の許可が必要です）"); }
