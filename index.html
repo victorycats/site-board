@@ -1808,7 +1808,7 @@ function pos(e){
   const r = pad.getBoundingClientRect();
   const cx = (e.touches? e.touches[0].clientX : e.clientX) - r.left;
   const cy = (e.touches? e.touches[0].clientY : e.clientY) - r.top;
-  return { x: cx * (pad.width / r.width), y: cy * (pad.height / r.height) };
+  return { x: cx * (pad.width / r.width), y: cy * (pad.height / r.height), t: e.timeStamp, pressure: e.pointerType==="pen" && e.pressure>0 ? e.pressure : null };
 }
 function pushUndo(){
   if(typeof cancelPadRestore==="function") cancelPadRestore();   // 描く/塗る/消す等の直前＝控えからの描き戻しを止める（新しい変更を消さない）
@@ -1827,15 +1827,14 @@ function start(e){
   ensureCanvas();                                                                 // 描く直前に半紙サイズを保証
   if(fillMode){ pushUndo(); const fp = pos(e); floodFill(fp.x, fp.y); return; } // バケツ：タップ位置を塗る
   pushUndo();
-  drawing = true; last = pos(e); lastMid = last; lastTime = performance.now(); lastDir = null; penOff = false; strokeLen = 0;
+  drawing = true; last = pos(e); lastMid = last; lastTime = last.t ?? performance.now(); lastDir = null; penOff = false; strokeLen = 0;
   if(brushType==="flat"){ flatDab(last); return; }
   if(brushType==="round"){ dot(last, size*DPR); return; } // 丸筆：一定の太さ
   if(brushType==="fude"){                                  // 本筆：速度で太さ＝溜めで太く・速いと細くかすれる
-    velEMA = null; fudeStrands = [];
-    const nh = 5;
-    for(let i=0;i<nh;i++) fudeStrands.push({ off:(i/(nh-1)-0.5), w:0.15+Math.random()*0.10 });   // 5本の毛、太さ少しランダム
-    lastWidth = Math.max(1, fudeBaseW()*0.10);            // 入りはごく細い種点から（本体と同じ圧縮太さ基準＝入りに過大な玉が残らない）
-    dot(last, lastWidth); return;
+    velEMA = null; fudeDry=0; fudeAngle=NIB; fudeClock=lastTime;
+    fudeStrands=Array.from({length:19},(_,i)=>({off:(i/18-0.5)*0.96,w:0.032+Math.random()*0.010,shift:(Math.random()-0.5)*0.06}));
+    lastWidth=fudeBaseW()*(last.pressure==null?0.32:0.12+0.68*last.pressure);
+    fudeStamp(last,lastWidth,fudeAngle,0); return;
   }
   if(brushType==="nijimi"){                                // にじみ筆：柔らか縁＋遅いほど太く溜まる＋入り/はらい
     velEMA = null; buildNijimiDab();
@@ -1865,7 +1864,7 @@ function flatStroke(a,b){
 }
 function resumeAt(p){            // エリアに戻った：同じ太さのまま継ぎ目なく再開（線でつながない）
   penOff = false;
-  last = p; lastMid = p; lastTime = performance.now(); lastDir = null;
+  last = p; lastMid = p; lastTime = p.t ?? performance.now(); fudeClock=lastTime; lastDir = null;
 }
 function move(e){
   if(!drawing) return; e.preventDefault();
@@ -1923,69 +1922,78 @@ function taperTail(){
     x = nx; y = ny; w0 = w1;
   }
 }
-// 本筆：速度連動の太さ＋速い時のかすれ（毛束を割って隙間＝かすれ。不透明のままなので重なりが濃くならない）
-// 本筆の基準太さ：共通sizeをそのまま使うと中盤以降が太くなりすぎるので、本筆だけ圧縮したカーブにする
+// 本筆：距離で補間した穂先。毛の配置は一画の間固定する。
+let fudeAngle = NIB, fudeDry = 0, fudeClock = 0;
 function fudeBaseW(){
-  const cw = (pad.getBoundingClientRect().width) || 248;   // 描画エリア幅(CSS px)
-  const minPx = 2, maxPx = cw*0.16;                        // 本筆の上限は描画幅の約16%（共通の40%より大幅に細く）
-  // size(px) を 0..1 に正規化してから緩いカーブに乗せ直す（3→4段の飛躍をならす）
-  const cwMax = cw*0.40;                                   // 共通sizeFromPosの最大px
-  const t = clamp((size - 2) / Math.max(1, (cwMax - 2)), 0, 1);
-  const e = Math.pow(t, 1.35);                             // 中盤をなだらかに（1.7より緩い）
-  return (minPx + (maxPx - minPx) * e) * DPR;
+  const cw = pad.width / DPR;
+  const t = clamp((size-2)/Math.max(1,cw*0.40-2),0,1);
+  return (2+(cw*0.20-2)*Math.pow(t,0.85))*DPR;
 }
-function fudeMove(p){
-  const now = performance.now();
-  const dx = p.x-last.x, dy = p.y-last.y;
-  const dist = Math.hypot(dx,dy);
-  const dt = Math.max(1, now-lastTime);
-  const v = (dist/DPR)/dt;                              // CSS px/ms
-  velEMA = (velEMA==null) ? v : velEMA*0.6 + v*0.4;     // 速度を平滑（カクつき防止）
-  const fast = clamp((velEMA-0.2)/2.2, 0, 1);           // 0=ゆっくり .. 1=速い
-  const base = fudeBaseW();                             // 本筆は太さカーブを圧縮（中盤以降が太くなりすぎない）
-  strokeLen += dist;
-  const head = Math.min(1, strokeLen/(base*2.0));       // 入り：細→本体まで立ち上げ
-  const targetW = base*(0.10+0.90*head)*(1 - 0.55*fast);// 速いほど細い（溜めると太い）
-  const w = lastWidth + (targetW-lastWidth)*0.45;       // 太さをなめらかに
-  ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
-  if(fast < 0.45 || w < base*0.33){                    // ゆっくり、または細い部分（はらい）＝ベタ一本（割らない）
-    ctx.lineWidth = w;
-    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
-  } else {                                              // 太くて速い所だけ毛が割れて隙間（かすれ）
-    const ux = dist>0?dx/dist:0, uy = dist>0?dy/dist:0;
-    const px = -uy, py = ux;                            // 進行方向に直交
-    const split = (fast-0.45)/0.55;                     // 速いほど広がる
-    const offMul = w*(0.35 + 0.35*split);               // 控えめに広げる（広げすぎるとカーブで毛が捻れてドリルになる）
+function fudeStamp(p,w,angle,dry){
+
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(angle);
+  // 丸いペン先ではなく、左右非対称の穂の接地面。
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(-w*0.52,0);
+  ctx.bezierCurveTo(-w*0.43,-w*0.22,w*0.28,-w*0.20,w*0.52,0);
+  ctx.bezierCurveTo(w*0.33,w*0.16,-w*0.36,w*0.23,-w*0.52,0);
+  if(dry<0.12 || w<3*DPR) ctx.fill();
+  else {
+    // 乾いた毛束の隙間は紙を消して作らず、描かないことで残す。
     for(const s of fudeStrands){
-      const ox = px*s.off*offMul, oy = py*s.off*offMul;
-      ctx.lineWidth = Math.max(0.6, w*s.w);
-      ctx.beginPath(); ctx.moveTo(last.x+ox,last.y+oy); ctx.lineTo(p.x+ox,p.y+oy); ctx.stroke();
+      const x=s.off*w;
+      const rw=w*s.w*(1-0.62*dry);
+      ctx.beginPath(); ctx.ellipse(x,s.shift*w,Math.max(0.22*DPR,rw),w*0.19,0,0,Math.PI*2); ctx.fill();
     }
   }
-  if(dist>0.5){
-    const ndx=dx/dist, ndy=dy/dist;
-    if(lastDir){ const sx=lastDir.x*0.7+ndx*0.3, sy=lastDir.y*0.7+ndy*0.3, sl=Math.hypot(sx,sy)||1; lastDir={x:sx/sl,y:sy/sl}; }  // 方向を平滑化＝はらいが直前の微ブレで上下に跳ねない
-    else lastDir = { x:ndx, y:ndy };
-  }
-  last = p; lastTime = now; lastWidth = w;
+  ctx.restore();
 }
-// 本筆の抜き：運筆方向へ延長して0へ細める＝きれいな先細りの点に（毛を扇状に割らない＝はらいが螺旋にならない）
+function fudeMove(p){
+  const now=p.t??performance.now();
+  const dx=p.x-last.x, dy=p.y-last.y, dist=Math.hypot(dx,dy);
+  if(dist<0.01) return;
+  const dt=Math.max(1,now-lastTime);
+  const v=dist/DPR/dt;
+  const response=1-Math.exp(-dt/32);
+  velEMA=velEMA==null?v:velEMA+(v-velEMA)*response;
+  const fast=clamp((velEMA-0.15)/1.5,0,1);
+  const base=fudeBaseW();
+  const head=clamp((strokeLen+dist)/(base*0.65),0,1);
+  const pressure=p.pressure==null?1-0.58*fast:0.12+0.98*Math.pow(p.pressure,0.65);
+  const target=base*(0.32+0.68*head)*pressure;
+  const w=lastWidth+(target-lastWidth)*(1-Math.exp(-dist/Math.max(DPR,base*0.22)));
+  // 穂は進行方向へ瞬時に回さず、しなって追いつく。180度反転による毛束の交差も避ける。
+  const wanted=Math.atan2(dy,dx)+Math.PI/2;
+  let delta=Math.atan2(Math.sin(wanted-fudeAngle),Math.cos(wanted-fudeAngle));
+  if(delta>Math.PI/2) delta-=Math.PI;
+  if(delta< -Math.PI/2) delta+=Math.PI;
+  const nextAngle=fudeAngle+delta*(1-Math.exp(-dist/Math.max(base*0.7,1)));
+  const dryTarget=clamp((fast-0.48)*1.25+Math.min(0.20,strokeLen/(base*140)),0,0.78);
+  const nextDry=fudeDry+(dryTarget-fudeDry)*(1-Math.exp(-dist/Math.max(base,1)));
+  const n=Math.max(1,Math.ceil(dist/Math.max(0.25*DPR,Math.min(lastWidth,w)*0.025)));
+  for(let i=1;i<=n;i++){
+    const t=i/n;
+    fudeStamp({x:last.x+dx*t,y:last.y+dy*t},lastWidth+(w-lastWidth)*t,fudeAngle+(nextAngle-fudeAngle)*t,fudeDry+(nextDry-fudeDry)*t);
+  }
+  lastDir={x:dx/dist,y:dy/dist};
+  strokeLen+=dist; last=p; lastTime=now; lastWidth=w; fudeAngle=nextAngle; fudeDry=nextDry; fudeClock=now;
+}
 function fudeTail(){
-  if(!last || !lastDir || lastWidth<=0.6) return;
-  const steps = 8;
-  const len = Math.min(lastWidth*2.0, fudeBaseW()*1.6);
-  const ux=lastDir.x, uy=lastDir.y;
-  ctx.strokeStyle = color; ctx.lineCap="round"; ctx.lineJoin="round";
-  let x=last.x, y=last.y, w0=lastWidth;
-  for(let i=1;i<=steps;i++){
-    const nx = last.x + ux*(len*i/steps);
-    const ny = last.y + uy*(len*i/steps);
-    const w1 = lastWidth*(1 - i/steps);
-    ctx.lineWidth = Math.max(0.3,(w0+w1)/2);
-    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
-    x=nx; y=ny; w0=w1;
+  if(!last || penOff) return;
+  // 停止してから離した場合は止め。動きながら離した場合だけ短く払う。
+  const idle=Math.max(0,performance.now()-fudeClock);
+  const fast=clamp(((velEMA||0)-0.25)/1.3,0,1)*Math.exp(-idle/70);
+  if(!lastDir || fast<0.12){ fudeStamp(last,lastWidth,fudeAngle,0); return; }
+  const len=Math.min(lastWidth*0.85,fudeBaseW()*0.65)*fast;
+  const n=Math.max(8,Math.ceil(len/(0.5*DPR)));
+  for(let i=1;i<=n;i++){
+    const t=i/n;
+    fudeStamp({x:last.x+lastDir.x*len*t,y:last.y+lastDir.y*len*t},Math.max(0.25*DPR,lastWidth*Math.pow(1-t,1.25)),fudeAngle,fudeDry);
   }
 }
+
+
 // にじみ筆：柔らか縁＋遅いほど太く滲む（ソフトなダブをパスに沿ってスタンプ。重なりで芯が締まり縁は羽毛のまま＝濡れた質感）
 function hexA(hex, a){
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex||"#1a1714");
@@ -2134,13 +2142,27 @@ function floodFill(sx, sy){
   scheduleDraftSave();
 }
 
-pad.addEventListener("mousedown",start);
-window.addEventListener("mousemove",move);
-window.addEventListener("mouseup",end);
-pad.addEventListener("touchstart",start,{passive:false});
-window.addEventListener("touchmove",move,{passive:false});
-window.addEventListener("touchend",end);
-window.addEventListener("touchcancel",end);
+let drawPointer=null;
+pad.style.touchAction="none";
+pad.addEventListener("pointerdown",e=>{
+  if(drawPointer!==null || (e.pointerType==="mouse" && e.button!==0)) return;
+  drawPointer=e.pointerId; pad.setPointerCapture(e.pointerId); start(e);
+});
+pad.addEventListener("pointermove",e=>{
+  if(e.pointerId!==drawPointer) return;
+  const samples=e.getCoalescedEvents?.() || [];
+  for(const sample of samples.length?samples:[e]) move(sample);
+});
+function finishPointer(e){
+  if(e.pointerId!==drawPointer) return;
+  if(e.type==="pointerup" && drawing) move(e);
+  if(e.type!=="pointerup") penOff=true;
+  end(); drawPointer=null;
+  if(pad.hasPointerCapture(e.pointerId)) pad.releasePointerCapture(e.pointerId);
+}
+pad.addEventListener("pointerup",finishPointer);
+pad.addEventListener("pointercancel",finishPointer);
+pad.addEventListener("lostpointercapture",finishPointer);
 
 /* color picker */
 document.getElementById("colors").addEventListener("click",e=>{
