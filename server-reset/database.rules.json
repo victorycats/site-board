@@ -1,0 +1,261 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "meta": {
+      "board": {
+        ".read": "auth != null",
+        ".write": "(root.child('meta/serverReset').val() !== true) && (auth != null && ( auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1' || ( newData.val() === data.val() + 1 && root.child('boards').child(''+data.val()).child('count').val() >= (root.child('meta/boardLimit').exists() ? root.child('meta/boardLimit').val() : 300) ) ))",
+        ".validate": "newData.isNumber() && newData.val() >= 1"
+      },
+      "boardLimit": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isNumber() && newData.val() >= 10 && newData.val() <= 1000"
+      },
+      "resetDays": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 90"
+      },
+      "postCooldownMs": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 600000"
+      },
+      "pendingArchive": {
+        ".read": "auth != null",
+        "$bid": {
+          ".write": "(root.child('meta/serverReset').val() !== true) && (auth != null)",
+          ".validate": "newData.isBoolean()"
+        }
+      },
+      "imgPost": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isBoolean()"
+      },
+      "imgGeo": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.hasChildren(['mode'])",
+        "mode": {
+          ".validate": "newData.isString() && (newData.val() === 'off' || newData.val() === 'any' || newData.val() === 'near')"
+        },
+        "lat": {
+          ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+        },
+        "lng": {
+          ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+        },
+        "radius": {
+          ".validate": "newData.isNumber() && newData.val() >= 10 && newData.val() <= 100000"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "imgWarn": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isString() && newData.val().length <= 400"
+      },
+      "adminGuide": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isString() && newData.val().length <= 8000"
+      },
+      "lazyGate": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isBoolean()"
+      },
+      "usage": {
+        "bytes": {
+          ".read": "auth != null",
+          ".write": "auth != null && ( auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1' || ( newData.isNumber() && newData.val() >= (data.exists() ? data.val() : 0) ) )",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "capMB": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "palette": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isString() && newData.val().length <= 60"
+      },
+      "randomNames": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isString() && newData.val().length <= 6000"
+      },
+      "resetLog": {
+        ".read": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        "$bid": {
+          ".write": "(root.child('meta/serverReset').val() !== true) && (auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1')",
+          ".validate": "newData.hasChildren(['at'])"
+        }
+      },
+      "serverReset": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'",
+        ".validate": "newData.isBoolean()"
+      }
+    },
+    "throttle": {
+      "$uid": {
+        ".write": "auth != null && $uid === auth.uid",
+        ".validate": "newData.isNumber() && newData.val() === now && ( !data.exists() || data.val() + (root.child('meta/postCooldownMs').exists() ? root.child('meta/postCooldownMs').val() : 40000) <= now )"
+      }
+    },
+    "boards": {
+      "$bid": {
+        "count": {
+          ".read": "auth != null",
+          ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null)",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= (root.child('meta/boardLimit').exists() ? root.child('meta/boardLimit').val() : 300)"
+        },
+        "startedAt": {
+          ".read": "auth != null",
+          ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && !data.exists())",
+          ".validate": "newData.isNumber()"
+        },
+        "notified": {
+          ".read": "auth != null",
+          "$w": {
+            ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null)",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+        "archiving": {
+          ".read": "auth != null",
+          ".write": "(root.child('meta/serverReset').val() !== true) && ((root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1'))",
+          ".validate": "newData.isBoolean()"
+        },
+        "advancing": {
+          ".read": "auth != null",
+          ".write": "(root.child('meta/serverReset').val() !== true) && ((root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null))",
+          ".validate": "newData.isBoolean()"
+        },
+        "posts": {
+          ".read": "auth != null",
+          "$pid": {
+            ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && ( !data.exists() ? ( newData.child('uid').val() === auth.uid && ( !root.child('throttle').child(auth.uid).exists() || root.child('throttle').child(auth.uid).val() + (root.child('meta/postCooldownMs').exists() ? root.child('meta/postCooldownMs').val() : 40000) <= now ) ) : ( data.child('uid').val() === auth.uid || auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1' ) ))",
+            ".validate": "newData.hasChildren(['name','t','uid','nx','ny','sou','del','hidden','angle'])",
+            "uid": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 16"
+            },
+            "t": {
+              ".validate": "newData.isNumber()"
+            },
+            "nx": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
+            },
+            "ny": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
+            },
+            "fid": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "angle": {
+              ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && data.parent().child('uid').val() === auth.uid)",
+              ".validate": "newData.isNumber() && newData.val() >= -360 && newData.val() <= 360"
+            },
+            "sou": {
+              ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && newData.isNumber() && data.exists() && (newData.val() === data.val() + 1 || (newData.val() === data.val() - 1 && data.val() > 0)))",
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "del": {
+              ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && newData.isNumber() && data.exists() && newData.val() === data.val() + 1)",
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "hidden": {
+              ".validate": "newData.isBoolean()"
+            },
+            "imgPath": {
+              ".validate": "newData.isString() && newData.val().length < 200"
+            },
+            "land": {
+              ".validate": "newData.isBoolean()"
+            },
+            "dev": {
+              ".validate": "newData.isString() && newData.val().length <= 8"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "imgs": {
+          "$pid": {
+            ".read": "auth != null",
+            ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && ( !data.exists() || auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1' || !root.child('boards').child($bid).child('posts').child($pid).exists() || root.child('boards').child($bid).child('posts').child($pid).child('uid').val() === auth.uid ))",
+            ".validate": "!newData.exists() || ( newData.isString() && newData.val().beginsWith('data:image/') && newData.val().length < 700000 )"
+          }
+        },
+        "reservations": {
+          ".read": "auth != null",
+          "$rid": {
+            ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && ( ( !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid ) || ( data.exists() && !newData.exists() && ( data.child('uid').val() === auth.uid || auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1' || ( now >= data.child('end').val() && data.child('hasPost').val() != true ) || ( now > data.child('start').val() + 2400000 && data.child('hasPost').val() != true ) ) ) || ( data.exists() && newData.exists() && newData.child('uid').val() === data.child('uid').val() && newData.child('start').val() === data.child('start').val() && newData.child('rx').val() === data.child('rx').val() && newData.child('ry').val() === data.child('ry').val() && newData.child('rw').val() >= data.child('rw').val() && newData.child('rh').val() >= data.child('rh').val() && newData.child('end').val() >= data.child('end').val() ) || ( data.exists() && newData.exists() && newData.child('uid').val() === data.child('uid').val() && newData.child('start').val() === data.child('start').val() && newData.child('rx').val() === data.child('rx').val() && newData.child('ry').val() === data.child('ry').val() && newData.child('rw').val() === data.child('rw').val() && newData.child('rh').val() === data.child('rh').val() && newData.child('end').val() < data.child('end').val() && newData.child('end').val() >= now && ( data.child('uid').val() === auth.uid || auth.uid === 'VRZS1oZuihN7if6GD2yuP1qvDik1' ) ) ))",
+            ".validate": "newData.hasChildren(['uid','start','end','rx','ry','rw','rh']) && (newData.child('rw').val() * newData.child('rh').val()) >= 0.0045 && (newData.child('rw').val() * newData.child('rh').val()) <= 0.201",
+            "uid": {
+              ".validate": "newData.isString() && newData.val().length <= 64 && ( newData.val() === auth.uid || ( data.exists() && newData.val() === data.val() ) )"
+            },
+            "t": {
+              ".validate": "newData.isNumber()"
+            },
+            "ori": {
+              ".validate": "newData.isString() && (newData.val() === 'p' || newData.val() === 'l')"
+            },
+            "roll": {
+              ".validate": "newData.isBoolean()"
+            },
+            "start": {
+              ".validate": "newData.isNumber() && newData.val() <= now + 14460000"
+            },
+            "end": {
+              ".validate": "newData.isNumber() && newData.val() > newData.parent().child('start').val() && newData.val() <= newData.parent().child('start').val() + 172800000"
+            },
+            "rx": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
+            },
+            "ry": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
+            },
+            "rw": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 0.45"
+            },
+            "rh": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 0.55"
+            },
+            "hasPost": {
+              ".write": "(root.child('meta/serverReset').val() !== true || $bid === ''+root.child('meta/board').val()) && (auth != null && newData.val() === true)",
+              ".validate": "newData.isBoolean()"
+            },
+            "t1": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "t2": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "t3": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

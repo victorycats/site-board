@@ -1452,7 +1452,9 @@ let BOARD_LIMIT = 300;            // この枚数でボード満杯（meta/board
 let boardResetDays = 0;           // 日数でも自動リセット（meta/resetDays。0/未設定なら日数リセットは無効）
 let boardStartedAt = null;        // 今の板が始まった時刻（boards/{id}/startedAt。最初に来た1人が記録）
 function boardExpiredByDays(){ return !!(boardResetDays>0 && boardStartedAt && (Date.now()-boardStartedAt) >= boardResetDays*86400000); }
-function boardShouldReset(){ return remaining()<=0 || boardExpiredByDays(); }   // 枚数上限・日数上限のどちらかで満員扱い
+let serverResetMode = false, resetModeReady = false;
+let boardCountReady = false, boardStartReady = false;
+function boardShouldReset(){ return boardCountReady && boardStartReady && (remaining()<=0 || boardExpiredByDays()); }   // 枚数上限・日数上限のどちらかで満員扱い
 let boardId = null;               // 現在のボード番号（meta/board）
 // ===== 共有リンクからの直リンク（?board=N&note=ID）＝その半紙へ直接ジャンプ =====
 const DEEPLINK_PARAMS = new URLSearchParams(location.search);
@@ -2789,6 +2791,11 @@ function listen(){
     BOARD_LIMIT = (typeof v==="number" && v>=10 && v<=1000) ? v : 300;
     updateCountTooltip();
   });
+  onValue(ref(db, "meta/serverReset"), snap=>{
+    serverResetMode = snap.val() === true; resetModeReady = true;
+    if(advanceTimer){ clearTimeout(advanceTimer); advanceTimer = null; }
+    maybeAutoArchive(); maybeAutoAdvance();
+  }, error=>{ resetModeReady = false; console.error("リセット担当を確認できません",error); });
   onValue(ref(db, "meta/resetDays"), snap=>{   // 板の自動リセット日数（未設定/0は日数リセット無効）
     const v = snap && snap.val();
     boardResetDays = (typeof v==="number" && v>=0 && v<=90) ? v : 0;
@@ -2828,6 +2835,8 @@ function unsubBoard(){ boardSubs.forEach(fn=>{ try{ fn(); }catch(e){} }); boardS
 function switchToBoard(id){
   unsubBoard();
   boardId = id;
+  boardStartedAt = null;
+  boardCountReady = false; boardStartReady = false;
   // ローカル状態をまっさらに
   posts.clear(); imgCache.clear(); imgState.clear(); renderedIds.clear();
   zOverride.clear(); activeNoteId = null; editingId = null;
@@ -2849,14 +2858,16 @@ function switchToBoard(id){
   const postsRef = ref(db, bpath("posts"));
   try{
     get(postsRef).then(snap=>{
+      if(boardId !== id) return;
       const v = snap && snap.val();
       if(v){ Object.keys(v).forEach(k=>{ posts.set(k, v[k]||{}); seenNoteIds.add(k); }); }
       postsLoaded = true; render();
+      maybeAutoArchive(); maybeAutoAdvance();
       updateFreshUI(); drawMinimap();
       const u = unreadCount();
       if(u > 0) toast("前回から" + (u>99?"99+":u) + "枚 新しい半紙があるよ", 3200);   // 12時間ぶり等：差分があることだけ気づかせる
       if(!didInitialFocus && posts.size){ clearTimeout(focusTimer); focusTimer = setTimeout(initialFocus, 300); }
-    }).catch(()=>{ postsLoaded = true; render(); });
+    }).catch(()=>{ if(boardId !== id) return; postsLoaded = false; render(); });
 
     boardSubs.push(onChildAdded(postsRef, snap=>{
       const id3 = snap.key;
@@ -2875,6 +2886,8 @@ function switchToBoard(id){
     }));
     // 枚数（満杯判定・残数表示・通知のトリガ）
     boardSubs.push(onValue(ref(db, bpath("count")), s=>{
+      if(boardId !== id) return;
+      boardCountReady = true;
       boardCount = (s && s.val()) || 0;
       setActiveCount();
       maybeAutoArchive();   // 運営タブがあれば：満員で自動保存（画像化）→新ボード
@@ -2882,6 +2895,8 @@ function switchToBoard(id){
     }));
     // この板が始まった時刻（日数リセット判定用）。無ければ最初に来た1人が記録（ルール上、既にあれば書けないので安全）
     boardSubs.push(onValue(ref(db, bpath("startedAt")), s=>{
+      if(boardId !== id) return;
+      boardStartReady = true;
       if(s && s.exists() && typeof s.val()==="number"){ boardStartedAt = s.val(); }
       else { boardStartedAt = null; set(ref(db, bpath("startedAt")), serverTimestamp()).catch(()=>{}); }
       setActiveCount();
@@ -4122,6 +4137,7 @@ async function buildFullLookCanvas(){
   }
 }
 async function archiveAndAdvance(auto){
+  if(!resetModeReady || serverResetMode){ if(!auto) toast("板の切り替えはサーバー定期処理が担当しています。画像の再出力は履歴から使えます"); return false; }
   if(!db || !admin){ if(!auto) toast("運営のみ"); return false; }
   if(!auto && !confirm("このボードを画像に保存し、新しい空のボードへ切り替えます。\n現在の半紙は新ボードには表示されなくなります。\nよろしいですか？")) return false;
   toast(auto ? "満員：自動で保存して新ボードへ…" : "画像を作成中…", 4000);
@@ -4448,6 +4464,7 @@ window.reoutputBoardFull = reoutputBoardFull;
 // 運営が管理ページを開いた時：運営不在で自動切替されて未画像化のボードを拾って画像化＆保存
 let pendingArchiveRunning = false;
 async function processPendingArchives(){
+  if(!resetModeReady || serverResetMode) return;
   if(!admin || pendingArchiveRunning || !db) return;
   pendingArchiveRunning = true;
   try{
@@ -4483,7 +4500,8 @@ async function processPendingArchives(){
 // 運営タブだけ：満員を検知したら自動で保存→新ボード（複数タブでも1つだけ実行）
 let autoArchiving = false;
 async function maybeAutoArchive(){
-  if(!admin || autoArchiving || boardId == null) return;
+  if(!resetModeReady || serverResetMode) return;
+  if(!admin || autoArchiving || boardId == null || !postsLoaded) return;
   if(!boardShouldReset()) return;
   autoArchiving = true;
   try{
@@ -4493,11 +4511,12 @@ async function maybeAutoArchive(){
       if(!ok){ remove(ref(db, bpath("archiving"))).catch(()=>{}); }   // 失敗時は旗を戻して再試行可能に
     }
   }catch(e){ console.error(e); }
-  finally{ autoArchiving = false; }
+  finally{ autoArchiving = false; if(boardShouldReset()) setTimeout(maybeAutoArchive,1000); }
 }
 // 運営タブが無くても：満員なら一般ユーザーの誰か1人が新ボードへ進める（画像化はせず pendingArchive に記録）
 let autoAdvancing = false, advanceTimer = null;
 async function maybeAutoAdvance(){
+  if(!resetModeReady || serverResetMode) return;
   if(autoAdvancing || boardId == null) return;
   if(!boardShouldReset()){ if(advanceTimer){ clearTimeout(advanceTimer); advanceTimer = null; } return; }
   if(admin) return;                       // 運営タブは maybeAutoArchive 側で処理（画像化込み）
@@ -4505,7 +4524,7 @@ async function maybeAutoAdvance(){
   // 運営が画像化込みで処理する猶予を与え、一定時間後もまだ満員（＝運営不在）なら切替だけ実行
   advanceTimer = setTimeout(async ()=>{
     advanceTimer = null;
-    if(boardId == null || !boardShouldReset()) return;     // 既に誰かが進めた
+    if(!resetModeReady || serverResetMode || boardId == null || !boardShouldReset()) return;     // 既に誰かが進めた
     if(autoAdvancing) return;
     // 運営が画像化処理中（archiving旗）なら、その運営に任せて切替しない（board二重進行を防ぐ）
     try{ const ar = await get(ref(db, bpath("archiving"))); if(ar && ar.val()===true) return; }catch(_){}

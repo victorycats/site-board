@@ -1,0 +1,16 @@
+{
+  "name": "futaba-board-reset",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "reset": "node run.js"
+  },
+  "dependencies": {
+    "firebase-admin": "13.10.0",
+    "@supabase/supabase-js": "2.117.2",
+    "@napi-rs/canvas": "0.1.100"
+  }
+}
