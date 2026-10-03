@@ -1,0 +1,37 @@
+name: Board archive and reset
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Check settings only; do not save or reset'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: futaba-board-reset
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server-reset/functions
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev
+      - run: npm test
+      - name: Archive if due
+        run: npm run reset
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          SUPABASE_STORAGE_SERVER_KEY: ${{ secrets.SUPABASE_STORAGE_SERVER_KEY }}
+          RESET_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
